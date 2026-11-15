@@ -73,7 +73,7 @@
             </div>
         </div>
 
-        <div class="kd-grid kd-grid--3 kd-section__block">
+        <div class="kd-grid kd-grid--2 kd-section__block">
             <section class="kd-card">
                 <h3 class="kd-card__title">{{ ux_icon('lucide:clipboard-list') }} Nouvelle séance</h3>
                 <form method="post" action="{{ path('app_coach_workout_new', {id: athlete.id}) }}" class="kd-coachform">
@@ -131,6 +131,30 @@
                         {{ ux_icon('lucide:plus') }} Créer et composer
                     </button>
                 </form>
+            </section>
+
+            {# Un plan de SA bibliothèque, copié chez l'athlète avec ses séances (#58).
+               Pour lui donner le plan lui-même : « Donner ce plan à », dans l'éditeur. #}
+            <section class="kd-card">
+                <h3 class="kd-card__title">{{ ux_icon('lucide:copy') }} Un de mes plans</h3>
+                {% if coachPlans is empty %}
+                    <p class="kd-lead">Tu n'as pas encore de plan : compose-en un dans « Mes plans ».</p>
+                {% else %}
+                    <form method="post" action="{{ path('app_coach_plan_copy', {id: athlete.id}) }}" class="kd-coachform">
+                        <input type="hidden" name="_token" value="{{ csrf_token('coach_plan_copy' ~ athlete.id) }}">
+                        <div class="kd-field kd-coachform__field">
+                            <label class="kd-label" for="coach_plan_copy">Plan à lui donner</label>
+                            <select class="kd-input" id="coach_plan_copy" name="plan" required>
+                                {% for plan in coachPlans %}
+                                    <option value="{{ plan.id }}">{{ plan.title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="kd-btn kd-btn--primary">
+                            {{ ux_icon('lucide:plus') }} Ajouter à ses plans
+                        </button>
+                    </form>
+                {% endif %}
             </section>
         </div>
     </section>

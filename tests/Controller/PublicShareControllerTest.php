@@ -138,6 +138,9 @@ final class PublicShareControllerTest extends WebTestCase
 
         // ...donc l'auteur peut toujours supprimer le sien : aucune référence
         // croisée ne le retient (FK RESTRICT sur prescribed_exercise.exercise_id).
+        // Gestionnaire vidé d'abord : la copie chargée pointe la source par
+        // `copiedFrom`, que la base remet à NULL, pas la mémoire du test.
+        $this->em->clear();
         $workout = $this->em->find(Workout::class, $workout->getId());
         self::assertNotNull($workout);
         $this->em->remove($workout);

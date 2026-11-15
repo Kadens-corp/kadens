@@ -227,11 +227,17 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   règle — ancrer un plan sur une échéance vise le calendrier du propriétaire de
   l'objectif, avec en plus la garde « ce plan lui appartient » ; sur le lecteur, un
   coach posait les séances de son athlète chez lui).
-  **L'éditeur de trame ne fait pas exception** : sa palette, la garde de pose,
-  l'owner des copies locales forkées, la duplication et l'owner passé à
+  **L'éditeur de trame ne fait pas exception** : la garde de pose, l'owner des
+  copies locales forkées, la duplication et l'owner passé à
   `PlanScheduler::rescheduleItem()` dérivent tous de `PlanTemplateController::ownerOf()`
-  (= `$template->getOwner()`). Un coach y compose donc avec la bibliothèque de
-  **l'athlète**, et tout ce qu'il crée reste à l'athlète. Même logique pour
+  (= `$template->getOwner()`), et tout ce que le coach y crée reste à l'athlète.
+  **Seule la palette s'élargit (#58)** : le coach y voit la bibliothèque de
+  l'athlète **et la sienne** (`coachComposing()`), mais poser une de ses séances la
+  copie d'abord chez l'athlète (`SharedWorkoutCopier::libraryCopyFor`, une seule
+  copie par séance, retrouvée par `Workout.copiedFrom`), et la case part de cette
+  copie. L'athlète ne voit donc jamais une séance qui n'est pas à lui, et sa lignée
+  vit chez lui : les requêtes de lignée sont scopées sur le propriétaire de la
+  racine, une case racinée chez le coach perdrait son « dernier réalisé ». Même logique pour
   `WorkoutController::duplicate` : la copie appartient au propriétaire de la
   source. Une copie qui atterrirait chez le coach serait inerte — ni posable au
   calendrier de l'athlète ni dans son plan, qui n'acceptent que son contenu.
@@ -255,6 +261,14 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   `prescribed_exercise.exercise_id` est en RESTRICT, une référence croisée
   empêcherait l'auteur de supprimer son exercice. Entre coach et athlète en
   relation acceptée, le voter dit oui : la référence reste, comme au compositeur.
+  **Les plans suivent la même règle** (`SharedPlanCopier` : copie publique,
+  « Un de mes plans » sur la fiche coach) et une de plus : chaque case se
+  **re-racine** dans la bibliothèque du destinataire (une copie par racine). Un
+  plan peut aussi être **donné** depuis son éditeur (« Donner ce plan à »,
+  `PlanTransfer`) : il change de propriétaire, le coach reste co-éditeur. Gardes :
+  propriétaire seul, athlète accepté, plan **jamais posé au calendrier** (ses
+  séances datées pointeraient des cases parties chez l'athlète). Ni le bloc-notes
+  privé ni les objectifs ne passent, ni à la copie ni au transfert.
 - **Le bloc-notes privé est la seule exception à « le coach voit tout ».**
   `Workout.notes` et `PlanTemplate.notes` (TEXT nullable) sont un fourre-tout du
   **propriétaire seul** : brouillon, déroulé en vrac. À distinguer de

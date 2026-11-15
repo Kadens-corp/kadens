@@ -24,6 +24,7 @@ use App\Service\ExerciseTrajectory;
 use App\Service\HeartRateZones;
 use App\Service\PlanScheduler;
 use App\Service\ProfileStats;
+use App\Service\SharedPlanCopier;
 use App\Service\SharedWorkoutCopier;
 use App\Service\SlugGenerator;
 use App\Service\StatsPeriod;
@@ -109,6 +110,7 @@ final class CoachController extends AbstractController
             // Le seul élément de la page qui parle du coach : ce qu'il peut donner.
             'coachWorkouts' => $workoutRepository->findLibraryForOwner($coach),
             'plans' => $planTemplateRepository->findBy(['owner' => $athlete], ['title' => 'ASC']),
+            'coachPlans' => $planTemplateRepository->findBy(['owner' => $coach], ['title' => 'ASC']),
             'upcoming' => $scheduledWorkoutRepository->findByOwnerBetween($athlete, $today, $today->modify('+8 weeks')),
             'logged' => $logged,
             'loggedTotal' => $trainingLog->total($athlete),
@@ -312,6 +314,42 @@ final class CoachController extends AbstractController
             'id' => $copy->getId(),
             'from' => BackTarget::token(BackTarget::ATHLETE, (int) $athlete->getId()),
         ]);
+    }
+
+    /**
+     * Donne à l'athlète une copie d'un plan **du coach** (#58), comme `copyWorkout`
+     * pour une séance. Le plan modèle reste chez le coach ; la copie, ses cases et
+     * leurs séances racines appartiennent à l'athlète (`SharedPlanCopier`).
+     *
+     * Pour donner le plan lui-même plutôt qu'une copie, c'est l'éditeur de plan
+     * (« Donner ce plan à », `PlanTemplateController::assign`).
+     */
+    #[Route('/athlete/{id}/plan/copy', name: 'app_coach_plan_copy', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function copyPlan(
+        Request $request,
+        #[MapEntity(id: 'id')] User $athlete,
+        PlanTemplateRepository $planTemplateRepository,
+        SharedPlanCopier $copier,
+    ): Response {
+        $this->denyUnlessCoachOf($athlete);
+        $this->denyUnlessCsrf($request, 'coach_plan_copy'.$athlete->getId());
+
+        /** @var User $coach */
+        $coach = $this->getUser();
+        $source = $planTemplateRepository->find($request->getPayload()->getInt('plan'));
+
+        if (!$source instanceof PlanTemplate || $source->getOwner()?->getId() !== $coach->getId()) {
+            $this->addFlash('error', 'Choisis un plan de ta bibliothèque.');
+
+            return $this->redirectToRoute('app_coach_athlete', ['id' => $athlete->getId()]);
+        }
+
+        $copy = $copier->copyFor($source, $athlete);
+        $this->entityManager->flush();
+
+        $this->addFlash('success', sprintf('« %s » ajouté aux plans de %s, avec ses séances.', $copy->getTitle(), $athlete->getDisplayName()));
+
+        return $this->redirectToRoute('app_plan_template_edit', ['id' => $copy->getId()]);
     }
 
     /**

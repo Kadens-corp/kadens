@@ -405,14 +405,18 @@ final class CoachControllerTest extends WebTestCase
      * n'avait dans la palette que sa propre bibliothèque — donc ni les séances de
      * l'athlète, ni celles qu'il avait lui-même créées pour lui (elles appartiennent
      * à l'athlète).
+     *
+     * #58 : le coach y voit AUSSI ses propres séances, marquées « à moi » (la pose
+     * les copiera chez l'athlète). La palette reste celle du propriétaire du plan,
+     * élargie pour ce seul coach.
      */
-    public function testPlanEditorPaletteScopesToPlanOwner(): void
+    public function testPlanEditorPaletteOffersTheCoachHisOwnWorkoutsToo(): void
     {
         $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
         $athlete = $this->createUser('athlete@example.com');
         $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
         $this->createWorkout($athlete, 'Fractionné athlète');
-        $this->createWorkout($coach, 'Ma séance perso');
+        $mine = $this->createWorkout($coach, 'Ma séance perso');
         $plan = $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
 
         $this->client->loginUser($coach);
@@ -421,7 +425,28 @@ final class CoachControllerTest extends WebTestCase
         self::assertResponseIsSuccessful();
         $palette = $crawler->filter('.kd-palette')->html();
         self::assertStringContainsString('Fractionné athlète', $palette);
-        self::assertStringNotContainsString('Ma séance perso', $palette);
+        self::assertStringContainsString('Ma séance perso', $palette);
+        self::assertSame('mine', $crawler->filter('.kd-palettecard[data-workout-id="'.$mine->getId().'"]')->attr('data-owner'));
+        self::assertSelectorExists('[data-owner-pill][data-owner="mine"]');
+    }
+
+    /** La relation est dirigée : l'athlète, dans son propre plan, ne voit que ses séances. */
+    public function testAthletePaletteNeverShowsCoachWorkouts(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createWorkout($athlete, 'Fractionné athlète');
+        $this->createWorkout($coach, 'Séance du coach');
+        $plan = $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
+
+        $this->client->loginUser($athlete);
+        $crawler = $this->client->request('GET', '/plan-template/'.$plan->getId().'/edit');
+
+        $palette = $crawler->filter('.kd-palette')->html();
+        self::assertStringContainsString('Fractionné athlète', $palette);
+        self::assertStringNotContainsString('Séance du coach', $palette);
+        self::assertSelectorNotExists('[data-owner-pill]');
     }
 
     /**

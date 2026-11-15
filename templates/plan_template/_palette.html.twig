@@ -11,8 +11,12 @@
    - ou on glisse la carte dans une case.
    La carte est un vrai <button> : au doigt, il faut une cible pleine, et le mode
    tampon (deux gestes séparés dans le temps) n'y est pas lisible.
-   Contexte : paletteCards (chaque : workout, activities, exerciseCount, filterText),
-   paletteCount, paletteActivities, template. #}
+   Contexte : paletteCards (chaque : workout, activities, exerciseCount, filterText,
+   mine), paletteCount, paletteActivities, paletteOwners, template.
+
+   Un coach qui compose le plan de son athlète y voit aussi SES séances (`mine`,
+   #58), marquées « À moi » : la poser la copie d'abord dans la bibliothèque de
+   l'athlète. Les pastilles « à qui » n'existent que dans ce cas. #}
 {% import 'components/_activity.html.twig' as activity %}
 {% import 'components/_rating.html.twig' as ratings %}
 
@@ -52,6 +56,19 @@
                         data-action="plangrid#pickActivity">{{ act.label }} · {{ act.count }}</button>
             {% endfor %}
         </div>
+
+        {% if paletteOwners %}
+            <div class="kd-libfilters" aria-label="Bibliothèque">
+                <button type="button" class="kd-libfilter kd-libfilter--on"
+                        data-owner-pill data-owner="all"
+                        data-action="plangrid#pickOwner">Toutes · {{ paletteCount }}</button>
+                {% for key, facet in paletteOwners %}
+                    <button type="button" class="kd-libfilter"
+                            data-owner-pill data-owner="{{ key }}"
+                            data-action="plangrid#pickOwner">{{ facet.label }} · {{ facet.count }}</button>
+                {% endfor %}
+            </div>
+        {% endif %}
     </div>
 
     <div class="kd-libpanel__list" data-plangrid-target="paletteList">
@@ -60,12 +77,18 @@
             <button type="button" class="kd-palettecard kd-palettecard--btn"
                     data-plangrid-target="palettecard"
                     data-workout-id="{{ w.id }}"
+                    data-owner="{{ card.mine ? 'mine' : 'owner' }}"
                     data-activity="{% for a in card.activities %}{{ a.value }}{{ not loop.last ? ' ' }}{% endfor %}"
                     data-filter-text="{{ card.filterText }}"
                     data-action="plangrid#armWorkout">
                 <span class="kd-libx__code">{{ w.title|slice(0, 2)|upper }}</span>
                 <span class="kd-libx__body">
                     <span class="kd-libx__name">{{ w.title }}</span>
+                    {% if card.mine %}
+                        <span class="kd-scope" title="Posée, elle sera copiée dans sa bibliothèque">
+                            {{ ux_icon('lucide:user') }} À moi
+                        </span>
+                    {% endif %}
                     <span class="kd-palettecard__meta">
                         {% if w.estimatedDurationMinutes %}
                             <span>{{ ux_icon('lucide:clock') }} {{ w.estimatedDurationMinutes }} min</span>

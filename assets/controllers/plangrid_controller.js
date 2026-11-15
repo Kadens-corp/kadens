@@ -58,6 +58,7 @@ export default class extends Controller {
         // sur les cases). L'état survit aux re-render de #plan-grid (porté ici).
         this.libQuery = '';
         this.libActivity = 'all';
+        this.libOwner = 'all';
         this.armedWorkoutId = null;
         this.armedCard = null;
         // Case visée par la palette ouverte depuis un « + ». Non nulle = taper une
@@ -270,14 +271,26 @@ export default class extends Controller {
         this.applyLibFilter();
     }
 
+    // Pastilles « à qui » (#58) : n'existent que quand un coach compose le plan
+    // de son athlète, ses séances et celles de l'athlète dans la même palette.
+    pickOwner(event) {
+        this.libOwner = event.currentTarget.dataset.owner;
+        this.element.querySelectorAll('[data-owner-pill]').forEach((pill) => {
+            pill.classList.toggle('kd-libfilter--on', pill.dataset.owner === this.libOwner);
+        });
+        this.applyLibFilter();
+    }
+
     applyLibFilter() {
         if (!this.hasPalettecardTarget) return;
+        const owner = this.libOwner || 'all';
         this.palettecardTargets.forEach((card) => {
             const matchText = this.libQuery === '' || (card.dataset.filterText || '').toLowerCase().includes(this.libQuery);
             // Une séance peut porter plusieurs activités (data-activity espacé).
             const acts = (card.dataset.activity || '').split(' ').filter(Boolean);
             const matchAct = this.libActivity === 'all' || acts.includes(this.libActivity);
-            card.hidden = !(matchText && matchAct);
+            const matchOwner = owner === 'all' || card.dataset.owner === owner;
+            card.hidden = !(matchText && matchAct && matchOwner);
         });
     }
 

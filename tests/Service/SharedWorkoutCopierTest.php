@@ -163,6 +163,52 @@ final class SharedWorkoutCopierTest extends KernelTestCase
         self::assertSame(1, $result->copiedExercises);
     }
 
+    public function testAnExplicitCopyRemembersItsSource(): void
+    {
+        $source = $this->workout($this->author, 'Upper A', [$this->exercise(null, 'Squat')]);
+
+        $copy = $this->copier->copyFor($source, $this->reader)->workout;
+
+        self::assertSame($source, $copy->getCopiedFrom());
+    }
+
+    /**
+     * La pose implicite (séance du coach dans le plan de l'athlète) reprend la
+     * même copie : avant le flush, par la mémoire de la requête, et après, par
+     * `copiedFrom` en base.
+     */
+    public function testLibraryCopyIsCreatedOnceThenReused(): void
+    {
+        $source = $this->workout($this->author, 'Upper A', [$this->exercise(null, 'Squat')]);
+
+        $first = $this->copier->libraryCopyFor($source, $this->reader);
+        self::assertSame($first, $this->copier->libraryCopyFor($source, $this->reader), 'Même requête, avant le flush.');
+        $this->em->flush();
+
+        $this->copier->reset();
+        self::assertSame($first, $this->copier->libraryCopyFor($source, $this->reader), 'Requête suivante, retrouvée en base.');
+        self::assertCount(1, $this->em->getRepository(Workout::class)->findBy(['owner' => $this->reader]));
+    }
+
+    public function testOwnWorkoutNeedsNoLibraryCopy(): void
+    {
+        $own = $this->workout($this->reader, 'Upper A', [$this->exercise(null, 'Squat')]);
+
+        self::assertSame($own, $this->copier->libraryCopyFor($own, $this->reader));
+    }
+
+    /** Un plan de douze cases avec le même exercice perso n'en recopie qu'un. */
+    public function testAForeignExerciseIsCopiedOnceAcrossSeveralWorkoutsOfTheSameRequest(): void
+    {
+        $foreign = $this->exercise($this->author, 'Tirage serré');
+        $first = $this->copier->copyFor($this->workout($this->author, 'Dos A', [$foreign]), $this->reader);
+        $second = $this->copier->copyFor($this->workout($this->author, 'Dos B', [$foreign]), $this->reader);
+
+        self::assertSame(1, $first->copiedExercises);
+        self::assertSame(0, $second->copiedExercises);
+        self::assertSame($this->prescribedExercises($first->workout)[0], $this->prescribedExercises($second->workout)[0]);
+    }
+
     private function user(string $email): User
     {
         $user = (new User())->setEmail($email)->setPassword('x');

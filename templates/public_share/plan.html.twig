@@ -5,6 +5,45 @@
 {% block body %}
     {# Page publique d'un plan en lecture seule : réutilise le composant de rendu en
        mode `public` (séances cliquables vers leur page publique), éventuellement
-       filtré sur une plage de semaines (`weeks`). Aucune action d'édition. #}
+       filtré sur une plage de semaines (`weeks`). Aucune action d'édition.
+
+       La barre ne porte que des gestes de VISITEUR (#58), comme la page publique
+       d'une séance : repartager ce lien (la plage comprise, d'où l'URL courante),
+       et copier le plan chez soi — en entier, même depuis une plage. #}
+    {% set shared = flat.template %}
+    {# Comparaison par `id` : `owner` peut être un proxy Doctrine. #}
+    {% set isOwner = app.user and shared.owner and app.user.id == shared.owner.id %}
+
+    <div class="kd-actionbar" data-controller="clipboard"
+         data-clipboard-url-value="{{ app.request.uri }}"
+         data-clipboard-title-value="{{ shared.title }}">
+        <div class="kd-actionbar__end">
+            {% if isOwner %}
+                <a href="{{ path('app_plan_template_show', {id: shared.id}) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
+                    {{ ux_icon('lucide:library') }} Ouvrir dans mes plans
+                </a>
+            {% elseif app.user %}
+                <form id="plan-copy-shared" method="post" hidden
+                      action="{{ path('app_plan_template_copy_shared', {slug: shared.slug}) }}">
+                    <input type="hidden" name="_token" value="{{ csrf_token('copy_shared_plan' ~ shared.slug) }}">
+                </form>
+                <button type="submit" form="plan-copy-shared" class="kd-btn kd-btn--secondary kd-btn--sm">
+                    {{ ux_icon('lucide:copy') }} Copier dans mes plans
+                </button>
+            {% else %}
+                {# Anonyme : route protégée en GET, qui le ramène ici une fois
+                   connecté (cf. PlanTemplateController::copySharedEntry). #}
+                <a href="{{ path('app_plan_template_copy_shared_entry', {slug: shared.slug}) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
+                    {{ ux_icon('lucide:log-in') }} Se connecter pour le copier
+                </a>
+            {% endif %}
+
+            <button type="button" class="kd-btn kd-btn--ghost kd-btn--sm" data-action="clipboard#share">
+                {{ ux_icon('lucide:share-2') }} Partager
+            </button>
+            <span class="kd-actionbar__feedback" data-clipboard-target="feedback" role="status" aria-live="polite"></span>
+        </div>
+    </div>
+
     {% include 'components/_plan_read.html.twig' with { flat: flat, public: true, weeks: weeks } only %}
 {% endblock %}

@@ -13,19 +13,25 @@ use App\Repository\GoalRepository;
 use App\Repository\ImportedActivityRepository;
 use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
+use App\Repository\UserRepository;
 use App\Repository\WorkoutRepository;
 use App\Security\Voter\PlanTemplateVoter;
 use App\Service\CoachedLibrary;
+use App\Service\CoachingResolver;
 use App\Service\LineageSeed;
 use App\Service\PlanFlattener;
 use App\Service\PlanScheduler;
+use App\Service\PlanTransfer;
 use App\Service\PlanVolumeAggregator;
 use App\Service\SessionRating;
 use App\Service\ProgressionAggregator;
+use App\Service\SharedPlanCopier;
+use App\Service\SharedWorkoutCopier;
 use App\Service\SlugGenerator;
 use App\Service\WorkoutCloner;
 use App\Service\WorkoutMetrics;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bridge\Doctrine\Attribute\MapEntity;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -59,6 +65,8 @@ final class PlanTemplateController extends AbstractController
         private readonly PlanVolumeAggregator $volumeAggregator,
         private readonly GoalRepository $goalRepository,
         private readonly ScheduledWorkoutRepository $scheduledWorkoutRepository,
+        private readonly CoachingResolver $coachingResolver,
+        private readonly CoachedLibrary $coachedLibrary,
     ) {
     }
 
@@ -239,7 +247,98 @@ final class PlanTemplateController extends AbstractController
 
         return $this->render('plan_template/edit.html.twig',
             $this->gridContext($template) + $this->paletteContext($template) + $this->goalsContext($template)
+            + $this->assignContext($template)
         );
+    }
+
+    /**
+     * « Ce plan est pour mon athlète » (#58) : le propriétaire le donne à un de ses
+     * athlètes, depuis son propre éditeur, sans passer par la fiche coach. Le plan
+     * change de propriétaire (`PlanTransfer`), le coach en reste co-éditeur.
+     *
+     * Trois gardes :
+     * - **le propriétaire seul**, pas l'attribut EDIT : un coach co-éditeur ne
+     *   réattribue pas le plan de son athlète à quelqu'un d'autre, ni à lui-même ;
+     * - **un athlète en relation acceptée** avec lui ;
+     * - **un plan jamais posé au calendrier.** Ses séances datées appartiennent au
+     *   calendrier du coach et pointent les copies locales qui partiraient avec le
+     *   plan. On ne démêle pas ça en silence : on refuse, et on dit quoi faire.
+     */
+    #[Route('/{id}/assign', name: 'app_plan_template_assign', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function assign(Request $request, PlanTemplate $template, UserRepository $userRepository, PlanTransfer $transfer): Response
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+        if ($template->getOwner()?->getId() !== $user->getId()) {
+            throw $this->createAccessDeniedException('Seul le propriétaire du plan peut le donner.');
+        }
+
+        $redirect = $this->redirectToRoute('app_plan_template_edit', ['id' => $template->getId()]);
+        if (!$this->isCsrfTokenValid('plan_assign'.$template->getId(), $request->getPayload()->getString('_token'))) {
+            return $redirect;
+        }
+
+        $athlete = $userRepository->find($request->getPayload()->getInt('athlete'));
+        if (null === $athlete || !$this->coachingResolver->isAcceptedCoachOf($user, $athlete)) {
+            $this->addFlash('error', 'Choisis un de tes athlètes.');
+
+            return $redirect;
+        }
+
+        if (!$template->getScheduledWorkouts()->isEmpty()) {
+            $this->addFlash('error', sprintf('Ce plan est déjà sur ton calendrier : il ne peut plus changer de propriétaire. Donne-en une copie à %s depuis sa fiche.', $athlete->getDisplayName()));
+
+            return $redirect;
+        }
+
+        $transfer->transfer($template, $athlete);
+        $this->entityManager->flush();
+
+        $this->addFlash('success', sprintf('« %s » est maintenant le plan de %s. Tu restes co-éditeur.', $template->getTitle(), $athlete->getDisplayName()));
+
+        return $redirect;
+    }
+
+    /**
+     * Copie dans SA bibliothèque un plan reçu par son lien public (#58). Même
+     * principe que `WorkoutController::copyShared` : le slug vaut droit de lecture,
+     * donc de copie. Les séances du plan arrivent avec lui dans sa bibliothèque
+     * (`SharedPlanCopier`). Sur son propre plan, rien à copier.
+     */
+    #[Route('/shared/{slug}/copy', name: 'app_plan_template_copy_shared', methods: ['POST'])]
+    public function copyShared(
+        Request $request,
+        #[MapEntity(mapping: ['slug' => 'slug'])] PlanTemplate $template,
+        SharedPlanCopier $copier,
+    ): Response {
+        if (!$this->isCsrfTokenValid('copy_shared_plan'.$template->getSlug(), $request->getPayload()->getString('_token'))) {
+            return $this->redirectToRoute('app_public_share_plan', ['slug' => $template->getSlug()]);
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+
+        if ($template->getOwner()?->getId() === $user->getId()) {
+            return $this->redirectToRoute('app_plan_template_show', ['id' => $template->getId()]);
+        }
+
+        $copy = $copier->copyFor($template, $user);
+        $this->entityManager->flush();
+
+        $this->addFlash('success', 'Plan copié dans ta bibliothèque, avec ses séances.');
+
+        return $this->redirectToRoute('app_plan_template_show', ['id' => $copy->getId()]);
+    }
+
+    /**
+     * L'entrée du visiteur anonyme, comme `WorkoutController::copySharedEntry` :
+     * le pare-feu le fait passer par le login, puis on le repose sur la page
+     * publique du plan, où la copie est désormais possible.
+     */
+    #[Route('/shared/{slug}/copy', name: 'app_plan_template_copy_shared_entry', methods: ['GET'])]
+    public function copySharedEntry(#[MapEntity(mapping: ['slug' => 'slug'])] PlanTemplate $template): Response
+    {
+        return $this->redirectToRoute('app_public_share_plan', ['slug' => $template->getSlug()]);
     }
 
     /**
@@ -458,7 +557,7 @@ final class PlanTemplateController extends AbstractController
      * puis resync si le plan est déjà au calendrier.
      */
     #[Route('/{id}/place', name: 'app_plan_template_item_place', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function placeItem(Request $request, PlanTemplate $template, LineageSeed $seed, PlanScheduler $scheduler): Response
+    public function placeItem(Request $request, PlanTemplate $template, LineageSeed $seed, PlanScheduler $scheduler, SharedWorkoutCopier $copier): Response
     {
         $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
         $payload = $request->getPayload();
@@ -466,14 +565,9 @@ final class PlanTemplateController extends AbstractController
         if ($this->isCsrfTokenValid('plan_place'.$template->getId(), $payload->getString('_token'))) {
             $week = $payload->getInt('week');
             $day = $payload->getInt('day');
-            $source = $this->workoutRepository->find($payload->getInt('workoutId'));
+            $source = $this->placeableSource($template, $payload->getInt('workoutId'), $copier);
 
-            // Case valide + séance possédée par le PROPRIÉTAIRE DU PLAN et de
-            // bibliothèque (jamais une copie locale d'un autre plan). Scoper sur
-            // l'utilisateur courant interdirait à un coach de poser une séance de
-            // son athlète — c'est-à-dire tout ce que la palette lui propose.
-            if ($week >= 1 && $week <= (int) $template->getDurationWeeks() && $day >= 1 && $day <= 7
-                && null !== $source && $source->getOwner()?->getId() === $this->ownerOf($template)->getId() && !$source->isPlanLocal()) {
+            if ($week >= 1 && $week <= (int) $template->getDurationWeeks() && $day >= 1 && $day <= 7 && null !== $source) {
                 $this->placeWorkoutInCell($template, $source, $week, $day, null, $seed);
                 $this->entityManager->flush();
                 $scheduler->resync($template);
@@ -481,6 +575,44 @@ final class PlanTemplateController extends AbstractController
         }
 
         return $this->gridResponse($request, $template);
+    }
+
+    /**
+     * La séance de bibliothèque à partir de laquelle forker la case, ou null si la
+     * palette n'avait pas à la proposer. Deux provenances admises, jamais une copie
+     * locale d'un autre plan :
+     *
+     * - la bibliothèque du **propriétaire du plan**. Scoper sur l'utilisateur courant
+     *   interdirait à un coach de poser une séance de son athlète ;
+     * - celle du **coach courant**, quand il compose le plan de son athlète (#58).
+     *   Elle passe d'abord dans la bibliothèque de l'athlète (une seule copie, reprise
+     *   aux poses suivantes) : la case part de cette copie, l'athlète ne voit jamais
+     *   une séance qui n'est pas à lui, et sa lignée vit chez lui.
+     */
+    private function placeableSource(PlanTemplate $template, int $workoutId, SharedWorkoutCopier $copier): ?Workout
+    {
+        $source = $this->workoutRepository->find($workoutId);
+        if (null === $source || $source->isPlanLocal()) {
+            return null;
+        }
+
+        $owner = $this->ownerOf($template);
+        $sourceOwnerId = $source->getOwner()?->getId();
+        if ($sourceOwnerId === $owner->getId()) {
+            return $source;
+        }
+
+        $coach = $this->coachComposing($template);
+        if (null === $coach || $sourceOwnerId !== $coach->getId()) {
+            return null;
+        }
+
+        $copy = $copier->libraryCopyFor($source, $owner);
+        // La pose part du dernier réalisé de la lignée (LineageSeed), qui se cherche
+        // en base : une copie fraîche doit y être avant.
+        $this->entityManager->flush();
+
+        return $copy;
     }
 
     #[Route('/{id}/items/{itemId}/delete', name: 'app_plan_template_item_delete', methods: ['POST'], requirements: ['id' => '\d+', 'itemId' => '\d+'])]
@@ -708,10 +840,11 @@ final class PlanTemplateController extends AbstractController
 
     /**
      * Propriétaire du plan — la seule référence valable pour tout ce que cet
-     * éditeur lit ou crée (bibliothèque proposée, copies locales, calendrier ciblé).
+     * éditeur crée (copies locales, copies de bibliothèque, calendrier ciblé).
      * L'utilisateur courant n'est pas forcément le propriétaire : un coach accepté
      * édite la trame de son athlète, et le contenu doit rester à l'athlète
-     * (cf. CLAUDE.md §3). Repli sur l'utilisateur courant pour un plan sans owner
+     * (cf. CLAUDE.md §3). Seule lecture élargie : la palette, qui propose aussi
+     * au coach ses propres séances (cf. `coachComposing()`). Repli sur l'utilisateur courant pour un plan sans owner
      * (données anciennes) — le cas normal ne s'y appuie pas.
      */
     private function ownerOf(PlanTemplate $template): User
@@ -720,6 +853,42 @@ final class PlanTemplateController extends AbstractController
         $current = $this->getUser();
 
         return $template->getOwner() ?? $current;
+    }
+
+    /**
+     * Le coach qui compose le plan de son athlète, ou null si l'utilisateur courant
+     * est le propriétaire (ou un plan sans propriétaire). Seul cas où l'éditeur lit
+     * une seconde bibliothèque : la sienne, pour la palette et la pose (#58).
+     */
+    private function coachComposing(PlanTemplate $template): ?User
+    {
+        $viewer = $this->getUser();
+        $owner = $template->getOwner();
+
+        if (!$viewer instanceof User || null === $owner || $viewer->getId() === $owner->getId()) {
+            return null;
+        }
+
+        return $this->coachingResolver->isAcceptedCoachOf($viewer, $owner) ? $viewer : null;
+    }
+
+    /**
+     * Contexte du bandeau « Pour qui » de l'éditeur (#58). Le propriétaire voit ses
+     * athlètes à qui donner le plan ; un coach sur le plan d'un athlète voit à qui
+     * il appartient.
+     *
+     * @return array{assignableAthletes: list<User>, onCalendar: bool, composingFor: User|null}
+     */
+    private function assignContext(PlanTemplate $template): array
+    {
+        $viewer = $this->getUser();
+        $isOwner = $viewer instanceof User && $template->getOwner()?->getId() === $viewer->getId();
+
+        return [
+            'assignableAthletes' => $isOwner ? $this->coachedLibrary->athletesOf($viewer) : [],
+            'onCalendar' => !$template->getScheduledWorkouts()->isEmpty(),
+            'composingFor' => null !== $this->coachComposing($template) ? $template->getOwner() : null,
+        ];
     }
 
     /**
@@ -860,7 +1029,9 @@ final class PlanTemplateController extends AbstractController
      * Portée : la bibliothèque du **propriétaire du plan**, pas celle de
      * l'utilisateur courant. Un coach qui compose la trame d'un athlète doit y
      * retrouver les séances de cet athlète — dont celles qu'il a lui-même créées
-     * pour lui, qui appartiennent à l'athlète (cf. CLAUDE.md §3).
+     * pour lui, qui appartiennent à l'athlète (cf. CLAUDE.md §3). S'y ajoutent,
+     * pour ce coach seulement, ses propres séances pas encore copiées chez
+     * l'athlète (#58) : la pose les y copie (`placeableSource()`).
      *
      * @return array<string, mixed>
      */
@@ -868,6 +1039,19 @@ final class PlanTemplateController extends AbstractController
     {
         $owner = $this->ownerOf($template);
         $workouts = $this->workoutRepository->findLibraryForOwnerWithContent($owner);
+
+        // Le coach qui compose le plan de son athlète voit aussi SES séances (#58).
+        // Celles déjà copiées chez l'athlète s'effacent : leur copie est dans la
+        // liste ci-dessus, et c'est elle que la pose reprendrait de toute façon.
+        $coach = $this->coachComposing($template);
+        $coachWorkouts = [];
+        if (null !== $coach) {
+            $copied = array_flip($this->workoutRepository->findCopiedSourceIds($owner));
+            $coachWorkouts = array_values(array_filter(
+                $this->workoutRepository->findLibraryForOwnerWithContent($coach),
+                static fn (Workout $w): bool => !isset($copied[(int) $w->getId()]),
+            ));
+        }
         // La pose part de la dernière réalisation : la carte le dit, pour que
         // les valeurs de la case ne changent pas de source en silence.
         $lastDone = $this->scheduledWorkoutRepository->lastDoneDateByLineage($owner);
@@ -877,7 +1061,7 @@ final class PlanTemplateController extends AbstractController
 
         $cards = [];
         $countsByActivity = [];
-        foreach ($workouts as $workout) {
+        foreach ([...$workouts, ...$coachWorkouts] as $index => $workout) {
             $activities = $this->workoutMetrics->distinctActivities($workout);
 
             $filterText = (string) $workout->getTitle();
@@ -893,6 +1077,8 @@ final class PlanTemplateController extends AbstractController
                 'filterText' => $filterText,
                 'lastDone' => $lastDone[(int) $workout->getId()] ?? null,
                 'feelings' => self::feelingSummary($feelings[(int) $workout->getId()] ?? []),
+                // À la séance du coach : la poser la copiera chez l'athlète.
+                'mine' => $index >= \count($workouts),
             ];
         }
 
@@ -911,8 +1097,13 @@ final class PlanTemplateController extends AbstractController
 
         return [
             'paletteCards' => $cards,
-            'paletteCount' => \count($workouts),
+            'paletteCount' => \count($cards),
             'paletteActivities' => $activityFilters,
+            // Pastilles « à qui » : seulement quand deux bibliothèques se croisent.
+            'paletteOwners' => null === $coach ? null : [
+                'owner' => ['label' => $owner->getDisplayName(), 'count' => \count($workouts)],
+                'mine' => ['label' => 'Moi', 'count' => \count($coachWorkouts)],
+            ],
         ];
     }
 
