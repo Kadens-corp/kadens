@@ -163,13 +163,37 @@
                                                         </div>
                                                     </form>
 
+                                                    {# Copier UNE séance ailleurs, sans recopier toute sa semaine.
+                                                       La case cible ne perd rien : la copie s'ajoute au jour choisi.
+                                                       Semaine suivante proposée par défaut, le cas le plus courant. #}
+                                                    {% set copyWeek = week.weekNumber < template.durationWeeks ? week.weekNumber + 1 : week.weekNumber %}
+                                                    <form method="post" class="kd-kebab__form"
+                                                          action="{{ path('app_plan_template_item_copy', {id: template.id, itemId: entry.item.id}) }}">
+                                                        <input type="hidden" name="_token" value="{{ csrf_token('item_copy' ~ entry.item.id) }}">
+                                                        <span class="kd-kebab__formlabel">
+                                                            {{ ux_icon('lucide:copy') }} Copier vers
+                                                        </span>
+                                                        <div class="kd-kebab__formrow">
+                                                            <select name="week" class="kd-input" aria-label="Semaine de la copie">
+                                                                {% for w in 1..template.durationWeeks %}
+                                                                    <option value="{{ w }}"{{ w == copyWeek ? ' selected' }}>S{{ w }}</option>
+                                                                {% endfor %}
+                                                            </select>
+                                                            <select name="day" class="kd-input" aria-label="Jour de la copie">
+                                                                {% for d, name in dayNames %}
+                                                                    <option value="{{ d }}"{{ d == day.dayOfWeek ? ' selected' }}>{{ name }}</option>
+                                                                {% endfor %}
+                                                            </select>
+                                                            <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">OK</button>
+                                                        </div>
+                                                    </form>
+
                                                     {{ include('components/_menu_form.html.twig', {
                                                         action: path('app_plan_template_item_delete', {id: template.id, itemId: entry.item.id}),
                                                         token: csrf_token('item_delete' ~ entry.item.id),
                                                         icon: 'lucide:x',
                                                         variant: 'danger',
-                                                        label: 'Retirer de la trame',
-                                                        confirm: 'Retirer cette séance de la trame ?'
+                                                        label: 'Retirer de la trame'
                                                     }) }}
                                                 </div>
                                             </details>

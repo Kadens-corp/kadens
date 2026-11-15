@@ -810,6 +810,46 @@ final class PlanTemplateController extends AbstractController
     }
 
     /**
+     * Copie UNE case vers une autre semaine et un autre jour, sans toucher au reste
+     * de la trame. Le pendant unitaire de `copyWeek` : reprendre la séance de la
+     * semaine 3 dans la semaine 6, sans recopier toute la semaine 3.
+     *
+     * La case cible ne remplace rien : un jour porte plusieurs séances, la copie
+     * s'y ajoute. Elle reçoit sa PROPRE copie locale (progression indépendante),
+     * clonée depuis la case source, valeurs ajustées comprises, et garde sa lignée
+     * (`origin`) : c'est toujours la même séance, à une autre date. Le calendrier
+     * suit si le plan y est posé (`resync`, add-only).
+     */
+    #[Route('/{id}/items/{itemId}/copy', name: 'app_plan_template_item_copy', methods: ['POST'], requirements: ['id' => '\d+', 'itemId' => '\d+'])]
+    public function copyItem(Request $request, PlanTemplate $template, int $itemId, WorkoutCloner $cloner, PlanScheduler $scheduler): Response
+    {
+        $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
+        $item = $this->findItem($template, $itemId);
+        $payload = $request->getPayload();
+
+        $source = $item->getWorkout();
+        $week = $payload->getInt('week');
+        $day = $payload->getInt('day');
+
+        if ($this->isCsrfTokenValid('item_copy'.$itemId, $payload->getString('_token'))
+            && null !== $source
+            && $week >= 1 && $week <= (int) $template->getDurationWeeks() && $day >= 1 && $day <= 7) {
+            $copy = (new PlanItem())
+                ->setWeekNumber($week)
+                ->setDayOfWeek($day)
+                ->setNotes($item->getNotes())
+                ->setWorkout($cloner->cloneWorkout($source, $this->ownerOf($template), $source->getTitle(), true));
+            $template->addPlanItem($copy);
+            $this->entityManager->persist($copy);
+            $this->entityManager->flush();
+
+            $scheduler->resync($template);
+        }
+
+        return $this->gridResponse($request, $template);
+    }
+
+    /**
      * Déplace une case dans une autre semaine/jour (glisser-déposer SortableJS).
      * Réaligne les séances datées ENCORE PRÉVUES sur la nouvelle position (le
      * calendrier suit le plan), en préservant les DONE/MISSED (leur date =
