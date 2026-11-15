@@ -21,8 +21,11 @@ use App\Repository\WorkoutRepository;
 use App\Security\Voter\WorkoutVoter;
 use App\Service\CoachedLibrary;
 use App\Service\PerformanceHistory;
+use App\Service\LineageSeed;
+use App\Service\OffProgramRecap;
 use App\Service\PlanFlattener;
 use App\Service\SetSynchronizer;
+use App\Service\SharedWorkoutCopier;
 use App\Service\SlugGenerator;
 use App\Service\SupersetGrouper;
 use App\Service\VolumePanel;
@@ -30,6 +33,7 @@ use App\Service\WorkoutCloner;
 use App\Service\WorkoutEstimator;
 use App\Service\WorkoutMetrics;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bridge\Doctrine\Attribute\MapEntity;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormInterface;
@@ -68,6 +72,7 @@ final class WorkoutController extends AbstractController
         private readonly SetSynchronizer $setSynchronizer,
         private readonly SupersetGrouper $supersets,
         private readonly VolumePanel $volumePanel,
+        private readonly OffProgramRecap $offProgramRecap,
     ) {
     }
 
@@ -304,6 +309,59 @@ final class WorkoutController extends AbstractController
         $this->addFlash('success', 'Séance dupliquée. Compose-la maintenant.');
 
         return $this->redirectToRoute('app_workout_edit', ['id' => $copy->getId()]);
+    }
+
+    /**
+     * Copie dans SA bibliothèque une séance reçue par son lien public (#58).
+     *
+     * Le slug vaut droit de lecture (cf. `PublicShareController`), donc droit de
+     * copie : on ne passe pas par `WorkoutVoter`, qui refuserait la séance d'un
+     * inconnu. La copie appartient à l'utilisateur courant, sans lignée, et les
+     * exercices perso de l'auteur y sont recopiés chez lui (`SharedWorkoutCopier`).
+     * Sur sa propre séance, rien à copier : on l'y renvoie.
+     */
+    #[Route('/shared/{slug}/copy', name: 'app_workout_copy_shared', methods: ['POST'])]
+    public function copyShared(
+        Request $request,
+        #[MapEntity(mapping: ['slug' => 'slug'])] Workout $workout,
+        SharedWorkoutCopier $copier,
+    ): Response {
+        if (!$this->isCsrfTokenValid('copy_shared'.$workout->getSlug(), $request->getPayload()->getString('_token'))) {
+            return $this->redirectToRoute('app_public_share', ['slug' => $workout->getSlug()]);
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+
+        if ($workout->getOwner() === $user) {
+            return $this->redirectToRoute('app_workout_show', ['id' => $workout->getId()]);
+        }
+
+        $copy = $copier->copyFor($workout, $user);
+        $this->entityManager->flush();
+
+        $this->addFlash('success', match ($copy->copiedExercises) {
+            0 => 'Séance copiée dans ta bibliothèque.',
+            1 => 'Séance copiée dans ta bibliothèque, avec 1 exercice perso de son auteur, ajouté à tes exercices.',
+            default => sprintf('Séance copiée dans ta bibliothèque, avec %d exercices perso de son auteur, ajoutés à tes exercices.', $copy->copiedExercises),
+        });
+
+        return $this->redirectToRoute('app_workout_show', ['id' => $copy->workout->getId()]);
+    }
+
+    /**
+     * L'entrée du visiteur anonyme. La page publique lui propose ce lien plutôt que
+     * le formulaire : la route est sous `/workout`, donc le pare-feu le renvoie au
+     * login en mémorisant cette adresse, puis l'y ramène une fois connecté, et on le
+     * repose sur la page publique, où le bouton de copie est désormais actif.
+     *
+     * Une copie ne se déclenche jamais en GET, et la cible ne transite jamais en
+     * query : aucune redirection ouverte possible.
+     */
+    #[Route('/shared/{slug}/copy', name: 'app_workout_copy_shared_entry', methods: ['GET'])]
+    public function copySharedEntry(#[MapEntity(mapping: ['slug' => 'slug'])] Workout $workout): Response
+    {
+        return $this->redirectToRoute('app_public_share', ['slug' => $workout->getSlug()]);
     }
 
     // ---- Édition des blocs -------------------------------------------------
@@ -694,6 +752,76 @@ final class WorkoutController extends AbstractController
         $user = $this->getUser();
 
         return ['workout' => $workout] + $this->volumePanel->for($workout, $user instanceof User ? $user : null);
+    }
+
+    /**
+     * « Ajouter à la séance » un exercice que l'athlète a fait HORS PROGRAMME la
+     * dernière fois (cf. `OffProgramRecap`). Il est prescrit avec ce qui a été fait,
+     * par la même règle de report que la pose (`LineageSeed::prescribeFromLog`), en
+     * fin du dernier bloc principal.
+     *
+     * Le log n'est accepté que s'il figure dans la liste que la page propose,
+     * recalculée ici : jamais le réalisé d'un tiers ni celui d'une autre lignée
+     * (la route lit un réalisé, elle ne doit pas servir à en lire un autre).
+     *
+     * Répond au panneau d'où vient le clic : l'édition rapide d'une case
+     * (`context=quick`) ou le compositeur.
+     */
+    #[Route('/{id}/exercises/from-log/{loggedId}', name: 'app_workout_prescribed_from_log', methods: ['POST'], requirements: ['id' => '\d+', 'loggedId' => '\d+'])]
+    public function addFromLog(Request $request, Workout $workout, int $loggedId, LineageSeed $lineageSeed): Response
+    {
+        $this->denyAccessUnlessGranted(WorkoutVoter::EDIT, $workout);
+        $payload = $request->getPayload();
+        $quick = 'quick' === $payload->getString('context');
+
+        if ($this->isCsrfTokenValid('prescribed_from_log'.$workout->getId(), $payload->getString('_token'))) {
+            $logged = null;
+            foreach ($this->offProgramRecap->forWorkout($workout)['extras'] ?? [] as $extra) {
+                if ($extra['addable'] && $extra['logged']->getId() === $loggedId) {
+                    $logged = $extra['logged'];
+                }
+            }
+
+            $prescribed = null === $logged ? null : $lineageSeed->prescribeFromLog($logged);
+            if (null !== $prescribed) {
+                $block = $this->blockForAddition($workout);
+                $prescribed->setPosition($this->nextPosition($block->getPrescribedExercises()->toArray()));
+                $block->addPrescribedExercise($prescribed);
+                $this->entityManager->persist($prescribed);
+                $workout->setEstimatedDurationMinutes($this->estimator->estimateMinutes($workout));
+                $this->entityManager->flush();
+            }
+        }
+
+        if ($quick && TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
+            $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
+
+            return $this->render('workout/stream/quick_panel.stream.html.twig', $this->quickPanelContext($workout));
+        }
+
+        return $this->blocksResponse($request, $workout);
+    }
+
+    /**
+     * Où atterrit un exercice ajouté sans point de dépôt : en fin du dernier bloc
+     * principal, à défaut du dernier bloc. Une séance sans bloc en reçoit un.
+     */
+    private function blockForAddition(Workout $workout): Block
+    {
+        $blocks = $workout->getBlocks()->toArray();
+        usort($blocks, static fn (Block $a, Block $b): int => $a->getPosition() <=> $b->getPosition());
+
+        $main = array_values(array_filter($blocks, static fn (Block $b): bool => BlockRole::MAIN === $b->getRole()));
+        $block = end($main) ?: end($blocks);
+        if ($block instanceof Block) {
+            return $block;
+        }
+
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $workout->addBlock($block);
+        $this->entityManager->persist($block);
+
+        return $block;
     }
 
     /**
@@ -1153,6 +1281,7 @@ final class WorkoutController extends AbstractController
             'prescribedForms' => $prescribedForms,
             'summaries' => $this->prescribedSummaries($workout),
             'supersetLabels' => $supersetLabels,
+            'offProgram' => $this->offProgramRecap->forWorkout($workout),
         ];
     }
 
@@ -1197,6 +1326,9 @@ final class WorkoutController extends AbstractController
             'segments' => $segments,
             'summaries' => $this->prescribedSummaries($workout),
             'history' => $this->historyFor($workout, $exerciseIds),
+            // Hors programme la dernière fois : dans #workout-blocks, pour que
+            // l'ajout (ou tout ajout du même exercice) le retire du re-rendu.
+            'offProgram' => $this->offProgramRecap->forWorkout($workout),
         ];
     }
 

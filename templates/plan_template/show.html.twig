@@ -3,10 +3,16 @@
 {% block title %}{{ flat.template.title }}{% endblock %}
 
 {% block body %}
+    {# Arrivée d'une copie depuis un lien partagé (#58). #}
+    {% for message in app.flashes('success') %}
+        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
+    {% endfor %}
+
     {# Vue de consultation auto-suffisante : aucun chargement AJAX post-rendu,
        condition du cache offline (Phase 9). Consomme la sortie de PlanFlattener. #}
     <div class="kd-actionbar" data-controller="clipboard"
-         data-clipboard-url-value="{{ url('app_public_share_plan', {slug: flat.template.slug}) }}">
+         data-clipboard-url-value="{{ url('app_public_share_plan', {slug: flat.template.slug}) }}"
+         data-clipboard-title-value="{{ flat.template.title }}">
         <a href="{{ path('app_plan_template_index') }}" class="kd-backlink">
             {{ ux_icon('lucide:arrow-left') }} Mes plans
         </a>
@@ -18,6 +24,10 @@
             <a href="{{ path('app_export_plan_template', {id: flat.template.id}) }}" class="kd-btn kd-btn--ghost kd-btn--sm">
                 {{ ux_icon('lucide:file-down') }} Excel
             </a>
+            {# Feuille de partage du système, ou copie là où elle n'existe pas (#58). #}
+            <button type="button" class="kd-btn kd-btn--ghost kd-btn--sm" data-action="clipboard#share">
+                {{ ux_icon('lucide:share-2') }} Partager
+            </button>
             <button type="button" class="kd-btn kd-btn--ghost kd-btn--sm" data-action="clipboard#copy">
                 {{ ux_icon('lucide:link-2') }} Copier le lien
             </button>

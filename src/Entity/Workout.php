@@ -69,6 +69,21 @@ class Workout
     #[ORM\JoinColumn(onDelete: 'SET NULL')]
     private ?Workout $origin = null;
 
+    /**
+     * Séance d'un AUTRE utilisateur dont celle-ci est la copie (#58) : le coach qui
+     * a donné la sienne à son athlète, l'auteur d'une séance partagée. Posée par
+     * `SharedWorkoutCopier`, jamais par une duplication chez soi.
+     *
+     * À ne pas confondre avec `origin`, qui relie une copie locale de plan à sa
+     * racine CHEZ LE MÊME propriétaire. Ici, rien ne se propage : c'est un repère
+     * pour retrouver « la copie de cette séance chez l'athlète » quand le coach la
+     * repose (une seule copie par séance, pas une par pose). SET NULL : supprimer
+     * l'original ne touche pas la copie, qui appartient à quelqu'un d'autre.
+     */
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    #[ORM\JoinColumn(onDelete: 'SET NULL')]
+    private ?Workout $copiedFrom = null;
+
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
 
@@ -210,6 +225,18 @@ class Workout
     public function setOrigin(?Workout $origin): static
     {
         $this->origin = $origin;
+
+        return $this;
+    }
+
+    public function getCopiedFrom(): ?Workout
+    {
+        return $this->copiedFrom;
+    }
+
+    public function setCopiedFrom(?Workout $copiedFrom): static
+    {
+        $this->copiedFrom = $copiedFrom;
 
         return $this;
     }

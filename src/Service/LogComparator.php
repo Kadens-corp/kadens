@@ -98,6 +98,34 @@ final class LogComparator
     }
 
     /**
+     * Les exercices faits **hors programme** : ceux que l'appariement de
+     * `compare()` laisse sans ligne prescrite, donc exactement ceux que l'analyse
+     * affiche à la suite du programme. Une seule définition, réutilisée pour les
+     * signaler au moment de programmer la suite (`OffProgramRecap`).
+     *
+     * Sans les exercices passés ni ceux sans aucune série : ils ne disent rien
+     * à reprendre.
+     *
+     * @return list<LoggedExercise>
+     */
+    public function offProgram(ScheduledWorkout $scheduled): array
+    {
+        if (!$scheduled->hasLog()) {
+            return [];
+        }
+
+        [, $unplanned] = $this->pair(
+            $this->plannedExercises($scheduled),
+            array_values($scheduled->getLoggedExercises()->toArray()),
+        );
+
+        return array_values(array_filter(
+            $unplanned,
+            static fn (LoggedExercise $logged): bool => !$logged->isSkipped() && !$logged->getLoggedSets()->isEmpty(),
+        ));
+    }
+
+    /**
      * Le programme de la séance, à plat et dans l'ordre de lecture. Les blocs
      * n'ont pas de sens ici : le réalisé est plat (cf. LogMetrics), un superset
      * est une intention qu'on ne peut pas observer après coup.

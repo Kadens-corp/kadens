@@ -22,9 +22,11 @@
    pas de réalisé : elles ne passent rien et rendent exactement ce qu'elles
    rendaient. C'est la portée qui garde la règle, pas une condition d'affichage.
 
-   Le bloc `actions` accueille la barre d'actions du propriétaire, posée dans le
-   hero. La page publique l'ignore et n'affiche donc rien — d'où un `embed`
-   côté workout/show plutôt qu'un `include` (un include ne porte pas de blocs). #}
+   Le bloc `actions` accueille la barre d'actions, posée dans le hero : celle du
+   propriétaire sur workout/show, celle du visiteur (partager, copier chez soi)
+   sur la page publique, qui n'y met aucune commande sur la séance elle-même.
+   D'où un `embed` chez les deux plutôt qu'un `include` (un include ne porte pas
+   de blocs). #}
 {% import 'components/_activity.html.twig' as activity %}
 {% set workout = flat.workout %}
 {% set summary = summary|default(null) %}

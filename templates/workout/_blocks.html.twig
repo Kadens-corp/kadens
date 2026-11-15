@@ -1,7 +1,11 @@
 {# Colonne droite du compositeur : les blocs. Cible des Turbo Streams (#workout-blocks).
    Contexte (blocksContext) : workout, addBlockForm, blockForms, prescribedForms,
-   summaries. #}
+   summaries, offProgram (hors programme de la dernière fois, en tête). #}
 <div class="kd-cblocks">
+    {{ include('components/_off_program.html.twig', {
+        recap: offProgram|default(null), workout: workout, context: 'composer'
+    }, with_context = false) }}
+
     {% if workout.blocks is empty %}
         <div class="kd-cblocks__empty">
             {{ ux_icon('lucide:layers') }}

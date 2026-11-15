@@ -200,6 +200,74 @@ final class CoachControllerTest extends WebTestCase
         self::assertSame(6, $plan->getDurationWeeks());
     }
 
+    /**
+     * #58 : le coach donne une de SES séances à son athlète. La copie appartient
+     * à l'athlète, l'original reste au coach, et le compositeur s'ouvre avec la
+     * fiche athlète comme retour.
+     */
+    public function testCoachCopiesOwnWorkoutIntoAthleteLibrary(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $source = $this->createWorkout($coach, 'Upper A');
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+        $form = $crawler->filter('form[action$="/workout/copy"]')->form();
+        $form['workout'] = (string) $source->getId();
+        $this->client->submit($form);
+
+        $copies = $this->em->getRepository(Workout::class)->findBy(['owner' => $athlete]);
+        self::assertCount(1, $copies);
+        self::assertSame('Upper A', $copies[0]->getTitle());
+        self::assertResponseRedirects('/workout/'.$copies[0]->getId().'/edit?from=athlete-'.$athlete->getId());
+        // L'original reste au coach, intact.
+        self::assertSame($coach->getId(), $this->mustFind(Workout::class, $source->getId())->getOwner()?->getId());
+    }
+
+    /**
+     * Seule une séance de SA bibliothèque se donne : ni celle de l'athlète (qui
+     * l'a déjà), ni celle d'un tiers, que le coach ne peut même pas lire.
+     */
+    public function testCoachCannotCopyAWorkoutHeDoesNotOwn(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $stranger = $this->createUser('stranger@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createWorkout($coach, 'Upper A');
+        $foreign = $this->createWorkout($stranger, 'Séance d\'un tiers');
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+        $token = $crawler->filter('form[action$="/workout/copy"] input[name="_token"]')->attr('value');
+
+        $this->client->request('POST', '/coach/athlete/'.$athlete->getId().'/workout/copy', [
+            '_token' => $token,
+            'workout' => (string) $foreign->getId(),
+        ]);
+
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId());
+        self::assertCount(0, $this->em->getRepository(Workout::class)->findBy(['owner' => $athlete]));
+    }
+
+    public function testCopyToAthleteIsDeniedWithoutAcceptedRelation(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::PENDING);
+        $source = $this->createWorkout($coach, 'Upper A');
+
+        $this->client->loginUser($coach);
+        $this->client->request('POST', '/coach/athlete/'.$athlete->getId().'/workout/copy', [
+            'workout' => (string) $source->getId(),
+        ]);
+
+        self::assertResponseStatusCodeSame(403);
+        self::assertCount(0, $this->em->getRepository(Workout::class)->findBy(['owner' => $athlete]));
+    }
+
     public function testCoachSchedulesWorkoutOnAthleteCalendar(): void
     {
         $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
@@ -337,14 +405,18 @@ final class CoachControllerTest extends WebTestCase
      * n'avait dans la palette que sa propre bibliothèque — donc ni les séances de
      * l'athlète, ni celles qu'il avait lui-même créées pour lui (elles appartiennent
      * à l'athlète).
+     *
+     * #58 : le coach y voit AUSSI ses propres séances, marquées « à moi » (la pose
+     * les copiera chez l'athlète). La palette reste celle du propriétaire du plan,
+     * élargie pour ce seul coach.
      */
-    public function testPlanEditorPaletteScopesToPlanOwner(): void
+    public function testPlanEditorPaletteOffersTheCoachHisOwnWorkoutsToo(): void
     {
         $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
         $athlete = $this->createUser('athlete@example.com');
         $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
         $this->createWorkout($athlete, 'Fractionné athlète');
-        $this->createWorkout($coach, 'Ma séance perso');
+        $mine = $this->createWorkout($coach, 'Ma séance perso');
         $plan = $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
 
         $this->client->loginUser($coach);
@@ -353,7 +425,28 @@ final class CoachControllerTest extends WebTestCase
         self::assertResponseIsSuccessful();
         $palette = $crawler->filter('.kd-palette')->html();
         self::assertStringContainsString('Fractionné athlète', $palette);
-        self::assertStringNotContainsString('Ma séance perso', $palette);
+        self::assertStringContainsString('Ma séance perso', $palette);
+        self::assertSame('mine', $crawler->filter('.kd-palettecard[data-workout-id="'.$mine->getId().'"]')->attr('data-owner'));
+        self::assertSelectorExists('[data-owner-pill][data-owner="mine"]');
+    }
+
+    /** La relation est dirigée : l'athlète, dans son propre plan, ne voit que ses séances. */
+    public function testAthletePaletteNeverShowsCoachWorkouts(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createWorkout($athlete, 'Fractionné athlète');
+        $this->createWorkout($coach, 'Séance du coach');
+        $plan = $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
+
+        $this->client->loginUser($athlete);
+        $crawler = $this->client->request('GET', '/plan-template/'.$plan->getId().'/edit');
+
+        $palette = $crawler->filter('.kd-palette')->html();
+        self::assertStringContainsString('Fractionné athlète', $palette);
+        self::assertStringNotContainsString('Séance du coach', $palette);
+        self::assertSelectorNotExists('[data-owner-pill]');
     }
 
     /**

@@ -20,6 +20,7 @@ use App\Enum\BlockRole;
 use App\Enum\PrescriptionType;
 use App\Enum\ScheduledStatus;
 use App\Enum\SetType;
+use App\Service\WorkoutCloner;
 use App\Tests\FindsEntities;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -300,6 +301,85 @@ final class PlanTemplateControllerTest extends WebTestCase
         self::assertNotNull($moved);
         self::assertSame(3, $moved->getWeekNumber());
         self::assertSame(6, $moved->getDayOfWeek());
+    }
+
+    /**
+     * Copier UNE séance vers une autre semaine, sans recopier toute la sienne.
+     * La copie a sa propre séance locale (progression indépendante) et garde la
+     * lignée ; la source ne bouge pas ; la case cible ne perd rien.
+     */
+    public function testCopyOneItemToAnotherWeek(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $library = $this->createLiftWorkout($user, 'Upper A');
+        $template = $this->createPlanTemplate($user, 'Bloc force', 4);
+        $source = $this->placeCell($template, $user, $library, 1, 2, 'Lourd');
+        $sourceCell = $source->getWorkout();
+        self::assertNotNull($sourceCell);
+        $alreadyThere = $this->placeCell($template, $user, $library, 3, 5, null);
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/plan-template/'.$template->getId().'/edit');
+        $form = $crawler->filter('form[action$="/items/'.$source->getId().'/copy"]')->form();
+        // Par défaut : semaine suivante, même jour.
+        self::assertSame(['week' => '2', 'day' => '2'], array_intersect_key($form->getValues(), ['week' => 0, 'day' => 0]));
+        $form['week'] = '3';
+        $form['day'] = '5';
+        $this->client->submit($form);
+
+        self::assertResponseRedirects('/plan-template/'.$template->getId().'/edit');
+
+        $this->em->clear();
+        $items = $this->em->getRepository(PlanItem::class)->findBy(['planTemplate' => $template->getId()]);
+        self::assertCount(3, $items, 'La copie s\'ajoute, elle ne remplace rien.');
+
+        $copy = null;
+        foreach ($items as $item) {
+            if (3 === $item->getWeekNumber() && 5 === $item->getDayOfWeek() && $item->getId() !== $alreadyThere->getId()) {
+                $copy = $item;
+            }
+        }
+        self::assertNotNull($copy);
+        self::assertSame('Lourd', $copy->getNotes());
+        $copyCell = $copy->getWorkout();
+        self::assertNotNull($copyCell);
+        self::assertNotSame($sourceCell->getId(), $copyCell->getId(), 'Sa propre séance locale.');
+        self::assertTrue($copyCell->isPlanLocal());
+        self::assertSame($library->getId(), $copyCell->getOrigin()?->getId(), 'Même lignée.');
+
+        $kept = $this->em->getRepository(PlanItem::class)->find($source->getId());
+        self::assertNotNull($kept);
+        self::assertSame([1, 2], [$kept->getWeekNumber(), $kept->getDayOfWeek()]);
+    }
+
+    public function testCopyOneItemOutsideThePlanIsRefused(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $library = $this->createLiftWorkout($user, 'Upper A');
+        $template = $this->createPlanTemplate($user, 'Bloc force', 4);
+        $source = $this->placeCell($template, $user, $library, 1, 2, null);
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/plan-template/'.$template->getId().'/edit');
+        $token = $crawler->filter('form[action$="/items/'.$source->getId().'/copy"] input[name="_token"]')->attr('value');
+        $this->client->request('POST', '/plan-template/'.$template->getId().'/items/'.$source->getId().'/copy', [
+            '_token' => $token, 'week' => '9', 'day' => '1',
+        ]);
+
+        $this->em->clear();
+        self::assertCount(1, $this->em->getRepository(PlanItem::class)->findBy(['planTemplate' => $template->getId()]));
+    }
+
+    /** Une case comme la pose la crée : une copie locale racinée sur la séance de bibliothèque. */
+    private function placeCell(PlanTemplate $template, User $owner, Workout $library, int $week, int $day, ?string $notes): PlanItem
+    {
+        $cell = static::getContainer()->get(WorkoutCloner::class)->cloneWorkout($library, $owner, null, true);
+        $item = (new PlanItem())->setWeekNumber($week)->setDayOfWeek($day)->setNotes($notes)->setWorkout($cell);
+        $template->addPlanItem($item);
+        $this->em->persist($item);
+        $this->em->flush();
+
+        return $item;
     }
 
     public function testDuplicateCopiesGrid(): void

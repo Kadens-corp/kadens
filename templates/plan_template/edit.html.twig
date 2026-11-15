@@ -6,6 +6,9 @@
     {% for message in app.flashes('success') %}
         <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
     {% endfor %}
+    {% for message in app.flashes('error') %}
+        <p class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ message }}</p>
+    {% endfor %}
 
     <div class="kd-actionbar">
         <a href="{{ path('app_plan_template_index') }}" class="kd-backlink">
@@ -48,8 +51,50 @@
                data-value="{{ template.description }}"
                data-action="click->inline-edit#start"
                title="Cliquer pour modifier">{{ template.description ?: '+ Ajouter une description' }}</p>
+
+            {# Coach sur le plan d'un athlète : à qui il est, et ce que fait la pose
+               d'une de ses propres séances (#58). #}
+            {% if composingFor %}
+                <p class="kd-editsection__hint">
+                    {{ include('components/_owner_badge.html.twig', {owner: composingFor}) }}
+                    Ses séances et les tiennes sont dans la palette. Une des tiennes, posée ici,
+                    est d'abord copiée dans sa bibliothèque.
+                </p>
+            {% endif %}
         </div>
     </div>
+
+    {# « Donner ce plan à » (#58) : le propriétaire le donne à un de ses athlètes,
+       sans passer par la fiche coach. Il change de propriétaire, le coach reste
+       co-éditeur. Refusé pour un plan déjà posé au calendrier (cf. assign).
+
+       Formulé comme une ACTION, jamais comme un état : aucun athlète n'est
+       présélectionné (« Choisir un athlète… »), sinon le bandeau se lisait
+       « ce plan est pour Léa » alors que rien n'était donné. La confirmation
+       nomme l'athlète choisi, lu dans le DOM au moment de l'envoi. #}
+    {% if assignableAthletes is not empty %}
+        {% if onCalendar %}
+            <p class="kd-editsection__hint">
+                Ce plan est déjà sur ton calendrier : il ne peut plus être donné à un athlète.
+                Pour qu'il en ait un, donne-lui une copie depuis sa fiche.
+            </p>
+        {% else %}
+            <form method="post" action="{{ path('app_plan_template_assign', {id: template.id}) }}" class="kd-sharerange"
+                  onsubmit="return confirm('Donner ce plan à ' + this.athlete.selectedOptions[0].text + ' ? Il deviendra le sien, tu resteras co-éditeur. Tes notes privées sur le plan seront effacées.');">
+                <input type="hidden" name="_token" value="{{ csrf_token('plan_assign' ~ template.id) }}">
+                <label class="kd-sharerange__label" for="plan_assign_athlete">Donner ce plan à&nbsp;:</label>
+                <select class="kd-planweek__select" id="plan_assign_athlete" name="athlete" required>
+                    <option value="" selected disabled>Choisir un athlète…</option>
+                    {% for athlete in assignableAthletes %}
+                        <option value="{{ athlete.id }}">{{ athlete.displayName }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">
+                    {{ ux_icon('lucide:user-plus') }} Donner
+                </button>
+            </form>
+        {% endif %}
+    {% endif %}
 
     {# Fourre-tout du propriétaire, replié tant qu'il est vide. C'est ici que se
        construit le déroulé du plan en vrac, avant qu'il devienne des cases. Le

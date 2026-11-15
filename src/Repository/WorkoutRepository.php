@@ -41,6 +41,46 @@ class WorkoutRepository extends ServiceEntityRepository
     }
 
     /**
+     * La copie de `$source` dans la bibliothèque de `$owner` (#58), la plus récente
+     * s'il y en a plusieurs. Sert à reposer la même copie quand un coach repose sa
+     * séance dans le plan de son athlète.
+     */
+    public function findLibraryCopy(Workout $source, User $owner): ?Workout
+    {
+        return $this->createQueryBuilder('w')
+            ->andWhere('w.owner = :owner')
+            ->andWhere('w.copiedFrom = :source')
+            ->andWhere('w.planLocal = false')
+            ->setParameter('owner', $owner)
+            ->setParameter('source', $source)
+            ->orderBy('w.id', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    /**
+     * Les ids des séances dont `$owner` a déjà une copie en bibliothèque : la
+     * palette du coach les retire, la copie de l'athlète les remplace.
+     *
+     * @return list<int>
+     */
+    public function findCopiedSourceIds(User $owner): array
+    {
+        /** @var list<int|string> $ids */
+        $ids = $this->createQueryBuilder('w')
+            ->select('DISTINCT IDENTITY(w.copiedFrom)')
+            ->andWhere('w.owner = :owner')
+            ->andWhere('w.copiedFrom IS NOT NULL')
+            ->andWhere('w.planLocal = false')
+            ->setParameter('owner', $owner)
+            ->getQuery()
+            ->getSingleColumnResult();
+
+        return array_map('intval', $ids);
+    }
+
+    /**
      * Comme findLibraryForOwner mais en chargeant le contenu (blocs -> exercices
      * prescrits -> exercice) en une requête. Sert la palette de l'éditeur de
      * trame, qui calcule pour chaque carte des repères dérivés (activités
