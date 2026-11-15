@@ -100,6 +100,11 @@
                     {% if card.lastDone %}
                         <span class="kd-palettecard__meta">
                             <span>{{ ux_icon('lucide:history') }} d'après le {{ card.lastDone|date('d/m') }}</span>
+                            {# Fait en plus ce jour-là : la pose ne le reprend pas,
+                               l'édition rapide de la case le propose. #}
+                            {% if card.offProgram %}
+                                <span>+ {{ card.offProgram }} hors programme</span>
+                            {% endif %}
                         </span>
                     {% endif %}
                     {# Comment ça s'est passé : la dernière fois, et en moyenne sur

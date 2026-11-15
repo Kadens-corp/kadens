@@ -201,6 +201,13 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   séance faite, réalisé logué reporté en prescrit (force uniquement, séries
   chiffrées, échauffement gardé), et la carte l'annonce. Duplication de semaine ou
   de plan et pose calendrier gardent le clone simple.
+  **Les exercices faits hors programme ne sont pas reportés** (un ajout ponctuel de
+  l'athlète ne devient pas une prescription sans le coach) : ils sont **signalés**
+  là où l'on programme (« + 2 hors programme » sur la carte de palette, encart dans
+  l'édition rapide d'une case et le compositeur, `OffProgramRecap`) et s'ajoutent
+  d'un clic, valeurs reportées par `LineageSeed::prescribeFromLog()`. « Hors
+  programme » = `LogComparator::offProgram()`, l'appariement même de l'analyse :
+  une seule définition.
 - **Plan vivant sur le calendrier.** L'instanciation est désormais **idempotente**
   (`PlanScheduler`, ex-`PlanInstantiator`) : la relancer resynchronise au lieu de
   dupliquer. `resync` est **add-only** — il ajoute au calendrier les cases posées

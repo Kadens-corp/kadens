@@ -977,6 +977,80 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
     }
 
     /**
+     * La dernière séance faite de chaque lignée d'un propriétaire, réalisé et
+     * programme chargés : de quoi dire, sur chaque carte de la palette, combien
+     * d'exercices ont été faits hors programme la dernière fois (`OffProgramRecap`).
+     *
+     * Même regroupement par racine que `lastDoneDateByLineage()`. Borné à UNE
+     * séance par racine, chargée en trois requêtes (la séance, son réalisé, son
+     * programme) plutôt qu'à la demande carte par carte.
+     *
+     * @return array<int, ScheduledWorkout> id de la séance de bibliothèque → dernière séance faite
+     */
+    public function findLatestDoneByLineageWithLog(User $owner): array
+    {
+        $latestDate = $this->createQueryBuilder('s2')
+            ->select('MAX(s2.scheduledDate)')
+            ->join('s2.workout', 'w2')
+            ->andWhere('s2.owner = :owner')
+            ->andWhere('s2.status = :done')
+            ->andWhere('COALESCE(IDENTITY(w2.origin), w2.id) = COALESCE(IDENTITY(w.origin), w.id)');
+
+        /** @var list<ScheduledWorkout> $sessions */
+        $sessions = $this->createQueryBuilder('s')
+            ->addSelect('w')
+            ->join('s.workout', 'w')
+            ->andWhere('s.owner = :owner')
+            ->andWhere('s.status = :done')
+            ->andWhere('s.scheduledDate = ('.$latestDate->getDQL().')')
+            ->setParameter('owner', $owner)
+            ->setParameter('done', ScheduledStatus::DONE)
+            ->orderBy('s.id', 'DESC')
+            ->getQuery()
+            ->getResult();
+
+        // Deux séances le même jour : la plus récemment créée l'emporte, comme
+        // dans `findDoneInLineage()` (tri date puis id décroissants).
+        $byRoot = [];
+        foreach ($sessions as $session) {
+            $workout = $session->getWorkout();
+            if (null === $workout) {
+                continue;
+            }
+            $root = (int) ($workout->getOrigin()?->getId() ?? $workout->getId());
+            $byRoot[$root] ??= $session;
+        }
+
+        if ([] !== $byRoot) {
+            $em = $this->getEntityManager();
+            // Le réalisé, collections initialisées d'un coup.
+            $em->createQueryBuilder()
+                ->select('s', 'l', 'ls', 'le')
+                ->from(ScheduledWorkout::class, 's')
+                ->leftJoin('s.loggedExercises', 'l')
+                ->leftJoin('l.loggedSets', 'ls')
+                ->leftJoin('l.exercise', 'le')
+                ->andWhere('s IN (:sessions)')
+                ->setParameter('sessions', array_values($byRoot))
+                ->getQuery()
+                ->getResult();
+            // Le programme que l'appariement relit.
+            $em->createQueryBuilder()
+                ->select('w', 'b', 'p', 'pe')
+                ->from(Workout::class, 'w')
+                ->leftJoin('w.blocks', 'b')
+                ->leftJoin('b.prescribedExercises', 'p')
+                ->leftJoin('p.exercise', 'pe')
+                ->andWhere('w IN (:workouts)')
+                ->setParameter('workouts', array_map(static fn (ScheduledWorkout $s): ?Workout => $s->getWorkout(), array_values($byRoot)))
+                ->getQuery()
+                ->getResult();
+        }
+
+        return $byRoot;
+    }
+
+    /**
      * Le ressenti effectif d'un lot de séances, en une requête : la saisie
      * Kadens si elle existe, sinon les activités rattachées (cf. `SessionRating`).
      *

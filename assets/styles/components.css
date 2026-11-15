@@ -6234,6 +6234,66 @@ button.kd-libx:active {
     color: var(--color-text-placeholder);
 }
 
+/* ---- Fait hors programme la dernière fois (OffProgramRecap) ----
+   En tête du compositeur et de l'édition rapide d'une case. Un encart d'info,
+   pas une alerte : fond discret, aucune couleur d'état. */
+.kd-offprog {
+    padding: var(--kd-space-4) var(--kd-space-5);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-subtle);
+}
+
+.kd-quickedit .kd-offprog {
+    margin-bottom: var(--kd-space-5);
+}
+
+.kd-offprog__title {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: 0 0 var(--kd-space-3);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: var(--kd-tracking-eyebrow);
+    color: var(--color-text-faint);
+}
+
+.kd-offprog__title svg {
+    width: 14px;
+    height: 14px;
+}
+
+.kd-offprog__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.kd-offprog__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kd-space-3);
+}
+
+.kd-offprog__name {
+    font-weight: var(--kd-weight-semibold);
+}
+
+.kd-offprog__add {
+    margin-left: auto;
+}
+
+.kd-offprog__gone {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--color-text-faint);
+}
+
 .kd-cblocks__empty svg {
     width: 26px;
     height: 26px;

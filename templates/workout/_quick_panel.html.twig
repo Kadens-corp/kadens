@@ -2,12 +2,17 @@
    leurs paramètres éditables. Injecté dans la mini-modale de l'éditeur de plan
    (fetch) et re-rendu par Turbo Stream à chaque enregistrement (action="update").
    Contexte (quickPanelContext) : workout, prescribedForms, summaries,
-   supersetLabels (rang « A1 » par id, seulement pour les exercices enchaînés).
+   supersetLabels (rang « A1 » par id, seulement pour les exercices enchaînés),
+   offProgram (ce que l'athlète a fait hors programme la dernière fois).
 
    Portée volontairement limitée aux valeurs (reps/séries/repos…) : la structure
    (blocs, ordre, glisser-déposer) reste au compositeur, atteignable par le lien
    « Édition complète ». #}
 {% import 'components/_activity.html.twig' as activity %}
+
+{{ include('components/_off_program.html.twig', {
+    recap: offProgram|default(null), workout: workout, context: 'quick'
+}, with_context = false) }}
 
 {% if workout.blocks is empty %}
     <p class="kd-quickedit__empty">

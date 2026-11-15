@@ -1,0 +1,43 @@
+{# ============================================================================
+   Ce que l'athlète a fait HORS PROGRAMME la dernière fois, là où l'on programme
+   la suite : compositeur (#workout-blocks) et édition rapide d'une case de plan
+   (#quick-panel). Cf. OffProgramRecap.
+
+   La pose « d'après le dernier réalisé » ne reporte pas ces exercices, à dessein :
+   l'encart les montre, et « Ajouter à la séance » les prescrit avec ce qui a été
+   fait. Le formulaire est intercepté par le contrôleur du panneau (composer /
+   plangrid), qui applique le flux renvoyé : l'exercice ajouté sort de la liste.
+
+   Paramètres :
+     recap    sortie de OffProgramRecap::forWorkout (null = rien à rendre)
+     workout  la séance éditée
+     context  'quick' (édition rapide) ou 'composer'
+   ============================================================================ #}
+{% if recap %}
+    <aside class="kd-offprog" aria-labelledby="offprog-{{ workout.id }}-{{ context }}">
+        <p class="kd-offprog__title" id="offprog-{{ workout.id }}-{{ context }}">
+            {{ ux_icon('lucide:history') }} Fait hors programme le {{ recap.date|date('d/m') }}
+        </p>
+        <ul class="kd-offprog__list">
+            {% for extra in recap.extras %}
+                {% set logged = extra.logged %}
+                <li class="kd-offprog__row">
+                    <span class="kd-offprog__name">{{ logged.exercise ? exercise_name(logged.exercise) : logged.exerciseName }}</span>
+                    <span class="kd-cexo__pill">{{ extra.summary }}</span>
+                    {% if extra.addable %}
+                        <form method="post" class="kd-offprog__add"
+                              action="{{ path('app_workout_prescribed_from_log', {id: workout.id, loggedId: logged.id}) }}">
+                            <input type="hidden" name="_token" value="{{ csrf_token('prescribed_from_log' ~ workout.id) }}">
+                            <input type="hidden" name="context" value="{{ context }}">
+                            <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm">
+                                {{ ux_icon('lucide:plus') }} Ajouter à la séance
+                            </button>
+                        </form>
+                    {% else %}
+                        <span class="kd-offprog__gone">Exercice supprimé de la bibliothèque</span>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    </aside>
+{% endif %}

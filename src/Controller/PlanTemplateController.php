@@ -19,6 +19,7 @@ use App\Security\Voter\PlanTemplateVoter;
 use App\Service\CoachedLibrary;
 use App\Service\CoachingResolver;
 use App\Service\LineageSeed;
+use App\Service\OffProgramRecap;
 use App\Service\PlanFlattener;
 use App\Service\PlanScheduler;
 use App\Service\PlanTransfer;
@@ -67,6 +68,7 @@ final class PlanTemplateController extends AbstractController
         private readonly ScheduledWorkoutRepository $scheduledWorkoutRepository,
         private readonly CoachingResolver $coachingResolver,
         private readonly CoachedLibrary $coachedLibrary,
+        private readonly OffProgramRecap $offProgramRecap,
     ) {
     }
 
@@ -1058,6 +1060,9 @@ final class PlanTemplateController extends AbstractController
         // Et comment ça s'est passé : on compose la semaine suivante en sachant
         // que « Upper A » a été vécue « faible » deux fois de suite.
         $feelings = $this->scheduledWorkoutRepository->recentRatingsByLineage($owner, self::PALETTE_RATINGS);
+        // Et ce qui a été fait en plus : la pose ne le reprend pas, la carte le
+        // signale, l'édition rapide de la case le propose.
+        $offProgram = $this->offProgramRecap->countsByLineage($owner);
 
         $cards = [];
         $countsByActivity = [];
@@ -1077,6 +1082,7 @@ final class PlanTemplateController extends AbstractController
                 'filterText' => $filterText,
                 'lastDone' => $lastDone[(int) $workout->getId()] ?? null,
                 'feelings' => self::feelingSummary($feelings[(int) $workout->getId()] ?? []),
+                'offProgram' => $offProgram[(int) $workout->getId()] ?? 0,
                 // À la séance du coach : la poser la copiera chez l'athlète.
                 'mine' => $index >= \count($workouts),
             ];

@@ -21,6 +21,8 @@ use App\Repository\WorkoutRepository;
 use App\Security\Voter\WorkoutVoter;
 use App\Service\CoachedLibrary;
 use App\Service\PerformanceHistory;
+use App\Service\LineageSeed;
+use App\Service\OffProgramRecap;
 use App\Service\PlanFlattener;
 use App\Service\SetSynchronizer;
 use App\Service\SharedWorkoutCopier;
@@ -70,6 +72,7 @@ final class WorkoutController extends AbstractController
         private readonly SetSynchronizer $setSynchronizer,
         private readonly SupersetGrouper $supersets,
         private readonly VolumePanel $volumePanel,
+        private readonly OffProgramRecap $offProgramRecap,
     ) {
     }
 
@@ -752,6 +755,76 @@ final class WorkoutController extends AbstractController
     }
 
     /**
+     * « Ajouter à la séance » un exercice que l'athlète a fait HORS PROGRAMME la
+     * dernière fois (cf. `OffProgramRecap`). Il est prescrit avec ce qui a été fait,
+     * par la même règle de report que la pose (`LineageSeed::prescribeFromLog`), en
+     * fin du dernier bloc principal.
+     *
+     * Le log n'est accepté que s'il figure dans la liste que la page propose,
+     * recalculée ici : jamais le réalisé d'un tiers ni celui d'une autre lignée
+     * (la route lit un réalisé, elle ne doit pas servir à en lire un autre).
+     *
+     * Répond au panneau d'où vient le clic : l'édition rapide d'une case
+     * (`context=quick`) ou le compositeur.
+     */
+    #[Route('/{id}/exercises/from-log/{loggedId}', name: 'app_workout_prescribed_from_log', methods: ['POST'], requirements: ['id' => '\d+', 'loggedId' => '\d+'])]
+    public function addFromLog(Request $request, Workout $workout, int $loggedId, LineageSeed $lineageSeed): Response
+    {
+        $this->denyAccessUnlessGranted(WorkoutVoter::EDIT, $workout);
+        $payload = $request->getPayload();
+        $quick = 'quick' === $payload->getString('context');
+
+        if ($this->isCsrfTokenValid('prescribed_from_log'.$workout->getId(), $payload->getString('_token'))) {
+            $logged = null;
+            foreach ($this->offProgramRecap->forWorkout($workout)['extras'] ?? [] as $extra) {
+                if ($extra['addable'] && $extra['logged']->getId() === $loggedId) {
+                    $logged = $extra['logged'];
+                }
+            }
+
+            $prescribed = null === $logged ? null : $lineageSeed->prescribeFromLog($logged);
+            if (null !== $prescribed) {
+                $block = $this->blockForAddition($workout);
+                $prescribed->setPosition($this->nextPosition($block->getPrescribedExercises()->toArray()));
+                $block->addPrescribedExercise($prescribed);
+                $this->entityManager->persist($prescribed);
+                $workout->setEstimatedDurationMinutes($this->estimator->estimateMinutes($workout));
+                $this->entityManager->flush();
+            }
+        }
+
+        if ($quick && TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
+            $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
+
+            return $this->render('workout/stream/quick_panel.stream.html.twig', $this->quickPanelContext($workout));
+        }
+
+        return $this->blocksResponse($request, $workout);
+    }
+
+    /**
+     * Où atterrit un exercice ajouté sans point de dépôt : en fin du dernier bloc
+     * principal, à défaut du dernier bloc. Une séance sans bloc en reçoit un.
+     */
+    private function blockForAddition(Workout $workout): Block
+    {
+        $blocks = $workout->getBlocks()->toArray();
+        usort($blocks, static fn (Block $a, Block $b): int => $a->getPosition() <=> $b->getPosition());
+
+        $main = array_values(array_filter($blocks, static fn (Block $b): bool => BlockRole::MAIN === $b->getRole()));
+        $block = end($main) ?: end($blocks);
+        if ($block instanceof Block) {
+            return $block;
+        }
+
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $workout->addBlock($block);
+        $this->entityManager->persist($block);
+
+        return $block;
+    }
+
+    /**
      * Enregistre les paramètres d'un exercice depuis la mini-modale. Même
      * traitement que editPrescribed, mais renvoie le stream du panneau rapide
      * (#quick-panel) et non celui du compositeur (#workout-blocks). Sans JS, repli
@@ -1208,6 +1281,7 @@ final class WorkoutController extends AbstractController
             'prescribedForms' => $prescribedForms,
             'summaries' => $this->prescribedSummaries($workout),
             'supersetLabels' => $supersetLabels,
+            'offProgram' => $this->offProgramRecap->forWorkout($workout),
         ];
     }
 
@@ -1252,6 +1326,9 @@ final class WorkoutController extends AbstractController
             'segments' => $segments,
             'summaries' => $this->prescribedSummaries($workout),
             'history' => $this->historyFor($workout, $exerciseIds),
+            // Hors programme la dernière fois : dans #workout-blocks, pour que
+            // l'ajout (ou tout ajout du même exercice) le retire du re-rendu.
+            'offProgram' => $this->offProgramRecap->forWorkout($workout),
         ];
     }
 

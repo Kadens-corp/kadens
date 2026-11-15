@@ -90,6 +90,41 @@ final class LineageSeed
         return $copy;
     }
 
+    /**
+     * Un exercice prescrit tiré d'un exercice fait HORS PROGRAMME, pour « Ajouter
+     * à la séance » (cf. `OffProgramRecap`). Pas de case d'origine ici : on part
+     * de rien, avec la même règle de report que la pose (séries chiffrées,
+     * échauffement gardé, mode simple si tout est identique).
+     *
+     * Null si l'exercice n'existe plus en bibliothèque : il n'en reste que le nom,
+     * on ne peut rien prescrire. Position et bloc sont posés par l'appelant ; rien
+     * n'est persisté ici hors des séries détaillées (cascade de l'exercice).
+     */
+    public function prescribeFromLog(LoggedExercise $logged): ?PrescribedExercise
+    {
+        $exercise = $logged->getExercise();
+        if (null === $exercise) {
+            return null;
+        }
+
+        // Des durées sans répétitions : une planche, un gainage. Le reste se compte.
+        $sets = $logged->getLoggedSets();
+        $hasReps = $sets->exists(static fn (int $i, LoggedSet $set): bool => ($set->getReps() ?? 0) > 0);
+        $hasTime = $sets->exists(static fn (int $i, LoggedSet $set): bool => ($set->getDurationSeconds() ?? 0) > 0);
+
+        $prescribed = (new PrescribedExercise())
+            ->setExercise($exercise)
+            ->setPrescriptionType(!$hasReps && $hasTime ? PrescriptionType::SETS_TIME : PrescriptionType::SETS_REPS);
+        $this->applyLogged($prescribed, $logged);
+
+        // Aucune série chiffrée : on garde au moins le nombre de séries faites.
+        if (null === $prescribed->getSets()) {
+            $prescribed->setSets(max(1, $logged->getLoggedSets()->count()));
+        }
+
+        return $prescribed;
+    }
+
     private function applyLogged(PrescribedExercise $target, LoggedExercise $logged): void
     {
         if ($logged->isSkipped() || !\in_array($target->getPrescriptionType(), self::LOGGABLE, true)) {
