@@ -6,10 +6,56 @@
 
 {% block body %}
     {# Page publique en lecture seule : réutilise le composant de rendu, sans
-       aucune action d'édition ni navigation propriétaire. Le bloc `actions` du
-       composant reste vide, c'est ce qui garantit qu'aucune commande
-       propriétaire ne peut fuiter ici. #}
-    {% include 'components/_workout_read.html.twig' with {
+       aucune action d'édition ni navigation propriétaire.
+
+       Le bloc `actions` ne porte que des gestes de VISITEUR (#58) : repartager
+       le lien, et copier la séance chez soi. Jamais une commande sur la séance
+       elle-même — éditer, supprimer, exporter restent sur /workout/{id}, derrière
+       WorkoutVoter. La copie, elle, n'est qu'une lecture de plus : le slug vaut
+       déjà droit de lecture. #}
+    {% embed 'components/_workout_read.html.twig' with {
         flat: flat, summary: summary, blockStats: blockStats
     } only %}
+        {% block actions %}
+            {% set shared = flat.workout %}
+            {# Comparaison par `id` : `owner` peut être un proxy Doctrine. #}
+            {% set isOwner = app.user and shared.owner and app.user.id == shared.owner.id %}
+
+            <div class="kd-wk__bar"
+                 data-controller="clipboard"
+                 data-clipboard-url-value="{{ url('app_public_share', {slug: shared.slug}) }}"
+                 data-clipboard-title-value="{{ shared.title }}">
+                <div class="kd-wk__baractions">
+                    {% if isOwner %}
+                        <a href="{{ path('app_workout_show', {id: shared.id}) }}" class="kd-btn kd-btn--sm kd-btn--onink">
+                            {{ ux_icon('lucide:library') }} Ouvrir dans mes séances
+                        </a>
+                    {% elseif app.user %}
+                        {# Le formulaire vit hors de la barre (attribut `form`) :
+                           le bouton reste un enfant direct, qui s'étale comme
+                           les autres en pleine largeur sur téléphone. #}
+                        <form id="wk-copy-shared" method="post" hidden
+                              action="{{ path('app_workout_copy_shared', {slug: shared.slug}) }}">
+                            <input type="hidden" name="_token" value="{{ csrf_token('copy_shared' ~ shared.slug) }}">
+                        </form>
+                        <button type="submit" form="wk-copy-shared" class="kd-btn kd-btn--sm kd-btn--onink">
+                            {{ ux_icon('lucide:copy') }} Copier dans mes séances
+                        </button>
+                    {% else %}
+                        {# Anonyme : une route protégée en GET, qui le ramène ici
+                           une fois connecté (cf. copySharedEntry). #}
+                        <a href="{{ path('app_workout_copy_shared_entry', {slug: shared.slug}) }}" class="kd-btn kd-btn--sm kd-btn--onink">
+                            {{ ux_icon('lucide:log-in') }} Se connecter pour la copier
+                        </a>
+                    {% endif %}
+
+                    <button type="button" class="kd-btn kd-btn--sm kd-btn--onink" data-action="clipboard#share">
+                        {{ ux_icon('lucide:share-2') }} Partager
+                    </button>
+
+                    <span class="kd-wk__feedback" data-clipboard-target="feedback" role="status" aria-live="polite"></span>
+                </div>
+            </div>
+        {% endblock %}
+    {% endembed %}
 {% endblock %}

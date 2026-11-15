@@ -375,6 +375,26 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertSelectorExists('[data-tabs-name="analyse"]');
     }
 
+    /**
+     * Le bouton « Partager » (#58) envoie le lien PUBLIC, pas l'adresse de la
+     * fiche : celle-ci est derrière la connexion et le voter, inutile au
+     * destinataire.
+     */
+    public function testShowOffersToShareThePublicLink(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Jambes');
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workout->getId());
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorExists('.kd-wk__baractions button[data-action="clipboard#share"]');
+        $bar = $crawler->filter('.kd-wk__bar');
+        self::assertStringEndsWith('/s/'.$workout->getSlug(), (string) $bar->attr('data-clipboard-url-value'));
+        self::assertSame('Jambes', $bar->attr('data-clipboard-title-value'));
+    }
+
     public function testShowRendersOneRowPerDetailedSet(): void
     {
         $user = $this->createUser('owner@example.com');

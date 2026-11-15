@@ -6,6 +6,11 @@
 
 {% block body %}
     {% import 'components/_rating.html.twig' as ratings %}
+
+    {# Arrivée d'une copie depuis un lien partagé (#58). #}
+    {% for message in app.flashes('success') %}
+        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
+    {% endfor %}
     {# Vue de consultation auto-suffisante : aucun chargement AJAX post-rendu,
        condition du cache offline. Consomme PlanFlattener + WorkoutMetrics.
 
@@ -18,7 +23,8 @@
         {% block actions %}
             <div class="kd-wk__bar"
                  data-controller="clipboard"
-                 data-clipboard-url-value="{{ url('app_public_share', {slug: flat.workout.slug}) }}">
+                 data-clipboard-url-value="{{ url('app_public_share', {slug: flat.workout.slug}) }}"
+                 data-clipboard-title-value="{{ flat.workout.title }}">
                 {{ include('components/_backlink.html.twig', {
                     fallback: 'app_workout_index', kicker: 'Mes séances', class: 'kd-wk__back'
                 }) }}
@@ -32,6 +38,12 @@
                             {{ ux_icon('lucide:square-pen') }} Éditer
                         </a>
                     {% endif %}
+
+                    {# Envoyer le lien public : feuille de partage du système, ou
+                       copie là où elle n'existe pas (cf. clipboard_controller). #}
+                    <button type="button" class="kd-btn kd-btn--sm kd-btn--onink" data-action="clipboard#share">
+                        {{ ux_icon('lucide:share-2') }} Partager
+                    </button>
 
                     {# Les actions secondaires vivent dans un <details> natif :
                        clavier et sans-JS d'office, comme le menu de compte. Le

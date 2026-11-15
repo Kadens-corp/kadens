@@ -246,6 +246,15 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   champ « créé par » : le coach voit/édite déjà tout le contenu de son athlète.
   À l'écran, une facette `owner` avec **« Moi » actif par défaut** et un badge de
   propriétaire sur les cartes des autres.
+- **Copier une séance chez un autre (#58) ne référence jamais un exercice qu'il
+  ne peut pas lire.** Coach → athlète (`/coach/athlete/{id}/workout/copy`) et
+  copie depuis le lien public (`/workout/shared/{slug}/copy`) passent par
+  `SharedWorkoutCopier` : un exercice perso de l'auteur que `ExerciseVoter::VIEW`
+  refuse au destinataire est recopié dans sa bibliothèque (homonyme de même
+  activité réutilisé, jamais de `refKey`). Ce n'est pas du confort : la FK
+  `prescribed_exercise.exercise_id` est en RESTRICT, une référence croisée
+  empêcherait l'auteur de supprimer son exercice. Entre coach et athlète en
+  relation acceptée, le voter dit oui : la référence reste, comme au compositeur.
 - **Le bloc-notes privé est la seule exception à « le coach voit tout ».**
   `Workout.notes` et `PlanTemplate.notes` (TEXT nullable) sont un fourre-tout du
   **propriétaire seul** : brouillon, déroulé en vrac. À distinguer de

@@ -11,6 +11,7 @@ use App\Enum\MuscleGroup;
 use App\Enum\ScheduledStatus;
 use App\Enum\StatsRange;
 use App\Enum\StatsTab;
+use App\Http\BackTarget;
 use App\Repository\GoalRepository;
 use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
@@ -23,6 +24,7 @@ use App\Service\ExerciseTrajectory;
 use App\Service\HeartRateZones;
 use App\Service\PlanScheduler;
 use App\Service\ProfileStats;
+use App\Service\SharedWorkoutCopier;
 use App\Service\SlugGenerator;
 use App\Service\StatsPeriod;
 use App\Service\TrainingHistory;
@@ -91,6 +93,8 @@ final class CoachController extends AbstractController
     ): Response {
         $this->denyUnlessCoachOf($athlete);
 
+        /** @var User $coach */
+        $coach = $this->getUser();
         $today = new \DateTimeImmutable('today');
 
         // Les dernières séances consignées, en agrégats scalaires : TrainingLog
@@ -102,6 +106,8 @@ final class CoachController extends AbstractController
         return $this->render('coach/athlete.html.twig', [
             'athlete' => $athlete,
             'workouts' => $workoutRepository->findLibraryForOwner($athlete),
+            // Le seul élément de la page qui parle du coach : ce qu'il peut donner.
+            'coachWorkouts' => $workoutRepository->findLibraryForOwner($coach),
             'plans' => $planTemplateRepository->findBy(['owner' => $athlete], ['title' => 'ASC']),
             'upcoming' => $scheduledWorkoutRepository->findByOwnerBetween($athlete, $today, $today->modify('+8 weeks')),
             'logged' => $logged,
@@ -262,6 +268,50 @@ final class CoachController extends AbstractController
         $this->addFlash('success', sprintf('Séance créée pour %s. Compose-la maintenant.', $athlete->getDisplayName()));
 
         return $this->redirectToRoute('app_workout_edit', ['id' => $workout->getId()]);
+    }
+
+    /**
+     * Ajoute à la bibliothèque de l'athlète une copie d'une séance **du coach**
+     * (#58). La copie appartient à l'athlète, comme tout ce que le coach crée ici,
+     * et l'original reste intact chez le coach : l'adapter à l'athlète ne touche
+     * pas sa séance modèle.
+     *
+     * Seule une séance de la bibliothèque du coach est acceptée (pas une copie
+     * locale de plan, pas le contenu d'un tiers). Les exercices perso du coach
+     * restent référencés, la relation acceptée les ouvre à l'athlète
+     * (cf. `SharedWorkoutCopier`).
+     *
+     * Bascule ensuite sur le compositeur, avec la fiche athlète comme retour.
+     */
+    #[Route('/athlete/{id}/workout/copy', name: 'app_coach_workout_copy', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function copyWorkout(
+        Request $request,
+        #[MapEntity(id: 'id')] User $athlete,
+        WorkoutRepository $workoutRepository,
+        SharedWorkoutCopier $copier,
+    ): Response {
+        $this->denyUnlessCoachOf($athlete);
+        $this->denyUnlessCsrf($request, 'coach_workout_copy'.$athlete->getId());
+
+        /** @var User $coach */
+        $coach = $this->getUser();
+        $source = $workoutRepository->find($request->getPayload()->getInt('workout'));
+
+        if (!$source instanceof Workout || $source->getOwner()?->getId() !== $coach->getId() || $source->isPlanLocal()) {
+            $this->addFlash('error', 'Choisis une séance de ta bibliothèque.');
+
+            return $this->redirectToRoute('app_coach_athlete', ['id' => $athlete->getId()]);
+        }
+
+        $copy = $copier->copyFor($source, $athlete)->workout;
+        $this->entityManager->flush();
+
+        $this->addFlash('success', sprintf('« %s » ajoutée à la bibliothèque de %s. Ajuste-la à son niveau si besoin.', $copy->getTitle(), $athlete->getDisplayName()));
+
+        return $this->redirectToRoute('app_workout_edit', [
+            'id' => $copy->getId(),
+            'from' => BackTarget::token(BackTarget::ATHLETE, (int) $athlete->getId()),
+        ]);
     }
 
     /**

@@ -73,7 +73,7 @@
             </div>
         </div>
 
-        <div class="kd-grid kd-grid--2 kd-section__block">
+        <div class="kd-grid kd-grid--3 kd-section__block">
             <section class="kd-card">
                 <h3 class="kd-card__title">{{ ux_icon('lucide:clipboard-list') }} Nouvelle séance</h3>
                 <form method="post" action="{{ path('app_coach_workout_new', {id: athlete.id}) }}" class="kd-coachform">
@@ -87,6 +87,30 @@
                         {{ ux_icon('lucide:plus') }} Créer et composer
                     </button>
                 </form>
+            </section>
+
+            {# Une séance de SA bibliothèque à lui, copiée chez l'athlète : l'original
+               reste intact, la copie appartient à l'athlète (#58). #}
+            <section class="kd-card">
+                <h3 class="kd-card__title">{{ ux_icon('lucide:copy') }} Une de mes séances</h3>
+                {% if coachWorkouts is empty %}
+                    <p class="kd-lead">Ta bibliothèque est vide : compose d'abord une séance dans « Mes séances ».</p>
+                {% else %}
+                    <form method="post" action="{{ path('app_coach_workout_copy', {id: athlete.id}) }}" class="kd-coachform">
+                        <input type="hidden" name="_token" value="{{ csrf_token('coach_workout_copy' ~ athlete.id) }}">
+                        <div class="kd-field kd-coachform__field">
+                            <label class="kd-label" for="coach_workout_copy">Séance à lui donner</label>
+                            <select class="kd-input" id="coach_workout_copy" name="workout" required>
+                                {% for workout in coachWorkouts %}
+                                    <option value="{{ workout.id }}">{{ workout.title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="kd-btn kd-btn--primary">
+                            {{ ux_icon('lucide:plus') }} Ajouter à sa bibliothèque
+                        </button>
+                    </form>
+                {% endif %}
             </section>
 
             <section class="kd-card">

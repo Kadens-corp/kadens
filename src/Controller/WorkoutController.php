@@ -23,6 +23,7 @@ use App\Service\CoachedLibrary;
 use App\Service\PerformanceHistory;
 use App\Service\PlanFlattener;
 use App\Service\SetSynchronizer;
+use App\Service\SharedWorkoutCopier;
 use App\Service\SlugGenerator;
 use App\Service\SupersetGrouper;
 use App\Service\VolumePanel;
@@ -30,6 +31,7 @@ use App\Service\WorkoutCloner;
 use App\Service\WorkoutEstimator;
 use App\Service\WorkoutMetrics;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bridge\Doctrine\Attribute\MapEntity;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormInterface;
@@ -304,6 +306,59 @@ final class WorkoutController extends AbstractController
         $this->addFlash('success', 'Séance dupliquée. Compose-la maintenant.');
 
         return $this->redirectToRoute('app_workout_edit', ['id' => $copy->getId()]);
+    }
+
+    /**
+     * Copie dans SA bibliothèque une séance reçue par son lien public (#58).
+     *
+     * Le slug vaut droit de lecture (cf. `PublicShareController`), donc droit de
+     * copie : on ne passe pas par `WorkoutVoter`, qui refuserait la séance d'un
+     * inconnu. La copie appartient à l'utilisateur courant, sans lignée, et les
+     * exercices perso de l'auteur y sont recopiés chez lui (`SharedWorkoutCopier`).
+     * Sur sa propre séance, rien à copier : on l'y renvoie.
+     */
+    #[Route('/shared/{slug}/copy', name: 'app_workout_copy_shared', methods: ['POST'])]
+    public function copyShared(
+        Request $request,
+        #[MapEntity(mapping: ['slug' => 'slug'])] Workout $workout,
+        SharedWorkoutCopier $copier,
+    ): Response {
+        if (!$this->isCsrfTokenValid('copy_shared'.$workout->getSlug(), $request->getPayload()->getString('_token'))) {
+            return $this->redirectToRoute('app_public_share', ['slug' => $workout->getSlug()]);
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+
+        if ($workout->getOwner() === $user) {
+            return $this->redirectToRoute('app_workout_show', ['id' => $workout->getId()]);
+        }
+
+        $copy = $copier->copyFor($workout, $user);
+        $this->entityManager->flush();
+
+        $this->addFlash('success', match ($copy->copiedExercises) {
+            0 => 'Séance copiée dans ta bibliothèque.',
+            1 => 'Séance copiée dans ta bibliothèque, avec 1 exercice perso de son auteur, ajouté à tes exercices.',
+            default => sprintf('Séance copiée dans ta bibliothèque, avec %d exercices perso de son auteur, ajoutés à tes exercices.', $copy->copiedExercises),
+        });
+
+        return $this->redirectToRoute('app_workout_show', ['id' => $copy->workout->getId()]);
+    }
+
+    /**
+     * L'entrée du visiteur anonyme. La page publique lui propose ce lien plutôt que
+     * le formulaire : la route est sous `/workout`, donc le pare-feu le renvoie au
+     * login en mémorisant cette adresse, puis l'y ramène une fois connecté, et on le
+     * repose sur la page publique, où le bouton de copie est désormais actif.
+     *
+     * Une copie ne se déclenche jamais en GET, et la cible ne transite jamais en
+     * query : aucune redirection ouverte possible.
+     */
+    #[Route('/shared/{slug}/copy', name: 'app_workout_copy_shared_entry', methods: ['GET'])]
+    public function copySharedEntry(#[MapEntity(mapping: ['slug' => 'slug'])] Workout $workout): Response
+    {
+        return $this->redirectToRoute('app_public_share', ['slug' => $workout->getSlug()]);
     }
 
     // ---- Édition des blocs -------------------------------------------------
