@@ -34,7 +34,7 @@ parameters:
 
     # Le dépôt qui héberge les releases. L'APK en téléchargement direct s'en
     # dérive, avec le nom de fichier composé par `.github/workflows/build.yml`.
-    app.mobile.repository: "CallMeTrinity/kadens-mobile"
+    app.mobile.repository: "Kadens-corp/kadens-mobile"
 
     # Le dépôt TNTStore (KL-42), qui ne référence que ces releases et n'héberge
     # aucun binaire. Cette URL est ce que la page affiche et ce que le QR encode :

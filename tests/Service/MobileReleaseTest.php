@@ -25,11 +25,11 @@ final class MobileReleaseTest extends TestCase
         // Le nom du fichier est celui que compose `.github/workflows/build.yml`
         // (`kadens-<versionName>-<versionCode>.apk`), et le tag est `v<name>`.
         self::assertSame(
-            'https://github.com/CallMeTrinity/kadens-mobile/releases/download/v1.2.0/kadens-1.2.0-42.apk',
+            'https://github.com/Kadens-corp/kadens-mobile/releases/download/v1.2.0/kadens-1.2.0-42.apk',
             $release->apkUrl(),
         );
         self::assertSame(
-            'https://github.com/CallMeTrinity/kadens-mobile/releases/tag/v1.2.0',
+            'https://github.com/Kadens-corp/kadens-mobile/releases/tag/v1.2.0',
             $release->releaseUrl(),
         );
     }
@@ -64,7 +64,7 @@ final class MobileReleaseTest extends TestCase
             versionCode: $versionCode,
             versionName: $versionName,
             minimumVersionCode: 0,
-            repository: 'CallMeTrinity/kadens-mobile',
+            repository: 'Kadens-corp/kadens-mobile',
             storeUrl: 'https://store.antoninpamart.fr',
             storeFingerprint: str_repeat('ab', 32),
         );
