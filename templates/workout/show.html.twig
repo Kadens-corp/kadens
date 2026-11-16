@@ -12,6 +12,9 @@
     {% for message in app.flashes('success') %}
         <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
     {% endfor %}
+    {# Séance d'un athlète ouverte par son coach : à qui elle est (#64). #}
+    {{ include('components/_owner_banner.html.twig', {owner: workout.owner, kind: 'Séance'}, with_context = false) }}
+
     {# Vue de consultation auto-suffisante : aucun chargement AJAX post-rendu,
        condition du cache offline. Consomme PlanFlattener + WorkoutMetrics.
 
@@ -24,7 +27,8 @@
         {% block actions %}
             <div class="kd-wk__bar">
                 {{ include('components/_backlink.html.twig', {
-                    fallback: 'app_workout_index', kicker: 'Mes séances', class: 'kd-wk__back'
+                    fallback: 'app_workout_index', kicker: 'Mes séances', class: 'kd-wk__back',
+                    owner: flat.workout.owner
                 }) }}
 
                 <div class="kd-wk__baractions">

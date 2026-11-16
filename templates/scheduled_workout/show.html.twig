@@ -10,6 +10,9 @@
         <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
     {% endfor %}
 
+    {# Séance datée d'un athlète ouverte par son coach : à qui elle est (#64). #}
+    {{ include('components/_owner_banner.html.twig', {owner: scheduled.owner, kind: 'Séance'}, with_context = false) }}
+
     {# Séance dans son contexte daté. La page de bibliothèque (app_workout_show)
        montre la même séance mais ne connaît aucune date : c'est ici, et seulement
        ici, que se boucle le « prévu vs réalisé ».

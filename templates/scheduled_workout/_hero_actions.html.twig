@@ -10,7 +10,8 @@
 
 <div class="kd-wk__bar">
     {{ include('components/_backlink.html.twig', {
-        fallback: 'app_calendar_index', kicker: 'Calendrier', class: 'kd-wk__back'
+        fallback: 'app_calendar_index', kicker: 'Calendrier', class: 'kd-wk__back',
+        owner: scheduled.owner
     }) }}
 
     <div class="kd-wk__baractions">

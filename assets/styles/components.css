@@ -1282,6 +1282,67 @@ a.kd-scope--link:hover {
 }
 
 /* ----------------------------------------------------------------------------
+   Bandeau propriétaire (#64) : « Séance de Trailer38 » sur le contenu d'un
+   athlète ouvert par son coach. Encre et gris seulement : ce n'est ni une
+   action primaire ni une alerte, le rouge n'a rien à y faire (règle 2). Le
+   filet gauche suffit à le détacher de la page sans en faire un message.
+   ---------------------------------------------------------------------------- */
+.kd-ownerbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-2) var(--kd-space-3);
+    margin: 0 0 var(--kd-space-7);
+    padding: var(--kd-space-3) var(--kd-space-5);
+    background: var(--color-surface-subtle);
+    border-left: 3px solid var(--color-text);
+    color: var(--color-text);
+}
+
+.kd-ownerbar > svg {
+    width: 14px;
+    height: 14px;
+    color: var(--color-text-secondary);
+}
+
+.kd-ownerbar__kicker {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+/* Le nom est du contenu saisi : casse normale (règle 4). */
+.kd-ownerbar__name {
+    font-family: var(--font-body);
+    font-weight: var(--kd-weight-semibold);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.kd-ownerbar__link {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+}
+
+.kd-ownerbar__link:hover {
+    color: var(--color-primary);
+}
+
+.kd-ownerbar__link svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* ----------------------------------------------------------------------------
    Liste de définitions (page de consultation : activité, zones, description…)
    ---------------------------------------------------------------------------- */
 .kd-deflist {
@@ -2044,10 +2105,12 @@ a.kd-scope--link:hover {
 }
 
 /* La morsure du haut suppose que le hero ouvre la page. Précédé d'un message
-   (flash) ou du bandeau « Page publique » (#61), il les recouvrait : il reprend
-   alors sa place dans le flux, sous eux. Les côtés mordent toujours. */
+   (flash), du bandeau « Page publique » (#61) ou du bandeau propriétaire (#64),
+   il les recouvrait : il reprend alors sa place dans le flux, sous eux. Les
+   côtés mordent toujours. */
 .kd-flash + .kd-wk > .kd-wk__hero,
-.kd-publicbanner + .kd-wk > .kd-wk__hero {
+.kd-publicbanner + .kd-wk > .kd-wk__hero,
+.kd-ownerbar + .kd-wk > .kd-wk__hero {
     margin-top: 0;
 }
 

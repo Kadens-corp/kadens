@@ -13,7 +13,7 @@
 
     <div class="kd-actionbar">
         {{ include('components/_backlink.html.twig', {
-            fallback: 'app_workout_index', kicker: 'Mes séances'
+            fallback: 'app_workout_index', kicker: 'Mes séances', owner: workout.owner
         }) }}
         <div class="kd-actionbar__end">
             {# `back_carry()` : ouvrir la consultation depuis le compositeur ne doit
@@ -26,6 +26,9 @@
             </a>
         </div>
     </div>
+
+    {# Séance d'un athlète composée par son coach : à qui elle est (#64). #}
+    {{ include('components/_owner_banner.html.twig', {owner: workout.owner, kind: 'Séance'}, with_context = false) }}
 
     {% set exCount = 0 %}
     {% for b in workout.blocks %}{% set exCount = exCount + b.prescribedExercises|length %}{% endfor %}

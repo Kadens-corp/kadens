@@ -35,6 +35,10 @@
     {% set subject = subject|default(null) %}
     {% set statsPath = subject ? path('app_coach_athlete_stats', {id: subject.id}) : path('app_profile_stats') %}
     {% set logPath = subject ? path('app_coach_athlete_log', {id: subject.id}) : path('app_profile_log') %}
+    {# Une séance ouverte depuis l'historique d'un athlète repart vers sa fiche,
+       pas vers le calendrier du coach, vide (#64, C-13). Pour soi, aucun jeton :
+       le retour d'origine de la séance datée (« Calendrier ») est le bon. #}
+    {% set back = subject ? back_to('athlete', subject.id) : {} %}
     {% set backPath = subject ? path('app_coach_athlete', {id: subject.id}) : path('app_profile') %}
     {% set years = history.years %}
 
@@ -186,7 +190,7 @@
                                                     ~ (session.rating.sessionRpe ? ' — difficulté ' ~ session.rating.sessionRpe ~ '/10') %}
 
                                                 <a class="kd-histsess{{ session.endurance ? ' kd-histsess--endurance' }}"
-                                                   href="{{ path('app_scheduled_workout_show', {id: session.id}) }}"
+                                                   href="{{ path('app_scheduled_workout_show', {id: session.id}|merge(back)) }}"
                                                    title="{{ label }}" aria-label="{{ label }}">
                                                     {% if session.endurance %}
                                                         {{ ux_icon(activity.icon(session.activity)|trim) }}

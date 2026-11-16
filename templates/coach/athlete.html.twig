@@ -180,8 +180,8 @@
                 <ul class="kd-coachitems">
                     {% for workout in workouts %}
                         <li class="kd-coachitem">
-                            <a href="{{ path('app_workout_show', {id: workout.id}) }}" class="kd-coachitem__name">{{ workout.title }}</a>
-                            <a href="{{ path('app_workout_edit', {id: workout.id}) }}" class="kd-btn kd-btn--ghost kd-btn--sm">
+                            <a href="{{ path('app_workout_show', {id: workout.id}|merge(back_to('athlete', athlete.id))) }}" class="kd-coachitem__name">{{ workout.title }}</a>
+                            <a href="{{ path('app_workout_edit', {id: workout.id}|merge(back_to('athlete', athlete.id))) }}" class="kd-btn kd-btn--ghost kd-btn--sm">
                                 {{ ux_icon('lucide:square-pen') }} Composer
                             </a>
                         </li>
@@ -237,9 +237,9 @@
                 <ul class="kd-coachitems">
                     {% for plan in plans %}
                         <li class="kd-coachitem">
-                            <a href="{{ path('app_plan_template_show', {id: plan.id}) }}" class="kd-coachitem__name">{{ plan.title }}</a>
+                            <a href="{{ path('app_plan_template_show', {id: plan.id}|merge(back_to('athlete', athlete.id))) }}" class="kd-coachitem__name">{{ plan.title }}</a>
                             <span class="kd-coachitem__meta">{{ plan.durationWeeks }} semaine{{ plan.durationWeeks > 1 ? 's' }}</span>
-                            <a href="{{ path('app_plan_template_edit', {id: plan.id}) }}" class="kd-btn kd-btn--ghost kd-btn--sm">
+                            <a href="{{ path('app_plan_template_edit', {id: plan.id}|merge(back_to('athlete', athlete.id))) }}" class="kd-btn kd-btn--ghost kd-btn--sm">
                                 {{ ux_icon('lucide:square-pen') }} Composer
                             </a>
                         </li>

@@ -35,6 +35,9 @@
     {% set subject = subject|default(null) %}
     {% set historyPath = subject ? path('app_coach_athlete_history', {id: subject.id}) : path('app_profile_history') %}
     {% set logPath = subject ? path('app_coach_athlete_log', {id: subject.id}) : path('app_profile_log') %}
+    {# Même règle que l'historique : depuis les stats d'un athlète, le retour
+       d'une séance ou d'un plan vise sa fiche (#64). #}
+    {% set back = subject ? back_to('athlete', subject.id) : {} %}
     {% set backPath = subject ? path('app_coach_athlete', {id: subject.id}) : path('app_profile') %}
     {% set vol = stats.volume %}
     {% set reg = stats.regularity %}
@@ -231,7 +234,7 @@
                                 <li class="kd-planbar">
                                     <div class="kd-planbar__head">
                                         {% if plan.planId %}
-                                            <a class="kd-planbar__name" href="{{ path('app_plan_template_show', {id: plan.planId}) }}">{{ plan.planTitle }}</a>
+                                            <a class="kd-planbar__name" href="{{ path('app_plan_template_show', {id: plan.planId}|merge(back)) }}">{{ plan.planTitle }}</a>
                                         {% else %}
                                             <span class="kd-planbar__name kd-planbar__name--loose">{{ plan.planTitle }}</span>
                                         {% endif %}
@@ -659,7 +662,7 @@
                             {% for r in endu.records %}
                                 <li class="kd-ranklist__row">
                                     <span class="kd-ranklist__rank">{{ activity.badge(r.activity, false) }}</span>
-                                    <a class="kd-ranklist__name" href="{{ path('app_scheduled_workout_show', {id: r.scheduledId}) }}">{{ r.label }}</a>
+                                    <a class="kd-ranklist__name" href="{{ path('app_scheduled_workout_show', {id: r.scheduledId}|merge(back)) }}">{{ r.label }}</a>
                                     <span class="kd-ranklist__val">{{ r.value }}</span>
                                     <span class="kd-ranklist__note">{{ r.date|date('d/m/Y') }}{{ r.note ? ' · ' ~ r.note }}</span>
                                 </li>

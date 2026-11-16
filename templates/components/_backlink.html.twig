@@ -8,11 +8,14 @@
      - kicker   : son libellé (structurel, il passera en capitales)
      - params   : paramètres de cette route (défaut {})
      - class    : `kd-backlink` (page claire) ou `kd-wk__back` (hero encré)
+     - owner    : propriétaire du contenu affiché (défaut null). Sans contexte
+                  porté, un coach sur le contenu de son athlète repart vers la
+                  fiche de l'athlète au lieu du repli, qui est sa page à lui (#64)
 
    Le libellé se rend en deux morceaux : le kicker est structurel et suit la
    casse de la classe, `name` est du contenu saisi (titre de plan) et reste en
    casse normale — règle 4 du design system. #}
-{% set back = back_link(fallback, kicker, params|default({})) %}
+{% set back = back_link(fallback, kicker, params|default({}), owner|default(null)) %}
 
 <a href="{{ back.url }}" class="{{ class|default('kd-backlink') }}">
     {{ ux_icon('lucide:arrow-left') }}

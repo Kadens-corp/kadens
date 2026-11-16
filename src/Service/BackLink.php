@@ -85,13 +85,21 @@ final class BackLink
      * Le lien de retour à afficher. `$fallbackKicker` / `$fallbackRoute` sont le
      * retour d'origine de la page, celui d'avant cette fonctionnalité.
      *
+     * `$owner` est le propriétaire du contenu affiché, quand la page en a un.
+     * Sans jeton lisible, un coach sur le contenu de son athlète repart vers la
+     * fiche de l'athlète plutôt que vers le repli (#64) : « Mes séances », « Mes
+     * plans » ou « Calendrier » sont SES pages, et l'y renvoyer changeait de
+     * sujet en silence — vers une liste souvent vide. Un jeton lisible garde la
+     * priorité : il dit d'où l'on vient, ce que le propriétaire ne sait pas.
+     *
      * @param array<string, scalar> $fallbackParams
      *
      * @return array{url: string, kicker: string, name: string|null}
      */
-    public function resolve(string $fallbackRoute, string $fallbackKicker, array $fallbackParams = []): array
+    public function resolve(string $fallbackRoute, string $fallbackKicker, array $fallbackParams = [], ?User $owner = null): array
     {
-        $resolved = $this->fromToken(BackTarget::parse($this->currentToken()));
+        $resolved = $this->fromToken(BackTarget::parse($this->currentToken()))
+            ?? $this->coachedOwner($owner);
 
         return $resolved ?? [
             'url' => $this->urlGenerator->generate($fallbackRoute, $fallbackParams),
@@ -182,6 +190,21 @@ final class BackLink
             'kicker' => $kicker,
             'name' => $athlete->getDisplayName(),
         ];
+    }
+
+    /**
+     * Fiche de l'athlète propriétaire, si le lecteur en est le coach accepté.
+     * Le propriétaire lui-même, un contenu global (`owner` null) ou une relation
+     * terminée retombent sur le repli de la page : même garde que le jeton
+     * `athlete-<id>`, dont c'est le pendant implicite.
+     *
+     * @return array{url: string, kicker: string, name: string|null}|null
+     */
+    private function coachedOwner(?User $owner): ?array
+    {
+        $id = $owner?->getId();
+
+        return null === $id ? null : $this->athlete((string) $id, 'app_coach_athlete', 'Athlète');
     }
 
     /**

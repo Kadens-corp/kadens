@@ -867,6 +867,123 @@ final class CoachControllerTest extends WebTestCase
         self::assertCount(0, $crawler->filter('a[href="/coach/athlete/'.$athlete->getId().'"]'));
     }
 
+    // ------------------------------------------- bandeau propriétaire (#64)
+
+    /**
+     * Le contenu de l'athlète s'ouvre chez son coach avec la mise en page du
+     * sien : sans bandeau, rien ne disait à qui il était, et le retour par
+     * défaut (« Mes séances », « Mes plans », « Calendrier ») ramenait le coach
+     * sur ses propres pages, vides. Sur les cinq pages, le bandeau nomme
+     * l'athlète par son pseudo et le retour vise sa fiche, sans `?from=`.
+     */
+    public function testAthleteContentNamesItsOwnerAndLeadsBackToTheSheet(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $athlete->setUsername('Trailer38');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $workout = $this->createWorkout($athlete, 'Séance suivie');
+        $plan = $this->createPlanTemplate($athlete, 'Plan suivi', 4);
+        $scheduled = $this->logSession($athlete, $this->createExercise(null, 'Squat'), '2026-03-08', [
+            [SetType::NORMAL, 5, 100.0],
+        ]);
+
+        $sheet = '/coach/athlete/'.$athlete->getId();
+        $pages = [
+            '/workout/'.$workout->getId() => ['Séance', 'a.kd-wk__back'],
+            '/workout/'.$workout->getId().'/edit' => ['Séance', 'a.kd-backlink'],
+            '/plan-template/'.$plan->getId() => ['Plan', 'a.kd-backlink'],
+            '/plan-template/'.$plan->getId().'/edit' => ['Plan', 'a.kd-backlink'],
+            '/schedule/'.$scheduled->getId() => ['Séance', 'a.kd-wk__back'],
+        ];
+
+        $this->client->loginUser($coach);
+
+        foreach ($pages as $url => [$kind, $back]) {
+            $crawler = $this->client->request('GET', $url);
+
+            self::assertResponseIsSuccessful($url);
+            $banner = $crawler->filter('.kd-ownerbar');
+            self::assertCount(1, $banner, $url);
+            self::assertStringContainsString($kind.' de Trailer38', $banner->text(), $url);
+            self::assertStringNotContainsString('athlete@example.com', $banner->text(), $url);
+            self::assertCount(1, $banner->filter('a[href="'.$sheet.'"]'), $url);
+            self::assertCount(1, $crawler->filter($back.'[href="'.$sheet.'"]'), $url);
+        }
+    }
+
+    /** Chez soi, rien ne change : ni bandeau, ni retour détourné. */
+    public function testOwnContentHasNoOwnerBannerAndKeepsItsDefaultBack(): void
+    {
+        $athlete = $this->createUser('athlete@example.com');
+        $workout = $this->createWorkout($athlete, 'Ma séance');
+        $plan = $this->createPlanTemplate($athlete, 'Mon plan', 4);
+
+        $this->client->loginUser($athlete);
+
+        $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        self::assertSelectorNotExists('.kd-ownerbar');
+        self::assertSelectorExists('a.kd-backlink[href="/workout"]');
+
+        $this->client->request('GET', '/plan-template/'.$plan->getId());
+        self::assertSelectorNotExists('.kd-ownerbar');
+        self::assertSelectorExists('a.kd-backlink[href="/plan-template"]');
+    }
+
+    /**
+     * Le retour vers la fiche n'est qu'un défaut : un contexte porté garde la
+     * priorité. Une case ouverte depuis le plan de l'athlète repart au plan.
+     */
+    public function testACarriedContextStillWinsOverTheSheet(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $workout = $this->createWorkout($athlete, 'Séance suivie');
+        $plan = $this->createPlanTemplate($athlete, 'Plan suivi', 4);
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/workout/'.$workout->getId().'/edit?from=plan-edit-'.$plan->getId());
+
+        self::assertSelectorExists('a.kd-backlink[href="/plan-template/'.$plan->getId().'/edit"]');
+        self::assertSelectorExists('.kd-ownerbar');
+    }
+
+    /**
+     * Tous les liens qui sortent de la fiche vers un contenu de l'athlète posent
+     * leur ancre, y compris par le détour de l'historique (C-13).
+     */
+    public function testLinksLeavingTheSheetCarryTheAthleteAnchor(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $workout = $this->createWorkout($athlete, 'Séance suivie');
+        $plan = $this->createPlanTemplate($athlete, 'Plan suivi', 4);
+        $scheduled = $this->logSession($athlete, $this->createExercise(null, 'Squat'), (new \DateTimeImmutable('-3 days'))->format('Y-m-d'), [
+            [SetType::NORMAL, 5, 100.0],
+        ]);
+        $from = '?from=athlete-'.$athlete->getId();
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertSelectorExists('a[href="/workout/'.$workout->getId().$from.'"]');
+        self::assertSelectorExists('a[href="/workout/'.$workout->getId().'/edit'.$from.'"]');
+        self::assertSelectorExists('a[href="/plan-template/'.$plan->getId().$from.'"]');
+        self::assertSelectorExists('a[href="/plan-template/'.$plan->getId().'/edit'.$from.'"]');
+
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId().'/history');
+        self::assertSelectorExists('a[href="/schedule/'.$scheduled->getId().$from.'"]');
+
+        // Pour soi, l'historique ne pose aucun jeton : le retour d'origine de la
+        // séance datée (le calendrier) est le bon.
+        $this->client->loginUser($athlete);
+        $this->client->request('GET', '/profile/history');
+        self::assertSelectorExists('a[href="/schedule/'.$scheduled->getId().'"]');
+    }
+
     /** Sans relation acceptée, le journal d'un autre reste fermé. */
     public function testAthleteLogPageIsDeniedWithoutAcceptedRelation(): void
     {

@@ -11,15 +11,18 @@
     {% endfor %}
 
     <div class="kd-actionbar">
-        <a href="{{ path('app_plan_template_index') }}" class="kd-backlink">
-            {{ ux_icon('lucide:arrow-left') }} Mes plans
-        </a>
+        {{ include('components/_backlink.html.twig', {
+            fallback: 'app_plan_template_index', kicker: 'Mes plans', owner: template.owner
+        }) }}
         <div class="kd-actionbar__end">
-            <a href="{{ path('app_plan_template_show', {id: template.id}) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
+            <a href="{{ path('app_plan_template_show', {id: template.id}|merge(back_carry())) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
                 {{ ux_icon('lucide:arrow-right') }} Voir le plan
             </a>
         </div>
     </div>
+
+    {# Plan d'un athlète édité par son coach : à qui il est (#64). #}
+    {{ include('components/_owner_banner.html.twig', {owner: template.owner, kind: 'Plan'}, with_context = false) }}
 
     {# En-tête à édition en ligne : cliquer le titre ou la description pour les
        modifier (contrôleur `inline-edit`, champs semi-invisibles). C'est le seul
@@ -52,11 +55,11 @@
                data-action="click->inline-edit#start"
                title="Cliquer pour modifier">{{ template.description ?: '+ Ajouter une description' }}</p>
 
-            {# Coach sur le plan d'un athlète : à qui il est, et ce que fait la pose
-               d'une de ses propres séances (#58). #}
+            {# Coach sur le plan d'un athlète : ce que fait la pose d'une de ses
+               propres séances (#58). À qui est le plan, le bandeau propriétaire
+               le dit déjà (#64). #}
             {% if composingFor %}
                 <p class="kd-editsection__hint">
-                    {{ include('components/_owner_badge.html.twig', {owner: composingFor}) }}
                     Ses séances et les tiennes sont dans la palette. Une des tiennes, posée ici,
                     est d'abord copiée dans sa bibliothèque.
                 </p>

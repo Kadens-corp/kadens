@@ -1,0 +1,27 @@
+{# ============================================================================
+   Bandeau propriétaire : « Séance de Trailer38 », « Plan de Trailer38 ».
+
+   Le contenu d'un athlète s'ouvre chez son coach avec exactement la même mise
+   en page que le sien. Sans ce bandeau, rien ne dit au coach qu'il modifie la
+   séance d'un autre (#64). Il ne se rend donc que quand le propriétaire n'est
+   pas le lecteur, ce qui revient à dire : un coach sur le contenu de son
+   athlète, seul autre lecteur que les voters laissent entrer.
+
+   Comparaison par `id` et non par objet, comme `_private_notes` : `owner` peut
+   être un proxy Doctrine non initialisé, que Twig comparerait attribut par
+   attribut. Le nom passe par `displayName`, jamais par `userIdentifier`.
+
+   Paramètres :
+     - owner : User|null, le propriétaire du contenu
+     - kind  : libellé structurel (« Séance », « Plan »), passe en capitales
+   ============================================================================ #}
+{% if owner is not null and app.user and owner.id != app.user.id %}
+    <p class="kd-ownerbar">
+        {{ ux_icon('lucide:user') }}
+        <span class="kd-ownerbar__kicker">{{ kind }} de</span>
+        <span class="kd-ownerbar__name">{{ owner.displayName }}</span>
+        <a class="kd-ownerbar__link" href="{{ path('app_coach_athlete', {id: owner.id}) }}">
+            Sa fiche {{ ux_icon('lucide:arrow-right') }}
+        </a>
+    </p>
+{% endif %}
