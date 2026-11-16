@@ -7860,6 +7860,11 @@ button.kd-libx:active {
     /* Contour encre : élément flottant, même règle que .kd-modal. */
     border: 1px solid var(--color-text);
     background: var(--color-surface-raised);
+    /* Un aperçu se regarde, il ne se touche pas (#69) : sans cette ligne, posé
+       sur la carte il captait le clic destiné au titre, et la souris posée
+       dessus restait « dans la carte » (le panneau en est un descendant DOM),
+       donc plus de `mouseleave` pour le refermer. */
+    pointer-events: none;
 }
 
 .kd-planpreview__title {

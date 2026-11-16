@@ -27,6 +27,8 @@ return [
     // Le moteur de recherche partagé par `filter` et `composer`. Pas un
     // entrypoint : il n'est chargé que par les contrôleurs qui l'importent.
     'search' => ['path' => './assets/search.js'],
+    // L'aperçu au survol d'une séance, partagé par `preview` et `plangrid` (#69).
+    'hover-preview' => ['path' => './assets/hover_preview.js'],
     '@hotwired/stimulus' => ['version' => '3.2.2'],
     '@symfony/stimulus-bundle' => ['path' => './vendor/symfony/stimulus-bundle/assets/dist/loader.js'],
     '@hotwired/turbo' => ['version' => '8.0.23'],

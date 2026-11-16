@@ -1,6 +1,8 @@
 {# Aperçu au survol d'une séance placée : promu en top-layer (Popover API) pour
    échapper à l'overflow de la grille. Auto-suffisant (aucun AJAX). Positionné en
-   JS par le contrôleur porteur (`plangrid` en édition, `preview` en lecture).
+   JS par `assets/hover_preview.js`, via le contrôleur porteur (`plangrid` en
+   édition, `preview` en lecture) : souris seulement, après un court délai, jamais
+   par-dessus la carte, refermé au clic et au défilement (#69).
 
    Attend `fw` = sortie de PlanFlattener::flattenWorkout (workout + blocks), et
    en option `feelings` (éditeur de trame seulement) : le ressenti des dernières

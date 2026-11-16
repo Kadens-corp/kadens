@@ -1,6 +1,7 @@
 import { Controller } from '@hotwired/stimulus';
 import { renderStreamMessage } from '@hotwired/turbo';
 import Sortable from 'sortablejs';
+import HoverPreview from 'hover-preview';
 
 /*
  * Éditeur de trame de plan. Deux responsabilités, toutes deux en amélioration
@@ -65,6 +66,7 @@ export default class extends Controller {
         // carte pose directement, sans armer.
         this.targetWeek = null;
         this.targetDay = null;
+        this.hoverPreview = new HoverPreview();
     }
 
     connect() {
@@ -100,6 +102,7 @@ export default class extends Controller {
         this.element.removeEventListener('submit', this.onPanelSubmit);
         document.removeEventListener('keydown', this.onKeydown);
         document.removeEventListener('click', this.onOutside);
+        this.hoverPreview.hide();
         // Une navigation Turbo pendant que la feuille est ouverte laisserait la page
         // suivante figée : l'état vit sur <body>, il ne part pas avec le contrôleur.
         document.body.classList.remove('kd-noscroll');
@@ -434,44 +437,14 @@ export default class extends Controller {
     showPreview(event) {
         // Pas d'aperçu pendant qu'une séance est armée (les cases sont en mode pose).
         if (this.armedWorkoutId) return;
-        // Souris uniquement : au doigt, un tap émet un `mouseenter` synthétique
-        // qui ouvrirait un popover `manual` que plus rien ne referme.
-        if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
         const entry = event.currentTarget;
-        const preview = entry.querySelector('.kd-planpreview');
-        if (!preview || typeof preview.showPopover !== 'function') return;
-
-        this.hidePreview();
-        try {
-            preview.showPopover();
-        } catch (error) {
-            return;
-        }
-
-        // Positionnement manuel près de la case (le popover est en top-layer, donc
-        // non rogné par l'overflow de la grille).
-        const rect = entry.getBoundingClientRect();
-        const pw = preview.offsetWidth;
-        const ph = preview.offsetHeight;
-        let left = rect.right + 8;
-        if (left + pw > window.innerWidth - 8) left = rect.left - pw - 8;
-        if (left < 8) left = 8;
-        let top = rect.top;
-        if (top + ph > window.innerHeight - 8) top = window.innerHeight - ph - 8;
-        if (top < 8) top = 8;
-        preview.style.left = `${left}px`;
-        preview.style.top = `${top}px`;
-        this.openPreview = preview;
+        // Mécanique partagée avec `preview` (souris seulement, délai, placement qui
+        // ne recouvre jamais la case, fermeture au clic et au défilement) : #69.
+        this.hoverPreview.schedule(entry, entry.querySelector('.kd-planpreview'), event);
     }
 
     hidePreview() {
-        if (!this.openPreview) return;
-        try {
-            this.openPreview.hidePopover();
-        } catch (error) {
-            // Déjà retiré du DOM (re-render de grille) : rien à faire.
-        }
-        this.openPreview = null;
+        this.hoverPreview.hide();
     }
 
     placeWorkout(workoutId, week, day) {
