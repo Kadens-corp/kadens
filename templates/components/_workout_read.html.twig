@@ -120,7 +120,9 @@
            séance, comme le hero. Celui du réalisé vit DANS son panneau — deux
            bandeaux empilés ne se distingueraient plus l'un de l'autre. #}
         {% if summary and summary.workingSets > 0 %}
-            {{ include('components/_workout_kpis.html.twig', {summary: summary}, with_context = false) }}
+            {# Sur une séance datée, ce bandeau voisine avec le réalisé (ou avec
+               son absence) : il se dit « prévu » (#78). #}
+            {{ include('components/_workout_kpis.html.twig', {summary: summary, planned: scheduled is not null}, with_context = false) }}
         {% endif %}
 
         {# ------------------------------------------------------------ Onglets

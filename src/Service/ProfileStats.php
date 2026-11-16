@@ -65,6 +65,10 @@ final class ProfileStats
                 'workouts' => $this->workouts->count(['owner' => $user, 'planLocal' => false]),
                 'plans' => $this->plans->count(['owner' => $user]),
                 'exercises' => \count($this->exercises->findLibraryForUser($user)),
+                // Ce qui est à LUI dans la bibliothèque. `exercises` compte aussi
+                // la globale, commune à tous : sur la fiche d'un athlète, ce
+                // chiffre se lisait comme le sien (« 323 exercices », #78).
+                'ownExercises' => $this->exercises->count(['owner' => $user]),
             ],
             'month' => $this->buildStats($this->scheduled->countByStatusForOwnerBetween($user, $monthStart, $monthEnd)),
             'allTime' => $allTime['adherence'],

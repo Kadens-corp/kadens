@@ -42,16 +42,21 @@
         </section>
         <section class="kd-card">
             <h3 class="kd-card__title kd-profile__grouphead">{{ ux_icon('lucide:trending-up') }} Depuis le début</h3>
-            {{ include('components/_status_stats.html.twig', {stats: stats.allTime}) }}
+            {# La fenêtre s'arrête à aujourd'hui : les séances à venir sont dans
+               « Ce mois », pas ici. #}
+            <p class="kd-card__note">Jusqu'à aujourd'hui. Les séances à venir sont dans « Ce mois ».</p>
+            {{ include('components/_status_stats.html.twig', {stats: stats.allTime, pastOnly: true}) }}
         </section>
     </div>
 
-    {# Compteurs bibliothèque #}
+    {# Compteurs bibliothèque. Les exercices sont les siens seulement : la
+       bibliothèque globale est commune à tous, son effectif ne dit rien de
+       l'athlète (#78). #}
     <div class="kd-grid kd-grid--3 kd-section__block">
         {% set counters = [
             { icon: 'lucide:clipboard-list', value: stats.counts.workouts, label: 'Séances' },
             { icon: 'lucide:layers', value: stats.counts.plans, label: 'Plans' },
-            { icon: 'lucide:dumbbell', value: stats.counts.exercises, label: 'Exercices' },
+            { icon: 'lucide:dumbbell', value: stats.counts.ownExercises, label: 'Exercices perso' },
         ] %}
         {% for c in counters %}
             <div class="kd-metric">

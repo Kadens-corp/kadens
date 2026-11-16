@@ -134,6 +134,56 @@ final class CoachControllerTest extends WebTestCase
     }
 
     /**
+     * #78 (C-12) : la fiche ne compte que les exercices de l'athlète. La
+     * bibliothèque globale, commune à tous, se lisait comme la sienne
+     * (« 323 exercices »).
+     */
+    public function testAthleteSheetCountsOnlyTheAthletesOwnExercises(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createExercise(null, 'Squat');
+        $this->createExercise(null, 'Développé couché');
+        $this->createExercise($athlete, 'Squat pause');
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseIsSuccessful();
+        $metrics = $crawler->filter('.kd-metric')->each(fn ($m) => preg_replace('/\s+/', ' ', trim($m->text())));
+        self::assertContains('1 Exercices perso', $metrics);
+    }
+
+    /**
+     * #78 (C-12) : « Depuis le début » s'arrête à aujourd'hui. Ses séances
+     * encore « prévues » sont passées sans statut : elles se disent « à
+     * cocher », et les séances à venir n'y entrent pas (elles sont dans « Ce
+     * mois »). On lisait « 0 prévue » à côté d'un mois qui en annonçait six.
+     */
+    public function testAllTimeBlockSaysPastPlannedSessionsAreToBeChecked(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createScheduled($athlete, 'Oubliée', $this->daysAgo(3), ScheduledStatus::PLANNED);
+        $this->createScheduled($athlete, 'Faite', $this->daysAgo(2), ScheduledStatus::DONE);
+        $this->createScheduled($athlete, 'À venir', (new \DateTimeImmutable('+40 days'))->format('Y-m-d'), ScheduledStatus::PLANNED);
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseIsSuccessful();
+        $allTime = $crawler->filter('.kd-card')->reduce(fn ($c) => str_contains($c->filter('h3')->count() ? $c->filter('h3')->text() : '', 'Depuis le début'));
+        self::assertCount(1, $allTime);
+        $text = $allTime->text();
+        self::assertStringContainsString("Jusqu'à aujourd'hui", $text);
+        self::assertStringContainsString('1 à cocher', $text);
+        self::assertStringContainsString('1 faite', $text);
+        self::assertStringNotContainsString('prévue', $text);
+    }
+
+    /**
      * GoalVoter accorde l'accès au coach accepté, comme les autres voters : sans
      * cette branche, cliquer un objectif depuis la page athlète donnait un 403.
      */

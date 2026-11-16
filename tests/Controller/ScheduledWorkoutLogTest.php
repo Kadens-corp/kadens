@@ -167,6 +167,48 @@ final class ScheduledWorkoutLogTest extends WebTestCase
         self::assertSelectorExists('.kd-settable');
     }
 
+    /**
+     * #78 (B-10) : sur une séance datée, le bandeau du prescrit se dit « prévu ».
+     * Faite sans rien consigner, elle affichait « Volume total 1 920 kg » à côté
+     * de stats qui disaient 0 kg réalisé. Le bandeau du réalisé, lui, se dit
+     * « réalisé ».
+     */
+    public function testDatedSessionLabelsPlannedAndLoggedVolumes(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        [$unlogged] = $this->createLoggedSession($user, []);
+        $unlogged->setStatus(ScheduledStatus::DONE);
+        [$logged] = $this->createLoggedSession($user, [[SetType::NORMAL, 8, 80.0]]);
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+
+        $crawler = $this->client->request('GET', '/schedule/'.$unlogged->getId());
+        self::assertResponseIsSuccessful();
+        $kpis = $crawler->filter('.kd-wk__kpis');
+        self::assertCount(1, $kpis);
+        self::assertStringContainsString('Volume prévu', $kpis->text());
+        self::assertStringContainsString('3 séries de travail prévues', $kpis->text());
+        self::assertStringNotContainsString('Volume total', $kpis->text());
+
+        $crawler = $this->client->request('GET', '/schedule/'.$logged->getId());
+        self::assertStringContainsString('Volume prévu', $crawler->filter('.kd-wk__kpis')->first()->text());
+        self::assertStringContainsString('Volume réalisé', $crawler->filter('.kd-wk__kpis--logged')->text());
+    }
+
+    /** La bibliothèque n'a pas de réalisé à opposer : son bandeau reste « total ». */
+    public function testLibraryPageKeepsTheTotalVolumeLabel(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        [$scheduled] = $this->createLoggedSession($user, []);
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$scheduled->getWorkout()?->getId());
+
+        self::assertResponseIsSuccessful();
+        self::assertStringContainsString('Volume total', $crawler->filter('.kd-wk__kpis')->text());
+    }
+
     /** Une séance manquée le dit en clair, sinon elle a l'allure d'une séance à venir. */
     public function testMissedSessionCarriesAnExplicitMark(): void
     {

@@ -15,8 +15,8 @@
 <div class="kd-pfile__panel">
     <div class="kd-grid kd-grid--2">
         <section class="kd-card kd-pfile__statcard">
-            <p class="kd-eyebrow">Depuis le début · observance</p>
-            {{ include('components/_status_stats.html.twig', {stats: stats.allTime}) }}
+            <p class="kd-eyebrow">Depuis le début · jusqu'à aujourd'hui</p>
+            {{ include('components/_status_stats.html.twig', {stats: stats.allTime, pastOnly: true}) }}
             <p class="kd-pfile__counts">
                 {{ stats.counts.workouts }} séance{{ stats.counts.workouts > 1 ? 's' }}
                 · {{ stats.counts.plans }} plan{{ stats.counts.plans > 1 ? 's' }}
