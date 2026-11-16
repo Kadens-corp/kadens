@@ -158,6 +158,15 @@
                     <div class="kd-field">
                         <textarea name="completionNotes" rows="2" class="kd-input kd-input--area" placeholder="Écart / ressenti (optionnel)">{{ scheduled.completionNotes }}</textarea>
                     </div>
+                    {# Séance de force : le texte libre n'est pas l'endroit des
+                       charges, et la modale doit dire lequel (#63). « De force »
+                       se lit sur `fw.activities`, la même définition que
+                       `TrackableSchedule` (un exercice gym suffit) et sans requête.
+                       Pas de « Pas de détail » ici : savoir s'il y a du réalisé
+                       coûterait une requête par pastille du mois. #}
+                    {% if fw and fw.activities|filter(a => a.value == 'gym') is not empty %}
+                        {{ include('components/_log_in_app.html.twig', {}, with_context = false) }}
+                    {% endif %}
                     {# Le ressenti se consigne (LOG) : propriétaire seul. Il part
                        avec le statut, et ne compte que si la séance est faite. #}
                     {% if is_granted('SCHEDULED_WORKOUT_LOG', scheduled) %}

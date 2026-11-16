@@ -100,6 +100,6 @@
        Sortie en composant : c'est la cible du Turbo Stream renvoyé par le
        changement de statut. #}
     {% if is_granted('SCHEDULED_WORKOUT_EDIT', scheduled) %}
-        {{ include('components/_scheduled_done.html.twig', {scheduled: scheduled}) }}
+        {{ include('components/_scheduled_done.html.twig', {scheduled: scheduled, strength: strength}) }}
     {% endif %}
 {% endblock %}

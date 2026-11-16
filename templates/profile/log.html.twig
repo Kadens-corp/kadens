@@ -65,15 +65,26 @@
         route: subject ? 'app_coach_athlete_log' : 'app_profile_log'
     }) }}
 
+    {# Le journal ne liste que le consigné : une séance de force cochée faite sans
+       réalisé n'y a pas de ligne, mais elle compte comme « faite » dans les
+       statistiques à côté. On le dit, plutôt que de laisser croire qu'elle a
+       disparu (#63). #}
+    {% set unloggedStrength = unloggedStrength|default(0) %}
+    {% if unloggedStrength > 0 %}
+        {{ include('components/_log_in_app.html.twig', {
+            count: unloggedStrength, third: subject is not null
+        }, with_context = false) }}
+    {% endif %}
+
     {% if groups is empty %}
         <div class="kd-empty kd-section__block">
             {{ ux_icon('lucide:history') }}
             <div>Aucune séance consignée sur cette fenêtre.</div>
-            <p class="kd-empty__hint">
-                {{- total > 0
-                    ? 'Élargis la fenêtre : il y a ' ~ total ~ ' séance' ~ (total > 1 ? 's') ~ ' consignée' ~ (total > 1 ? 's') ~ ' au total.'
-                    : 'Le détail série par série remonte du téléphone, une fois la séance terminée.' -}}
-            </p>
+            {% if total > 0 %}
+                <p class="kd-empty__hint">Élargis la fenêtre : il y a {{ total }} séance{{ total > 1 ? 's' }} consignée{{ total > 1 ? 's' }} au total.</p>
+            {% elseif unloggedStrength == 0 %}
+                {{ include('components/_log_in_app.html.twig', {third: subject is not null}, with_context = false) }}
+            {% endif %}
         </div>
     {% else %}
         {# Un mois, son sous-total, ses séances. Les deux viennent déjà calculés

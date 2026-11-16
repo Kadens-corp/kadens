@@ -20,6 +20,7 @@ use App\Service\LogMetrics;
 use App\Service\PlanFlattener;
 use App\Service\PlanScheduler;
 use App\Service\SessionRating;
+use App\Service\TrackableSchedule;
 use App\Service\VolumePanel;
 use App\Service\WorkoutMetrics;
 use Doctrine\ORM\EntityManagerInterface;
@@ -47,6 +48,7 @@ final class ScheduledWorkoutController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
         private readonly ScheduledWorkoutRepository $scheduledWorkouts,
+        private readonly TrackableSchedule $trackable,
     ) {
     }
 
@@ -179,6 +181,7 @@ final class ScheduledWorkoutController extends AbstractController
             'logSummary' => $logMetrics->summary($scheduled),
             'defaultTab' => $this->defaultTab($scheduled, $comparison),
             'rating' => $this->ratingOf($scheduled),
+            'strength' => $this->trackable->prescribesStrength($workout),
         ] + $this->importedActivityContext($scheduled, $importedActivities, $activityPresenter) + [
             // Le volume PRÉVU, dans le HTML initial comme le reste de la page :
             // une vue de consultation ne charge rien après coup (cache offline).
@@ -415,6 +418,9 @@ final class ScheduledWorkoutController extends AbstractController
         return $this->render('scheduled_workout/stream/status.stream.html.twig', [
             'scheduled' => $scheduled,
             'rating' => $this->ratingOf($scheduled),
+            // « Boucler la séance » dit où se saisissent les charges : le
+            // fragment re-rendu doit le dire à l'identique (#63).
+            'strength' => $this->trackable->prescribesStrength($scheduled->getWorkout()),
         ]);
     }
 

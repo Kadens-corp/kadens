@@ -149,6 +149,11 @@ final class TrainingStats
                 $prescribed['coverage'] + ['unattached' => $this->importedActivities->countUnattachedEnduranceForOwnerIn($user, $period->start, $period->end)],
             ) + ['progression' => $this->enduranceProgression($prescribed['byDate'], $period)],
             'feeling' => $this->feeling($this->scheduled->doneRatingsForOwner($user, $period->start, $period->end), $period),
+            // Les séances de force faites sans réalisé : elles comptent en
+            // assiduité et pas en volume, et la vue d'ensemble doit le dire là où
+            // le tonnage s'affiche à zéro (#63). Un compte, jamais un comblement
+            // par le prescrit (CLAUDE.md §3).
+            'unloggedStrength' => $this->scheduled->countDoneStrengthWithoutLogForOwner($user, $period->start, $period->end),
             'bounds' => $bounds,
         ];
     }

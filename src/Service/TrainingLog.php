@@ -113,6 +113,17 @@ final readonly class TrainingLog
     }
 
     /**
+     * Les séances de force faites sans réalisé, sur la fenêtre ou depuis le
+     * début (`null`). Le journal ne les liste pas — il n'y a rien à y lire —
+     * mais il doit dire qu'elles existent : sans ce compte, « 0 séance
+     * consignée » côtoyait « 1 faite » sur la page d'à côté (#63).
+     */
+    public function unloggedStrength(User $owner, ?StatsPeriod $period = null): int
+    {
+        return $this->scheduledWorkouts->countDoneStrengthWithoutLogForOwner($owner, $period?->start, $period?->end);
+    }
+
+    /**
      * @return list<LogEntry>
      */
     private function compose(User $owner, ?\DateTimeImmutable $start, ?\DateTimeImmutable $end, ?int $limit): array

@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\ImportedActivity;
+use App\Entity\LoggedExercise;
 use App\Entity\PlanItem;
 use App\Entity\PlanTemplate;
 use App\Entity\ScheduledWorkout;
@@ -738,6 +739,49 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
             ->setParameter('owner', $owner)
             ->getQuery()
             ->getSingleScalarResult();
+    }
+
+    /**
+     * Le nombre de séances de force **faites sans réalisé** sur une fenêtre
+     * (bornes nulles = sans borne) : cochées « faites », au moins un exercice
+     * d'activité `gym` au prescrit, aucune ligne consignée (#63).
+     *
+     * C'est le compte de ce que les pages de lecture doivent expliquer : une
+     * séance pareille pèse dans l'assiduité et pas dans le volume, et ses charges
+     * se saisissent dans l'app. « De force » suit la définition de
+     * `TrackableSchedule` (un exercice `gym` suffit) : une séance que le téléphone
+     * ne reçoit pas ne peut pas lui être reprochée.
+     *
+     * Un COUNT, jamais une hydratation : il vit à côté des agrégats des
+     * statistiques et du journal, soumis à la même contrainte de coût.
+     */
+    public function countDoneStrengthWithoutLogForOwner(User $owner, ?\DateTimeImmutable $start, ?\DateTimeImmutable $end): int
+    {
+        $qb = $this->createQueryBuilder('s')
+            ->select('COUNT(DISTINCT s.id)')
+            ->join('s.workout', 'w')
+            ->join('w.blocks', 'b')
+            ->join('b.prescribedExercises', 'pe')
+            ->join('pe.exercise', 'e')
+            ->andWhere('s.owner = :owner')
+            ->andWhere('s.status = :done')
+            ->andWhere('e.activity = :gym')
+            ->andWhere('NOT EXISTS (SELECT 1 FROM '.LoggedExercise::class.' le WHERE le.scheduledWorkout = s)')
+            ->setParameter('owner', $owner)
+            ->setParameter('done', ScheduledStatus::DONE)
+            ->setParameter('gym', ActivityType::GYM);
+
+        if (null !== $start) {
+            $qb->andWhere('s.scheduledDate >= :windowStart')
+                ->setParameter('windowStart', $start, \Doctrine\DBAL\Types\Types::DATE_IMMUTABLE);
+        }
+
+        if (null !== $end) {
+            $qb->andWhere('s.scheduledDate <= :windowEnd')
+                ->setParameter('windowEnd', $end, \Doctrine\DBAL\Types\Types::DATE_IMMUTABLE);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
     /**

@@ -336,11 +336,23 @@
             {% endif %}
         </div>
 
+        {# Ses séances de force faites sans réalisé, depuis le début : elles
+           comptent « faites » sur ses statistiques et n'ont pas de ligne ici. Sans
+           ce compte, « aucune séance consignée » côtoyait « 1 faite » (C-11, #63). #}
+        {% if unloggedStrength > 0 %}
+            {{ include('components/_log_in_app.html.twig', {
+                count: unloggedStrength, third: true
+            }, with_context = false) }}
+        {% endif %}
+
         {% if logged is empty %}
             <div class="kd-card kd-section__block">
                 <div class="kd-empty">
                     {{ ux_icon('lucide:history') }}
-                    <div>Aucune séance consignée pour l'instant. Le détail série par série remonte de son téléphone.</div>
+                    <div>Aucune séance consignée pour l'instant.</div>
+                    {% if unloggedStrength == 0 %}
+                        {{ include('components/_log_in_app.html.twig', {third: true}, with_context = false) }}
+                    {% endif %}
                 </div>
             </div>
         {% else %}

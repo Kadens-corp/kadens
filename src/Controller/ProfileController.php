@@ -141,6 +141,7 @@ final class ProfileController extends AbstractController
             'groups' => $groups,
             'sessions' => array_sum(array_column($groups, 'sessions')),
             'total' => $log->total($user),
+            'unloggedStrength' => $log->unloggedStrength($user, $period),
             'period' => $period,
             'ranges' => StatsRange::pickable(),
             'months' => $training->availableMonths($user),

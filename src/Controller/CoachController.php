@@ -114,6 +114,7 @@ final class CoachController extends AbstractController
             'upcoming' => $scheduledWorkoutRepository->findByOwnerBetween($athlete, $today, $today->modify('+8 weeks')),
             'logged' => $logged,
             'loggedTotal' => $trainingLog->total($athlete),
+            'unloggedStrength' => $trainingLog->unloggedStrength($athlete),
             'goals' => $goalRepository->findUpcomingForOwner($athlete, 3),
             // Mêmes services que la page profil : ils prennent n'importe quel User.
             // Le coach a besoin des 1RM, records et zones cardio pour programmer.
@@ -236,6 +237,7 @@ final class CoachController extends AbstractController
             'groups' => $groups,
             'sessions' => array_sum(array_column($groups, 'sessions')),
             'total' => $log->total($athlete),
+            'unloggedStrength' => $log->unloggedStrength($athlete, $period),
             'period' => $period,
             'ranges' => StatsRange::pickable(),
             'months' => $training->availableMonths($athlete),

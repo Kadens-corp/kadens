@@ -31,6 +31,20 @@
                       placeholder="Charge revue à la baisse, dos raide…">{{ scheduled.completionNotes }}</textarea>
         </div>
 
+        {# Séance de force (`strength`, `TrackableSchedule::prescribesStrength`) :
+           dire où se saisissent les charges, et dire « Pas de détail » quand la
+           séance est faite sans réalisé — l'onglet « Réalisé » n'apparaît pas,
+           et rien d'autre sur la page n'expliquait son absence (#63). Ici plutôt
+           qu'en tête de page : ce fragment est re-rendu par le flux Turbo du
+           statut, la phrase suit donc la bascule « faite » sans rechargement.
+           Le coach programme, il ne consigne pas : troisième personne. #}
+        {% if strength|default(false) %}
+            {{ include('components/_log_in_app.html.twig', {
+                missing: isDone and not scheduled.hasLog,
+                third: not is_granted('SCHEDULED_WORKOUT_LOG', scheduled)
+            }, with_context = false) }}
+        {% endif %}
+
         <button type="submit" class="kd-btn kd-btn--block {{ isDone ? 'kd-btn--secondary' : 'kd-btn--primary' }}">
             {% if isDone %}
                 {{ ux_icon('lucide:rotate-ccw') }} Annuler « fait »

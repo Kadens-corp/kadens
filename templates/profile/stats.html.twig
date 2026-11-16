@@ -95,6 +95,20 @@
             {% endfor %}
         </div>
 
+        {# Sous les quatre repères, parce que c'est là que « 1 séance faite » côtoie
+           « 0 kg » : la seule place où l'écart se lit, donc la seule où l'expliquer
+           sert. L'explication vivait dans l'onglet Salle, qu'on n'ouvre pas quand
+           on croit à un bug (#63). #}
+        {% if stats.unloggedStrength > 0 %}
+            {{ include('components/_log_in_app.html.twig', {
+                count: stats.unloggedStrength,
+                third: subject is not null,
+                note: stats.unloggedStrength > 1
+                    ? 'Elles comptent en assiduité, pas en volume.'
+                    : 'Elle compte en assiduité, pas en volume.'
+            }, with_context = false) }}
+        {% endif %}
+
         {# Le ressenti en une ligne, et le chemin vers son onglet. Absent tant que
            rien n'est noté : la vue d'ensemble n'annonce pas un vide facultatif. #}
         {% if feel.rated > 0 %}
@@ -252,6 +266,15 @@
                     <h2 class="kd-title kd-title--sm">Ce qui a été soulevé</h2>
                 </div>
             </div>
+
+            {# Même compte que la vue d'ensemble : le volume ci-dessous ne porte
+               pas ces séances-là, et il faut le dire même quand il n'est pas nul. #}
+            {% if stats.unloggedStrength > 0 %}
+                {{ include('components/_log_in_app.html.twig', {
+                    count: stats.unloggedStrength,
+                    third: subject is not null
+                }, with_context = false) }}
+            {% endif %}
 
             <div class="kd-grid kd-grid--1 kd-section__block">
                 <section class="kd-card">

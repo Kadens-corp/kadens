@@ -6417,6 +6417,73 @@ button.kd-libx:active {
     color: var(--color-text-faint);
 }
 
+/* ---- Les charges se saisissent dans l'app (#63) ----
+   Partout où un chiffre de salle manque faute de réalisé. Même registre que
+   l'encart hors programme : une information, pas une alerte. Aucune couleur
+   d'état, le rouge reste aux actions et à l'échec. */
+.kd-applog {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-3);
+    margin: 0 0 var(--kd-space-6);
+    padding: var(--kd-space-4) var(--kd-space-5);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-subtle);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+    text-align: left;
+}
+
+.kd-applog > svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    /* `margin` entier : `.kd-empty svg`, déclaré plus haut, pose une marge
+       basse qui décalerait l'icône dans un état vide. */
+    margin: 2px 0 0;
+    color: var(--color-text-faint);
+}
+
+.kd-applog__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-1);
+}
+
+.kd-applog__text {
+    color: var(--color-text);
+}
+
+.kd-applog__link {
+    color: inherit;
+    font-weight: var(--kd-weight-semibold);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.kd-applog__note {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+/* Dans un état vide, l'encart n'est qu'une ligne d'explication sous le titre :
+   ni cadre ni fond, centré comme le reste du bloc. */
+.kd-empty .kd-applog {
+    justify-content: center;
+    margin: var(--kd-space-3) auto 0;
+    padding: 0;
+    border: 0;
+    background: none;
+}
+
+/* Dans un formulaire (modale du calendrier, « Boucler la séance »), il suit le
+   champ de note sans marge propre : c'est l'espacement du formulaire qui joue. */
+.kd-modal__form .kd-applog,
+.kd-done__form .kd-applog {
+    margin: 0;
+}
+
 .kd-cblocks__empty svg {
     width: 26px;
     height: 26px;
