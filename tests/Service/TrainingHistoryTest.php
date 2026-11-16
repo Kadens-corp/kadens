@@ -336,10 +336,9 @@ final class TrainingHistoryTest extends KernelTestCase
 
     /**
      * La répartition par nature : chaque séance compte pour UNE, sous son
-     * activité dominante, et la somme vaut le total. C'est ce qui la distingue
-     * du `activityCounts` de TrainingStats, qui compte une séance dans chacune
-     * de ses activités — deux questions, deux chiffres, et celui-ci doit
-     * s'additionner.
+     * activité dominante, et la somme vaut le total. Le `activityCounts` de
+     * TrainingStats suit la même règle depuis #62 (test croisé dans
+     * `TrainingStatsTest`).
      */
     public function testSessionsAreTalliedOncePerActivity(): void
     {

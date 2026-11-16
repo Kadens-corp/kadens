@@ -152,11 +152,14 @@ class ImportedActivityRepository extends ServiceEntityRepository
      * (`ActivityMatcher`, `workout = null`). Son activité importée est la seule
      * chose qui dise ce qu'elle était.
      *
+     * Fenêtre facultative, sur la date de la séance (pas celle de la sortie) :
+     * c'est la séance qu'on range, comme les deux pendants côté séance datée.
+     *
      * @return list<array{scheduledId: int, activity: ActivityType, activities: int}>
      */
-    public function doneActivityCountsByScheduledWorkout(User $owner): array
+    public function doneActivityCountsByScheduledWorkout(User $owner, ?\DateTimeImmutable $start = null, ?\DateTimeImmutable $end = null): array
     {
-        $rows = $this->createQueryBuilder('a')
+        $qb = $this->createQueryBuilder('a')
             ->select('IDENTITY(a.scheduledWorkout) AS sid', 'a.activity AS activity', 'COUNT(a.id) AS activities')
             ->join('a.scheduledWorkout', 's')
             ->andWhere('s.owner = :owner')
@@ -164,9 +167,11 @@ class ImportedActivityRepository extends ServiceEntityRepository
             ->andWhere('a.activity IS NOT NULL')
             ->setParameter('owner', $owner)
             ->setParameter('done', ScheduledStatus::DONE)
-            ->groupBy('sid', 'a.activity')
-            ->getQuery()
-            ->getArrayResult();
+            ->groupBy('sid', 'a.activity');
+
+        $this->window($qb, 's.scheduledDate', $start, $end);
+
+        $rows = $qb->getQuery()->getArrayResult();
 
         return array_values(array_map(static fn (array $row): array => [
             'scheduledId' => (int) $row['sid'],

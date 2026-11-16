@@ -9,7 +9,6 @@ use App\Entity\User;
 use App\Enum\ActivityType;
 use App\Enum\MuscleGroup;
 use App\Repository\ExerciseRepository;
-use App\Repository\ImportedActivityRepository;
 use App\Repository\LoggedSetRepository;
 use App\Repository\ScheduledWorkoutRepository;
 
@@ -42,7 +41,8 @@ use App\Repository\ScheduledWorkoutRepository;
  * à la rendre visible plutôt que de la laisser en case creuse.
  *
  * **Coût.** Sept lectures, aucune hydratation de séance : les bornes, les
- * séances faites, leurs activités prescrites, importées et loguées, le volume
+ * séances faites, leurs activités prescrites, importées et loguées
+ * (`SessionNature`), le volume
  * par (séance × exercice), et les définitions des seuls exercices travaillés.
  * Les six premières sont des projections scalaires ; la dernière est bornée
  * par la pratique (le nombre d'exercices distincts qu'on pratique), pas par la
@@ -54,7 +54,7 @@ use App\Repository\ScheduledWorkoutRepository;
  * @phpstan-type HistoryDay array{date: \DateTimeImmutable, inMonth: bool, isToday: bool, sessions: list<HistorySession>}
  * @phpstan-type HistoryMonth array{year: int, month: int, label: string, sessions: int, activeDays: int, weeks: list<list<HistoryDay>>}
  * @phpstan-type HistoryYear array{year: int, sessions: int, months: list<HistoryMonth>}
- * @phpstan-type ActivityTally array{activity: ActivityType|null, sessions: int}
+ * @phpstan-import-type ActivityTally from SessionNature
  */
 final class TrainingHistory
 {
@@ -73,7 +73,7 @@ final class TrainingHistory
         private readonly ScheduledWorkoutRepository $scheduled,
         private readonly LoggedSetRepository $loggedSets,
         private readonly ExerciseRepository $exercises,
-        private readonly ImportedActivityRepository $importedActivities,
+        private readonly SessionNature $sessionNature,
     ) {
     }
 
@@ -143,7 +143,7 @@ final class TrainingHistory
      */
     private function sessionsByDay(User $user): array
     {
-        $activities = $this->dominantActivities($user);
+        $activities = $this->sessionNature->dominantByScheduled($user);
         $volume = $this->volumeByScheduled($user);
 
         $byDay = [];
@@ -162,98 +162,6 @@ final class TrainingHistory
         }
 
         return $byDay;
-    }
-
-    /**
-     * L'activité dominante de chaque séance faite : celle que portent le plus
-     * d'exercices.
-     *
-     * **Deux sources, dans cet ordre : le prescrit, puis le réalisé.** Le
-     * prescrit dit ce que la séance était censée être, et c'est la bonne réponse
-     * dès qu'il existe — y compris pour une sortie course, qui ne logue rien.
-     * Mais une séance peut n'avoir aucun prescrit : c'est le cas de tout
-     * historique importé (`TrainingHistoryImporter` crée ses séances avec
-     * `workout = null`, délibérément, pour ne pas inventer une intention). Son
-     * réalisé prend alors le relais — sans quoi des centaines de séances de
-     * salle se rangeraient sous « activité inconnue », ce qui serait faux : on
-     * sait très bien ce qu'elles étaient.
-     *
-     * Le réalisé ne fait que **compléter**, il ne corrige jamais : une séance
-     * prescrite en course dont on aurait logué du gainage reste une course. Le
-     * jour où l'on voudrait le contraire, ce serait une décision à prendre, pas
-     * un effet de bord à laisser arriver.
-     *
-     * **Entre les deux, l'activité importée de la montre.** La reprise
-     * d'historique Intervals (`ActivityMatcher`) crée elle aussi des séances
-     * libres, mais qui ne loguent rien : ni prescrit ni réalisé, seule leur
-     * activité rattachée dit qu'elles étaient une course. Elle passe AVANT le
-     * réalisé logué parce qu'elle est mesurée, pas saisie : une sortie importée
-     * où l'on aurait logué du gainage reste une sortie. Elle passe APRÈS le
-     * prescrit pour la même raison que le réalisé — compléter, jamais corriger.
-     *
-     * **Une séance ne relève que d'une nature ici, et c'est un choix.** Le
-     * `activityCounts` de `TrainingStats` compte au contraire une séance dans
-     * CHACUNE de ses activités — il répond à « combien de mes séances ont touché
-     * à la course ». Cette page répond à l'autre question : « combien de mes
-     * séances SONT des séances de course », dont la somme doit valoir le nombre
-     * de séances. Les deux chiffres peuvent donc différer sans se contredire, et
-     * l'écran nomme le sien pour qu'on ne les confonde pas.
-     *
-     * Départage : à égalité d'exercices, l'ordre de déclaration de l'enum
-     * tranche (la salle d'abord). Arbitraire mais stable — deux affichages de la
-     * même séance ne doivent pas la ranger ailleurs.
-     *
-     * @return array<int, ActivityType>
-     */
-    private function dominantActivities(User $user): array
-    {
-        $prescribed = $this->pickDominant(
-            $this->scheduled->doneActivityCountsForOwner($user, null, null)
-        );
-
-        // Même départage que les deux autres sources : le poids d'une activité
-        // y est son nombre de sorties rattachées au lieu d'un nombre d'exercices.
-        $imported = $this->pickDominant(array_map(
-            static fn (array $row): array => ['scheduledId' => $row['scheduledId'], 'activity' => $row['activity'], 'exercises' => $row['activities']],
-            $this->importedActivities->doneActivityCountsByScheduledWorkout($user),
-        ));
-
-        $logged = $this->pickDominant(
-            $this->scheduled->doneLoggedActivityCountsForOwner($user, null, null)
-        );
-
-        // `+` sur des tableaux garde la valeur de GAUCHE en cas de clé commune :
-        // le prescrit prime, l'importé puis le réalisé ne comblent que les
-        // séances que les sources précédentes ignorent.
-        return $prescribed + $imported + $logged;
-    }
-
-    /**
-     * L'activité la plus portée de chaque séance, à partir de lignes
-     * (séance, activité, nombre d'exercices). Écrit une fois pour les deux
-     * sources : deux départages différents rangeraient la même séance à deux
-     * endroits selon qu'elle a un prescrit ou non.
-     *
-     * @param list<array{scheduledId: int, activity: ActivityType, exercises: int}> $rows
-     *
-     * @return array<int, ActivityType>
-     */
-    private function pickDominant(array $rows): array
-    {
-        $counts = [];
-        foreach ($rows as $row) {
-            $counts[$row['scheduledId']][$row['activity']->value] = $row['exercises'];
-        }
-
-        $dominant = [];
-        foreach ($counts as $scheduledId => $byActivity) {
-            $ranked = ActivityType::rankByCount($byActivity);
-            if ([] !== $ranked) {
-                $dominant[$scheduledId] = $ranked[0];
-            }
-        }
-
-        return $dominant;
     }
 
     /**
@@ -333,32 +241,14 @@ final class TrainingHistory
      */
     private function tally(array $sessionsByDay): array
     {
-        $counts = [];
-        $unknown = 0;
-
+        $natures = [];
         foreach ($sessionsByDay as $day) {
             foreach ($day as $session) {
-                if (null === $session['activity']) {
-                    ++$unknown;
-                    continue;
-                }
-
-                $counts[$session['activity']->value] = ($counts[$session['activity']->value] ?? 0) + 1;
+                $natures[] = $session['activity'];
             }
         }
 
-        arsort($counts);
-
-        $tally = [];
-        foreach ($counts as $value => $sessions) {
-            $tally[] = ['activity' => ActivityType::from((string) $value), 'sessions' => $sessions];
-        }
-
-        if ($unknown > 0) {
-            $tally[] = ['activity' => null, 'sessions' => $unknown];
-        }
-
-        return $tally;
+        return SessionNature::tally($natures);
     }
 
     /**

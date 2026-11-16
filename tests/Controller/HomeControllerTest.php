@@ -80,6 +80,11 @@ final class HomeControllerTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         self::assertSelectorTextContains('.kd-observance__pct', '100%');
+        // La séance faite est vide : elle compte quand même, sous « Sans
+        // contenu », pour que la carte par activité dise le même total que
+        // l'observance d'à côté (#62).
+        self::assertSelectorTextContains('.kd-home__card:nth-child(2) .kd-eyebrow', '1 séance faite');
+        self::assertSelectorTextContains('.kd-home__acts', 'Sans contenu');
         self::assertGreaterThan(
             0,
             $crawler->filter('a.kd-home__card[href="/profile/stats?range='.$today->format('Y-m').'"]')->count(),

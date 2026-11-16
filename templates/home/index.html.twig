@@ -86,7 +86,9 @@
 
         {# =============================== LE MOIS ============================ #}
         {# Les deux cartes ouvrent les statistiques sur le mois courant : ce sont
-           les mêmes chiffres (TrainingStats, même fenêtre). #}
+           les mêmes chiffres (TrainingStats, même fenêtre). Chaque séance faite
+           compte UNE fois, sous sa nature (SessionNature) : le total vaut le
+           nombre de séances faites de l'observance (#62). #}
         {% set monthStats = path('app_profile_stats', {range: month.period.queryValue}) %}
         {% set acts = month.activityCounts %}
         {% set actTotal = acts|reduce((sum, r) => sum + r.sessions, 0) %}
@@ -103,8 +105,8 @@
                 {% else %}
                     <ul class="kd-home__acts">
                         {% for row in acts %}
-                            <li class="kd-home__act kd-act--{{ activity.modifier(row.activity) }}">
-                                <span class="kd-home__actname">{{ ux_icon(activity.icon(row.activity)|trim) }} {{ row.activity.label }}</span>
+                            <li class="kd-home__act{{ row.activity ? ' kd-act--' ~ activity.modifier(row.activity) }}">
+                                <span class="kd-home__actname">{{ ux_icon(activity.icon(row.activity)|trim) }} {{ activity.label(row.activity) }}</span>
                                 <span class="kd-home__acttrack"><span class="kd-home__actfill" style="width:{{ (row.sessions / actMax * 100)|round }}%"></span></span>
                                 <span class="kd-home__actcount">{{ row.sessions }}</span>
                             </li>

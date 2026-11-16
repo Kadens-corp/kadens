@@ -21,6 +21,7 @@ use App\Enum\SetType;
 use App\Enum\TargetArea;
 use App\Enum\TargetRegion;
 use App\Service\StatsPeriod;
+use App\Service\TrainingHistory;
 use App\Service\TrainingStats;
 use App\Tests\PurgesDatabase;
 use Doctrine\ORM\EntityManagerInterface;
@@ -242,6 +243,137 @@ final class TrainingStatsTest extends KernelTestCase
         }
 
         self::assertSame(['gym' => 2, 'running' => 1], $counts);
+    }
+
+    /**
+     * Le cas du ticket #62 : une séance de salle avec un échauffement au rameur
+     * porte deux activités, et elle comptait dans chacune. L'accueil annonçait
+     * « 2 séances faites » pour une seule. Elle compte UNE fois, sous son
+     * activité dominante — celle de son aplat de couleur.
+     */
+    public function testASessionWithTwoActivitiesCountsOnceUnderItsDominantOne(): void
+    {
+        $bench = $this->em->getRepository(Exercise::class)->findOneBy(['name' => 'Développé couché']);
+        self::assertNotNull($bench);
+        $rower = (new Exercise())->setOwner($this->user)->setName('Rameur')->setActivity(ActivityType::OTHER);
+        $this->em->persist($rower);
+
+        $workout = $this->gymWorkout($bench, 'Haut du corps + rameur');
+        $block = $workout->getBlocks()->first();
+        self::assertNotFalse($block);
+        $block->addPrescribedExercise(
+            (new PrescribedExercise())->setExercise($rower)->setPosition(1)
+                ->setPrescriptionType(PrescriptionType::DURATION)->setDurationSeconds(600),
+        );
+        $block->addPrescribedExercise(
+            (new PrescribedExercise())->setExercise($bench)->setPosition(2)
+                ->setPrescriptionType(PrescriptionType::SETS_REPS)->setSets(3)->setReps(10)->setWeightKg(60.0),
+        );
+        $this->schedule($workout, '2026-09-08', ScheduledStatus::DONE);
+        $this->em->flush();
+
+        $stats = $this->stats->over($this->user, StatsPeriod::month(2026, 9));
+
+        self::assertSame(
+            [['activity' => ActivityType::GYM, 'sessions' => 1]],
+            $stats['activityCounts'],
+            'Deux exercices de salle contre un de rameur : une séance de salle, une seule.',
+        );
+        self::assertSame(1, array_sum(array_column($stats['activityCounts'], 'sessions')));
+        self::assertSame(1, $stats['adherence']['done']);
+    }
+
+    /**
+     * Toute séance faite entre dans la répartition, même celle dont rien ne dit
+     * la nature (séance libre restée vide) : elle tombe sous `activity: null`.
+     * Sans elle, le total « par activité » de l'accueil ne vaudrait plus le
+     * nombre de séances faites de la carte d'observance juste à côté.
+     */
+    public function testTheBreakdownAddsUpToTheDoneSessions(): void
+    {
+        $empty = (new ScheduledWorkout())
+            ->setOwner($this->user)
+            ->setTitle('Séance libre')
+            ->setScheduledDate(new \DateTimeImmutable('2026-07-28'))
+            ->setStatus(ScheduledStatus::DONE);
+        $this->em->persist($empty);
+        $this->em->flush();
+
+        $stats = $this->stats->over($this->user, StatsPeriod::month(2026, 7));
+
+        self::assertSame(
+            [
+                ['activity' => ActivityType::GYM, 'sessions' => 1],
+                ['activity' => ActivityType::RUNNING, 'sessions' => 1],
+                ['activity' => null, 'sessions' => 1],
+            ],
+            $stats['activityCounts'],
+        );
+        self::assertSame($stats['adherence']['done'], array_sum(array_column($stats['activityCounts'], 'sessions')));
+    }
+
+    /**
+     * Une séance libre que seule son activité importée décrit (la reprise
+     * Intervals) se range sous cette activité, et la fenêtre la borne comme le
+     * reste : hors du mois, elle ne compte pas.
+     */
+    public function testAFreeSessionTakesItsNatureFromItsImportedActivity(): void
+    {
+        $free = (new ScheduledWorkout())
+            ->setOwner($this->user)
+            ->setTitle('Vélo du dimanche')
+            ->setScheduledDate(new \DateTimeImmutable('2026-08-02'))
+            ->setStatus(ScheduledStatus::DONE);
+        $this->em->persist($free);
+        $ride = (new ImportedActivity($this->user, ActivitySource::INTERVALS, 'i2001', 'Ride', new \DateTimeImmutable('2026-08-02 09:00'), new \DateTimeImmutable('2026-08-02')))
+            ->setActivity(ActivityType::CYCLING)
+            ->setDistanceMeters(40000)
+            ->setMovingSeconds(5400)
+            ->setScheduledWorkout($free);
+        $this->em->persist($ride);
+        $this->em->flush();
+
+        self::assertSame(
+            [['activity' => ActivityType::CYCLING, 'sessions' => 1]],
+            $this->stats->over($this->user, StatsPeriod::month(2026, 8))['activityCounts'],
+        );
+        self::assertNotContains(
+            ActivityType::CYCLING,
+            array_column($this->stats->over($this->user, StatsPeriod::month(2026, 7))['activityCounts'], 'activity'),
+        );
+    }
+
+    /**
+     * Les statistiques et l'historique répondent à la même question, « de
+     * quelle nature sont mes séances », par la même règle (`SessionNature`).
+     * Sur toute la profondeur, leurs répartitions sont identiques : avant #62,
+     * l'une comptait une séance dans chacune de ses activités, l'autre une fois.
+     */
+    public function testAllTimeBreakdownMatchesTheHistoryPage(): void
+    {
+        $bench = $this->em->getRepository(Exercise::class)->findOneBy(['name' => 'Développé couché']);
+        $run = $this->em->getRepository(Exercise::class)->findOneBy(['name' => 'Footing']);
+        self::assertNotNull($bench);
+        self::assertNotNull($run);
+
+        // Une séance mixte : un exercice de chaque, l'enum départage (la salle).
+        $mixed = $this->gymWorkout($bench, 'Brique');
+        $block = $mixed->getBlocks()->first();
+        self::assertNotFalse($block);
+        $block->addPrescribedExercise(
+            (new PrescribedExercise())->setExercise($run)->setPosition(1)
+                ->setPrescriptionType(PrescriptionType::DISTANCE_PACE)->setDistanceMeters(3000),
+        );
+        $this->schedule($mixed, '2026-07-05', ScheduledStatus::DONE);
+        $this->em->flush();
+
+        $now = new \DateTimeImmutable('2026-12-31');
+        $history = static::getContainer()->get(TrainingHistory::class);
+
+        self::assertSame(
+            $history->calendar($this->user, $now)['totals']['byActivity'],
+            $this->stats->over($this->user, StatsPeriod::allTime($now))['activityCounts'],
+        );
     }
 
     /**

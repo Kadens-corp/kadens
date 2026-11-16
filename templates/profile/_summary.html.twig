@@ -30,15 +30,15 @@
                 <p class="kd-observance__empty">{{ ux_icon('lucide:activity') }} Aucune séance faite pour l'instant.</p>
             {% else %}
                 <div class="kd-pfile__actbar" role="img"
-                     aria-label="{{ acts|map(r => r.activity.label ~ ' ' ~ r.sessions)|join(', ') }}">
+                     aria-label="{{ acts|map(r => activity.label(r.activity) ~ ' ' ~ r.sessions)|join(', ') }}">
                     {% for row in acts %}
-                        <span class="kd-act--{{ activity.modifier(row.activity) }}" style="flex:{{ row.sessions }}"></span>
+                        <span{% if row.activity %} class="kd-act--{{ activity.modifier(row.activity) }}"{% endif %} style="flex:{{ row.sessions }}"></span>
                     {% endfor %}
                 </div>
                 <ul class="kd-pfile__actlegend">
                     {% for row in acts %}
-                        <li class="kd-act--{{ activity.modifier(row.activity) }}">
-                            <span class="kd-pfile__actdot"></span>{{ row.activity.label }} {{ row.sessions }}
+                        <li{% if row.activity %} class="kd-act--{{ activity.modifier(row.activity) }}"{% endif %}>
+                            <span class="kd-pfile__actdot"></span>{{ activity.label(row.activity) }} {{ row.sessions }}
                         </li>
                     {% endfor %}
                 </ul>

@@ -12427,12 +12427,14 @@ a.kd-coachitem__name:hover {
     min-width: 0;
 }
 
-/* L'icône porte la couleur de l'activité ; le libellé reste en encre. */
+/* L'icône porte la couleur de l'activité ; le libellé reste en encre. Une
+   séance sans contenu n'a pas de classe d'activité : `--act` n'est pas
+   défini, la ligne retombe sur le gris neutre au lieu de disparaître. */
 .kd-home__actname svg {
     flex: none;
     width: 14px;
     height: 14px;
-    color: var(--act);
+    color: var(--act, var(--color-text-secondary));
 }
 
 .kd-home__acttrack {
@@ -12444,7 +12446,7 @@ a.kd-coachitem__name:hover {
 .kd-home__actfill {
     display: block;
     height: 100%;
-    background: var(--act);
+    background: var(--act, var(--color-border-strong));
 }
 
 .kd-home__actcount {
@@ -12788,8 +12790,9 @@ a.kd-coachitem__name:hover {
     overflow: hidden;
 }
 
+/* Repli neutre pour la part « sans contenu », qui n'a pas d'activité. */
 .kd-pfile__actbar > span {
-    background: var(--act);
+    background: var(--act, var(--color-border-strong));
 }
 
 .kd-pfile__actlegend {
@@ -12813,7 +12816,7 @@ a.kd-coachitem__name:hover {
 .kd-pfile__actdot {
     width: 8px;
     height: 8px;
-    background: var(--act);
+    background: var(--act, var(--color-border-strong));
 }
 
 .kd-pfile__tileshead {

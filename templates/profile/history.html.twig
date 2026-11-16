@@ -89,16 +89,14 @@
         </div>
     {% else %}
         {# Répartition par nature. Chaque séance compte pour UNE, sous son
-           activité dominante : la somme vaut le total affiché plus haut. À ne
-           pas confondre avec la répartition de /profile/stats, qui compte une
-           séance dans chacune de ses activités — deux questions, deux chiffres,
-           d'où deux libellés distincts. #}
+           activité dominante (SessionNature) : la somme vaut le total affiché
+           plus haut. /profile/stats et l'accueil suivent la même règle (#62). #}
         {% if history.totals.byActivity is not empty %}
             <div class="kd-grid kd-grid--4 kd-section__block">
                 {% for row in history.totals.byActivity %}
                     <div class="kd-metric">
                         <span class="kd-metric__icon">
-                            {{ ux_icon(row.activity ? activity.icon(row.activity)|trim : 'lucide:circle-dot') }}
+                            {{ ux_icon(activity.icon(row.activity)|trim) }}
                         </span>
                         <div>
                             <div class="kd-metric__value">{{ row.sessions }}</div>
@@ -107,7 +105,7 @@
                                programme » (l'historique importé n'en a pas et se
                                range très bien) : c'est une séance restée vide. #}
                             <div class="kd-metric__label">
-                                {{ row.activity ? row.activity.label : 'Sans contenu' }}
+                                {{ activity.label(row.activity) }}
                             </div>
                         </div>
                     </div>
