@@ -46,6 +46,16 @@
                 {{ sessions }} séance{{ sessions > 1 ? 's' }} consignée{{ sessions > 1 ? 's' }}
                 {%- if total > sessions %} · {{ total }} au total{% endif -%}
             </p>
+            {# Ce que la page montre ET ce qu'elle ne montre pas (#73) : à côté,
+               l'historique et les statistiques comptent une séance faite sans
+               détail, ici non. Sans cette phrase, « 0 séance consignée » côtoie
+               « 1 faite » et se lit comme une contradiction. #}
+            <p class="kd-pagehead__scope">
+                {{- subject
+                    ? 'Les séances dont le détail (exercices, charges, répétitions) a été saisi dans l\'app, une par ligne.'
+                    : 'Les séances dont tu as saisi le détail (exercices, charges, répétitions) dans l\'app, une par ligne.' }}
+                Une séance marquée faite sans ce détail, ou une sortie course, vélo ou natation, n'y figure pas : elle compte dans l'Historique et les Statistiques.
+            </p>
         </div>
         <div class="kd-actionbar__end">
             <a href="{{ statsPath }}" class="kd-btn kd-btn--secondary">

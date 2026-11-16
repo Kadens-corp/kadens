@@ -65,6 +65,34 @@ final class ProfileHistoryPageTest extends WebTestCase
         self::assertResponseIsSuccessful();
         self::assertGreaterThan(0, $crawler->filter('.kd-empty')->count());
         self::assertCount(0, $crawler->filter('.kd-histgrid'));
+        self::assertSelectorTextContains('.kd-pagehead__scope', 'Toutes les séances faites');
+    }
+
+    /**
+     * Une séance seulement posée au calendrier n'entre pas ici : c'est le
+     * statut « faite » qui compte. L'état vide le dit, au lieu de promettre
+     * l'inverse, et on ne dessine pas une suite de mois vides (#73, A-41).
+     */
+    public function testAPlannedSessionAloneLeavesTheTrueEmptyState(): void
+    {
+        $user = $this->createUser('planned-only@example.com');
+        $this->em->persist(
+            (new ScheduledWorkout())
+                ->setOwner($user)
+                ->setTitle('Footing')
+                ->setScheduledDate(new \DateTimeImmutable('+3 days'))
+                ->setStatus(ScheduledStatus::PLANNED),
+        );
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/profile/history');
+
+        self::assertResponseIsSuccessful();
+        self::assertCount(0, $crawler->filter('.kd-histgrid'));
+        self::assertSelectorTextContains('.kd-empty__hint', 'dès qu\'elle est marquée faite');
+        self::assertSelectorTextNotContains('.kd-empty', 'posée au calendrier');
+        self::assertSelectorNotExists('.kd-pagehead__lead');
     }
 
     /**

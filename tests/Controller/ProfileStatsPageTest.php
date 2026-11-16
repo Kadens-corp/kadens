@@ -69,6 +69,18 @@ final class ProfileStatsPageTest extends WebTestCase
         self::assertGreaterThan(0, $crawler->filter('.kd-empty')->count());
     }
 
+    /**
+     * La page dit ce qu'elle compte : une séance faite sans détail compte ici,
+     * pas au journal (#73).
+     */
+    public function testItSaysWhatItCounts(): void
+    {
+        $this->client->loginUser($this->createUser('perimetre@example.com'));
+        $this->client->request('GET', '/profile/stats');
+
+        self::assertSelectorTextContains('.kd-pagehead__scope', 'même sans détail');
+    }
+
     public function testEachWindowRendersAndMarksItselfActive(): void
     {
         $this->client->loginUser($this->seedUser());

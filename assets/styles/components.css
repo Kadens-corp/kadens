@@ -11262,6 +11262,19 @@ a.kd-coachitem__name:hover {
     color: var(--color-text-secondary);
 }
 
+/* Périmètre de page : ce que la page montre et ce qu'elle ne montre pas, en
+   une phrase (#73). Journal, historique et statistiques comptent des choses
+   voisines ; sans elle, leurs chiffres se contredisent en apparence. Lisible,
+   pas une note : c'est la clé de lecture de tout ce qui suit. */
+.kd-pagehead__scope {
+    max-width: 68ch;
+    margin: var(--kd-space-2) 0 0;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--color-text);
+}
+
 /* Note de bas de carte : d'où vient le chiffre, ce qu'il ne dit pas. Toujours
    secondaire — une note qui crie autant que sa donnée n'est plus une note. */
 .kd-card__note {
