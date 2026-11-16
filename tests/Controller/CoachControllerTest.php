@@ -652,6 +652,78 @@ final class CoachControllerTest extends WebTestCase
         );
     }
 
+    /**
+     * #75 : un coach sans séance à lui arrive sur « Moi ». La page prépare un
+     * état vide qui le dit et renvoie vers son athlète, distinct de celui de la
+     * recherche, et les effectifs des puces sont recalculables côté client.
+     */
+    public function testCoachIndexOffersOwnerEmptyStateWithJumpToAthlete(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createWorkout($athlete, 'Fractionné athlète');
+        $this->createWorkout($athlete, 'Côtes athlète');
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/workout');
+
+        self::assertResponseIsSuccessful();
+        $owner = $crawler->filter('[data-filter-target="empty"][data-empty-reason="owner"]');
+        self::assertCount(1, $owner);
+        self::assertSame((string) $coach->getId(), $owner->attr('data-empty-self'));
+        self::assertStringContainsString('Tu n\'as pas encore de séance à toi.', $owner->text());
+
+        // Un seul lien, vers l'athlète (jamais vers soi), avec son effectif.
+        $jump = $owner->filter('[data-filter-target="jump"]');
+        self::assertCount(1, $jump);
+        self::assertSame((string) $athlete->getId(), $jump->attr('data-filter-value-param'));
+        self::assertSame('2', $jump->filter('[data-facet-count]')->text());
+
+        // La recherche garde son propre message, les puces le leur.
+        self::assertStringContainsString(
+            'ta recherche',
+            $crawler->filter('[data-empty-reason="search"]')->text()
+        );
+        self::assertStringContainsString(
+            'ces filtres',
+            $crawler->filter('[data-empty-reason="filters"]')->text()
+        );
+        // Chaque puce expose un effectif que le contrôleur recalcule.
+        self::assertCount(
+            $crawler->filter('[data-filter-target="facet"]')->count(),
+            $crawler->filter('[data-filter-target="facet"] [data-facet-count]')
+        );
+    }
+
+    public function testCoachPlanIndexOffersOwnerEmptyState(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/plan-template');
+
+        $owner = $crawler->filter('[data-empty-reason="owner"]');
+        self::assertStringContainsString('Tu n\'as pas encore de plan à toi.', $owner->text());
+        self::assertStringContainsString('Ceux de', $owner->filter('[data-filter-target="jump"]')->text());
+    }
+
+    /** Sans athlète, pas de portée « Moi », donc pas d'état vide de propriétaire. */
+    public function testIndexWithoutAthleteHasNoOwnerEmptyState(): void
+    {
+        $user = $this->createUser('solo@example.com');
+        $this->createWorkout($user, 'Footing');
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout');
+
+        self::assertCount(0, $crawler->filter('[data-empty-reason="owner"]'));
+        self::assertCount(1, $crawler->filter('[data-empty-reason="search"]'));
+    }
+
     /** Une demande non acceptée n'ouvre aucune portée. */
     public function testPendingRelationDoesNotWidenIndex(): void
     {

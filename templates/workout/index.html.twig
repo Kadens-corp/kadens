@@ -100,10 +100,13 @@
                 {% endfor %}
             </div>
 
-            <div class="kd-card kd-empty" data-filter-target="empty" hidden>
-                {{ ux_icon('lucide:search') }}
-                <div>Aucune séance ne correspond à ta recherche.</div>
-            </div>
+            {{ include('components/_filter_empty.html.twig', {
+                search: 'Aucune séance ne correspond à ta recherche.',
+                filters: 'Aucune séance ne correspond à ces filtres.',
+                ownerFacets: ownerFacets,
+                mine: 'Tu n\'as pas encore de séance à toi.',
+                theirs: 'Celles de',
+            }) }}
         {% endif %}
     </div>
 {% endblock %}

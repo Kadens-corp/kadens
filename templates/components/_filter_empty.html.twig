@@ -1,0 +1,56 @@
+{# ============================================================================
+   États vides d'un index filtrable (contrôleur Stimulus `filter`).
+
+   Une liste vide n'a pas toujours la même cause, et le message doit dire la
+   bonne, sinon on croit à une perte de données (#75) : un coach qui vient de
+   créer une séance pour son athlète arrivait sur « Moi », sans rien, avec
+   « Aucune séance ne correspond à ta recherche » alors qu'il n'avait rien tapé.
+
+   Trois blocs, un seul visible à la fois, choisi par le contrôleur selon
+   `data-empty-reason` :
+     - search  : une recherche est saisie et rien n'y répond ;
+     - filters : pas de recherche, ce sont les puces qui vident la liste ;
+     - owner   : la facette de propriétaire est sur soi et on ne possède rien.
+                 Rendu seulement s'il y a des facettes de propriétaire (coach).
+                 Il renvoie vers les athlètes qui ont du contenu, avec leur
+                 effectif recalculé selon les autres puces actives.
+
+   Paramètres :
+     - icon        : icône des deux premiers blocs (défaut : loupe)
+     - search      : texte du bloc « search »
+     - filters     : texte du bloc « filters »
+     - ownerFacets : puces de propriétaire (`CoachedLibrary::ownerFacets`), optionnel
+     - mine        : texte du bloc « owner » (« Tu n'as pas encore de séance à toi. »)
+     - theirs      : début de chaque lien vers un athlète (« Celles de »)
+   ============================================================================ #}
+{% set icon = icon|default('lucide:search') %}
+
+<div class="kd-card kd-empty" data-filter-target="empty" data-empty-reason="search" hidden>
+    {{ ux_icon(icon) }}
+    <div>{{ search }}</div>
+</div>
+
+<div class="kd-card kd-empty" data-filter-target="empty" data-empty-reason="filters" hidden>
+    {{ ux_icon(icon) }}
+    <div>{{ filters }}</div>
+</div>
+
+{% if ownerFacets|default([]) and app.user %}
+    <div class="kd-card kd-empty" data-filter-target="empty" data-empty-reason="owner"
+         data-empty-group="owner" data-empty-self="{{ app.user.id }}" hidden>
+        {{ ux_icon('lucide:users') }}
+        <div>{{ mine }}</div>
+        <div class="kd-empty__jumps">
+            {% for f in ownerFacets|filter(f => f.value != (app.user.id ~ '')) %}
+                <button type="button" class="kd-btn kd-btn--secondary kd-btn--sm"
+                        data-filter-target="jump"
+                        data-filter-group-param="owner" data-filter-value-param="{{ f.value }}"
+                        data-action="filter#jump"{{ f.count == 0 ? ' hidden' }}>
+                    {{ theirs }} {{ f.label }} : <span data-facet-count>{{ f.count }}</span>
+                    {{ ux_icon('lucide:arrow-right') }}
+                </button>
+            {% endfor %}
+        </div>
+        <p class="kd-empty__hint">Ce que tu crées pour un athlète lui appartient : tu le retrouves sous son nom.</p>
+    </div>
+{% endif %}

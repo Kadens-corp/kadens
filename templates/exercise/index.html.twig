@@ -136,10 +136,10 @@
                 {% endfor %}
             </div>
 
-            <div class="kd-card kd-empty" data-filter-target="empty" hidden>
-                {{ ux_icon('lucide:search') }}
-                <div>Aucun exercice ne correspond à ta recherche.</div>
-            </div>
+            {{ include('components/_filter_empty.html.twig', {
+                search: 'Aucun exercice ne correspond à ta recherche.',
+                filters: 'Aucun exercice ne correspond à ces filtres.',
+            }) }}
         {% endif %}
     </div>
 {% endblock %}

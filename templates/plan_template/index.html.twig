@@ -90,10 +90,13 @@
                 {% endfor %}
             </div>
 
-            <div class="kd-card kd-empty" data-filter-target="empty" hidden>
-                {{ ux_icon('lucide:search') }}
-                <div>Aucun plan ne correspond à ta recherche.</div>
-            </div>
+            {{ include('components/_filter_empty.html.twig', {
+                search: 'Aucun plan ne correspond à ta recherche.',
+                filters: 'Aucun plan ne correspond à ces filtres.',
+                ownerFacets: ownerFacets,
+                mine: 'Tu n\'as pas encore de plan à toi.',
+                theirs: 'Ceux de',
+            }) }}
         {% endif %}
     </div>
 {% endblock %}

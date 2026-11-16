@@ -263,7 +263,11 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   `$template->getOwner()` pour une trame. Pas de
   champ « créé par » : le coach voit/édite déjà tout le contenu de son athlète.
   À l'écran, une facette `owner` avec **« Moi » actif par défaut** et un badge de
-  propriétaire sur les cartes des autres.
+  propriétaire sur les cartes des autres. Corollaire (#75) : les effectifs des
+  puces se recalculent selon les puces actives des autres groupes, et une liste
+  vide dit **pourquoi** (`components/_filter_empty.html.twig` : recherche, puces,
+  ou « rien à toi » avec un lien vers chaque athlète qui a du contenu) — sans
+  quoi un coach croit que ce qu'il vient de créer pour son athlète a disparu.
 - **Copier une séance chez un autre (#58) ne référence jamais un exercice qu'il
   ne peut pas lire.** Coach → athlète (`/coach/athlete/{id}/workout/copy`) et
   copie depuis le lien public (`/workout/shared/{token}/copy`) passent par

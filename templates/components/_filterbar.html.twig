@@ -12,6 +12,10 @@
      - facetGroups : list de { group, allLabel, facets:[{value,label,count}],
                                default?(valeur active au chargement, 'all' sinon) }
 
+   Les effectifs sont ceux de la liste entière (vrais sans JS, où rien ne se
+   filtre) ; le contrôleur les recalcule dès sa connexion selon les puces actives
+   des autres groupes, d'où le `<span data-facet-count>`.
+
    `default` sert au groupe « propriétaire » d'un coach : la page s'ouvre sur ses
    propres entrées, les athlètes sont à une puce. Le contrôleur Stimulus lit cet
    état initial dans les classes rendues — ne pas activer une puce à la main sans
@@ -52,7 +56,8 @@
             </label>
         {% endif %}
 
-        <span class="kd-count"><span data-filter-target="count">{{ total }}</span> {{ countNoun }}{{ total > 1 ? 's' }}</span>
+        <span class="kd-count"><span data-filter-target="count">{{ total }}</span>
+            <span data-filter-target="noun" data-one="{{ countNoun }}" data-many="{{ countNoun }}s">{{ countNoun }}{{ total > 1 ? 's' }}</span></span>
     </div>
 
     {% for grp in facetGroups|default([]) %}
@@ -61,11 +66,11 @@
             <div class="kd-libfilters">
                 <button type="button" class="kd-libfilter{{ active == 'all' ? ' kd-libfilter--on' }}"
                         data-filter-target="facet" data-facet-group="{{ grp.group }}" data-facet-value="all"
-                        data-action="filter#pickFacet">{{ grp.allLabel }} · {{ total }}</button>
+                        data-action="filter#pickFacet">{{ grp.allLabel }} · <span data-facet-count>{{ total }}</span></button>
                 {% for f in grp.facets %}
                     <button type="button" class="kd-libfilter{{ active == f.value ? ' kd-libfilter--on' }}"
                             data-filter-target="facet" data-facet-group="{{ grp.group }}" data-facet-value="{{ f.value }}"
-                            data-action="filter#pickFacet">{{ f.label }} · {{ f.count }}</button>
+                            data-action="filter#pickFacet">{{ f.label }} · <span data-facet-count>{{ f.count }}</span></button>
                 {% endfor %}
             </div>
         {% endif %}

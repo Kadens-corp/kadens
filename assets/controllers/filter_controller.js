@@ -13,6 +13,10 @@ import { normalize, scoreElement, tokens } from 'search';
  *      l'autre langue). Les items non correspondants sont masqués.
  *   2. Facettes — des puces (activité, portée…) restreignent la liste. Chaque
  *      groupe de facette est indépendant ; « Tous » réinitialise le groupe.
+ *      L'effectif d'une puce se RECALCULE selon les puces actives des AUTRES
+ *      groupes (pas selon la recherche) : sur la portée « Moi » d'un coach,
+ *      « Toutes activités · 4 » annonçait les séances de ses athlètes alors que
+ *      la liste n'en montrait aucune (#75).
  *   3. Tri — un <select> réordonne les items (nom, récence, durée, volume…).
  *
  * Quand une recherche est active, la pertinence prime, l'USAGE RÉEL départage
@@ -28,8 +32,20 @@ import { normalize, scoreElement, tokens } from 'search';
  *   - item  : chaque élément filtrable
  *   - facet : chaque puce de facette (optionnel)
  *   - sort  : le <select> de tri (optionnel)
- *   - empty : bloc affiché quand aucun élément ne correspond (optionnel)
+ *   - empty : bloc(s) affiché(s) quand aucun élément ne correspond (optionnel).
+ *             `data-empty-reason` dit QUELLE absence il explique, un seul est
+ *             visible à la fois (cf. `components/_filter_empty.html.twig`) :
+ *               search  : une recherche est saisie (défaut sans attribut) ;
+ *               filters : pas de recherche, les puces vident la liste ;
+ *               owner   : la puce de `data-empty-group` est sur
+ *                         `data-empty-self` et aucun item n'est à soi.
+ *             À défaut du bloc attendu, owner retombe sur filters, puis search.
+ *   - jump  : bouton qui active une puce sans en être une (lien d'un état
+ *             vide), via les paramètres `data-filter-group-param` et
+ *             `data-filter-value-param`. Son `[data-facet-count]` suit
+ *             l'effectif de la puce visée ; il se masque à zéro.
  *   - count : reçoit le nombre d'éléments visibles (optionnel)
+ *   - noun  : nom accordé au compteur (`data-one` / `data-many`, optionnel)
  *
  * Attributs portés par chaque item :
  *   - data-filter-name  : nom principal (base du classement exact/préfixe)
@@ -43,6 +59,7 @@ import { normalize, scoreElement, tokens } from 'search';
  * Attributs portés par chaque puce de facette :
  *   - data-facet-group  : le groupe (ex. "activity")
  *   - data-facet-value  : la valeur retenue (ex. "gym", ou "all" pour réinit.)
+ *   - [data-facet-count] : élément enfant qui reçoit l'effectif recalculé
  *
  * Options du <select> de tri :
  *   - value        : la clef (suffixe de data-sort-<clef>)
@@ -50,7 +67,7 @@ import { normalize, scoreElement, tokens } from 'search';
  *   - data-numeric : présent => comparaison numérique (sinon alphabétique)
  */
 export default class extends Controller {
-    static targets = ['input', 'list', 'item', 'facet', 'sort', 'empty', 'count'];
+    static targets = ['input', 'list', 'item', 'facet', 'sort', 'empty', 'jump', 'count', 'noun'];
 
     connect() {
         this.query = '';
@@ -68,7 +85,23 @@ export default class extends Controller {
     }
 
     pickFacet(event) {
-        const btn = event.currentTarget;
+        this.activate(event.currentTarget);
+    }
+
+    /*
+     * Lien d'un état vide (« Celles de Trailer38 : 4 ») : il active la puce
+     * correspondante comme un clic dessus, puis lui passe le focus — le bouton
+     * cliqué disparaît avec l'état vide, le focus ne doit pas partir avec lui.
+     */
+    jump({ params: { group, value } }) {
+        const btn = this.facetTargets.find((b) => b.dataset.facetGroup === group
+            && b.dataset.facetValue === String(value));
+        if (!btn) return;
+        this.activate(btn);
+        btn.focus();
+    }
+
+    activate(btn) {
         const group = btn.dataset.facetGroup;
         this.facets[group] = btn.dataset.facetValue;
         // état visuel : une seule puce active par groupe
@@ -141,17 +174,83 @@ export default class extends Controller {
                 .forEach((e) => this.listTarget.appendChild(e.el));
         }
 
-        if (this.hasEmptyTarget) this.emptyTarget.hidden = visible !== 0;
+        this.showEmpty(visible === 0 ? this.emptyReason(searching) : null);
+        this.recount();
         if (this.hasCountTarget) this.countTarget.textContent = visible;
+        if (this.hasNounTarget) {
+            const { one, many } = this.nounTarget.dataset;
+            this.nounTarget.textContent = visible > 1 ? many : one;
+        }
     }
 
-    facetMatch(el) {
-        return Object.entries(this.facets).every(([group, value]) => {
-            if (!value || value === 'all') return true;
-            const key = `facet${group.charAt(0).toUpperCase()}${group.slice(1)}`;
-            const owned = (el.dataset[key] || '').split(' ').filter(Boolean);
-            return owned.includes(value);
+    // ---------------------------------------------------------------- Effectifs
+    /*
+     * Effectif de chaque puce = items qui passent les puces actives des autres
+     * groupes et portent cette valeur. « Tous » d'un groupe compte donc ce que
+     * les autres groupes laissent passer.
+     */
+    recount() {
+        this.facetTargets.forEach((btn) => {
+            this.writeCount(btn, this.countFor(btn.dataset.facetGroup, btn.dataset.facetValue));
         });
+        this.jumpTargets.forEach((btn) => {
+            const count = this.countFor(btn.dataset.filterGroupParam, btn.dataset.filterValueParam);
+            this.writeCount(btn, count);
+            btn.hidden = count === 0;
+        });
+    }
+
+    countFor(group, value) {
+        return this.itemTargets.filter((el) => this.facetMatch(el, group)
+            && (!value || value === 'all' || this.facetValues(el, group).includes(value))).length;
+    }
+
+    writeCount(btn, count) {
+        const slot = btn.querySelector('[data-facet-count]');
+        if (slot) slot.textContent = count;
+    }
+
+    // --------------------------------------------------------------- États vides
+    /*
+     * Pourquoi la liste est vide. Une recherche saisie passe d'abord : c'est
+     * elle que l'utilisateur vient de toucher. Sans recherche, la portée « à
+     * moi » vide se distingue des autres puces : elle ne dit pas « tes filtres
+     * excluent tout », elle dit « tu ne possèdes rien ici », et renvoie ailleurs.
+     */
+    emptyReason(searching) {
+        if (searching) return 'search';
+        const owner = this.emptyTargets.find((el) => el.dataset.emptyReason === 'owner');
+        if (owner) {
+            const { emptyGroup: group, emptySelf: self } = owner.dataset;
+            if (this.facets[group] === self
+                && !this.itemTargets.some((el) => this.facetValues(el, group).includes(self))) {
+                return 'owner';
+            }
+        }
+        return 'filters';
+    }
+
+    showEmpty(reason) {
+        const reasonOf = (el) => el.dataset.emptyReason || 'search';
+        const available = new Set(this.emptyTargets.map(reasonOf));
+        let shown = reason;
+        if (shown === 'owner' && !available.has('owner')) shown = 'filters';
+        if (shown === 'filters' && !available.has('filters')) shown = 'search';
+        this.emptyTargets.forEach((el) => { el.hidden = reasonOf(el) !== shown; });
+    }
+
+    // ------------------------------------------------------------------ Facettes
+    /* `except` : groupe ignoré, pour compter les puces de ce groupe. */
+    facetMatch(el, except = null) {
+        return Object.entries(this.facets).every(([group, value]) => {
+            if (group === except || !value || value === 'all') return true;
+            return this.facetValues(el, group).includes(value);
+        });
+    }
+
+    facetValues(el, group) {
+        const key = `facet${group.charAt(0).toUpperCase()}${group.slice(1)}`;
+        return (el.dataset[key] || '').split(' ').filter(Boolean);
     }
 
     compareSort(a, b) {

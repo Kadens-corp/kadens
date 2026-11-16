@@ -11354,6 +11354,20 @@ a.kd-coachitem__name:hover {
     color: var(--color-text-placeholder);
 }
 
+/* Liens d'un état vide vers une autre portée (« Celles de Trailer38 : 4 »,
+   #75) : centrés sous le message, un par athlète, à la ligne si besoin. */
+.kd-empty__jumps {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--kd-space-3);
+    margin-top: var(--kd-space-6);
+}
+
+.kd-empty__jumps:not(:has(> :not([hidden]))) {
+    display: none;
+}
+
 .kd-deflist__note {
     color: var(--color-text-soft);
 }
