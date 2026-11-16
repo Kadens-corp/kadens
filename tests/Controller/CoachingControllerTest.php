@@ -102,6 +102,70 @@ final class CoachingControllerTest extends WebTestCase
         self::assertStringContainsString('Demander à être coaché', $crawler->html());
     }
 
+    /**
+     * #66 : l'athlète lit ce qu'il ouvre avant d'accepter, sur le bandeau
+     * d'accueil comme sur la carte de /coaching.
+     */
+    public function testAthleteSeesCoachRightsBeforeAccepting(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::PENDING, $coach);
+
+        $this->client->loginUser($athlete);
+
+        // Sur /coaching, le formulaire « Demander à être coaché » porte aussi la
+        // liste (repliée) : on vise la carte de la demande.
+        foreach (['/' => '.kd-home__coach', '/coaching' => '.kd-coachcard'] as $url => $scope) {
+            $crawler = $this->client->request('GET', $url);
+
+            self::assertResponseIsSuccessful();
+            $rights = $crawler->filter($scope.' .kd-coachrights');
+            self::assertCount(1, $rights, $url);
+            self::assertStringContainsString('Ce que coach@example.com pourra faire', $rights->text());
+            self::assertStringContainsString('notes privées', $rights->text());
+            // Liste en clair, pas repliée : elle doit se lire avant le bouton.
+            self::assertCount(0, $crawler->filter($scope.' details .kd-coachrights'), $url);
+        }
+    }
+
+    /** Le coach qui reçoit une demande d'athlète n'ouvre rien : pas de liste. */
+    public function testCoachReceivingRequestSeesNoRightsList(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::PENDING, $athlete);
+
+        $this->client->loginUser($coach);
+
+        $crawler = $this->client->request('GET', '/');
+        self::assertResponseIsSuccessful();
+        self::assertStringContainsString('te demande de l', $crawler->filter('.kd-home__coach')->text());
+        self::assertCount(0, $crawler->filter('.kd-coachrights'));
+
+        // Sur /coaching, seul le formulaire « Demander à être coaché » la porte.
+        $crawler = $this->client->request('GET', '/coaching');
+        self::assertCount(0, $crawler->filter('.kd-coachcard .kd-coachrights'));
+    }
+
+    /** Relation active : la liste reste consultable côté athlète, au présent, et jamais côté coach. */
+    public function testActiveRelationKeepsRightsOnAthleteCardOnly(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED, $coach);
+
+        $this->client->loginUser($athlete);
+        $crawler = $this->client->request('GET', '/coaching');
+        $folded = $crawler->filter('.kd-coachcard details.kd-coachcard__rights');
+        self::assertCount(1, $folded);
+        self::assertStringContainsString('Ce que coach@example.com peut faire', $folded->filter('summary')->text());
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coaching');
+        self::assertCount(0, $crawler->filter('.kd-coachcard .kd-coachrights'));
+    }
+
     public function testAthleteRequestCreatesPendingRelation(): void
     {
         $athlete = $this->createUser('athlete@example.com');

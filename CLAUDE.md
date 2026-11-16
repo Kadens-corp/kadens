@@ -223,7 +223,12 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   `ScheduledWorkoutVoter` (mémoïsée par `CoachingResolver`). Conséquences à ne pas
   casser : les repos owner-scoped, le repli `PlanScheduler::resync()` →
   `$template->getOwner()` et l'affichage chez l'athlète restent corrects sans
-  condition ; l'athlète **garde son contenu** quand la relation se termine. Les
+  condition ; l'athlète **garde son contenu** quand la relation se termine.
+  **Ces droits sont écrits pour l'athlète (#66)** dans
+  `components/_coaching_rights.html.twig` (bandeau d'accueil, cartes `/coaching`,
+  formulaire de demande) : toute évolution de ces voters, d'`ExerciseVoter` ou
+  d'une garde « propriétaire seul » (notes privées, `LOG`, partage, publication)
+  doit y être répercutée, la liste ne doit rien promettre de faux. Les
   actions coach ne forkent aucun éditeur : elles créent la coquille et redirigent
   vers le compositeur / l'éditeur de plan normaux. `ROLE_COACH` s'accorde par
   commande (`app:user:promote-coach`), jamais depuis l'app. `GoalVoter` porte la

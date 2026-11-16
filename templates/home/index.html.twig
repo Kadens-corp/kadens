@@ -32,6 +32,11 @@
                     <strong>{{ other ? other.displayName : 'Quelqu\'un' }}</strong>
                     {{ relation.coach == u ? 'te demande de l\'entraîner' : 'propose de t\'entraîner' }}
                 </p>
+                {# L'athlète sait à quoi il donne accès avant d'accepter (#66).
+                   Le coach qui reçoit une demande n'ouvre rien : pas de liste. #}
+                {% if relation.athlete and relation.athlete.id == u.id %}
+                    {{ include('components/_coaching_rights.html.twig', {coach: other}) }}
+                {% endif %}
                 <div class="kd-home__coachacts">
                     <form method="post" action="{{ path('app_coaching_respond', {id: relation.id}) }}">
                         <input type="hidden" name="_token" value="{{ csrf_token('coaching_respond' ~ relation.id) }}">

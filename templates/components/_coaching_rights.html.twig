@@ -1,0 +1,49 @@
+{# Ce qu'un coach accepté peut voir et faire chez son athlète (#66).
+
+   Montré à l'athlète, et à lui seul : avant d'accepter (bandeau d'accueil,
+   demande reçue sur /coaching) et tant que la relation est active.
+
+   Chaque ligne est tenue par le code, pas par l'intention. À relire si l'un
+   de ces points bouge :
+     - voir : stats, journal, historique (`CoachController::athleteStats`,
+       `athleteLog`, `athleteHistory`), exercices perso (`ExerciseVoter::VIEW`,
+       lecture seule) ;
+     - créer, modifier, supprimer : VIEW/EDIT/DELETE de `WorkoutVoter`,
+       `PlanTemplateVoter`, `ScheduledWorkoutVoter`, et `GoalVoter` pour les
+       objectifs et leur récit (le coach ne crée pas d'objectif : `GoalController::new`
+       pose l'owner sur l'utilisateur courant) ;
+     - ne pas : notes privées (propriétaire seul, cf. `_private_notes`), séries
+       et ressenti (`ScheduledWorkoutVoter::LOG`), partage et publication
+       (`share` / `publish` réservés au propriétaire) ;
+     - le contenu est posé chez l'athlète (`setOwner($athlete)`) et y reste.
+
+   Paramètres :
+     - coach : User|null, pour nommer le coach (repli : « ton coach »)
+     - active : relation déjà acceptée, la liste passe au présent (défaut false)
+     - title  : afficher l'intitulé (défaut true ; false quand un <summary> le
+                porte déjà) #}
+{% set active = active|default(false) %}
+{% set name = coach ? coach.displayName : 'ton coach' %}
+{% set will = active ? 'peut' : 'pourra' %}
+
+<div class="kd-coachrights">
+    {# Pas `title|default(true)` : `default` remplace aussi un false. #}
+    {% if title is not defined or title %}
+        <p class="kd-coachrights__title">Ce que {{ name }} {{ will }} faire</p>
+    {% endif %}
+    <ul class="kd-coachrights__list">
+        <li>
+            {{ ux_icon('lucide:eye') }}
+            <span><strong>Voir</strong> tes statistiques, ton journal, ton historique et ton ressenti, tes exercices perso.</span>
+        </li>
+        <li>
+            {{ ux_icon('lucide:square-pen') }}
+            <span><strong>Créer, modifier et supprimer</strong> tes séances, tes plans et ton agenda. <strong>Modifier et supprimer</strong> tes objectifs et leur récit.</span>
+        </li>
+        <li>
+            {{ ux_icon('lucide:lock') }}
+            <span><strong>Mais pas</strong> lire tes notes privées, saisir tes séries et ton ressenti à ta place, ni partager ou publier ton contenu.</span>
+        </li>
+    </ul>
+    <p class="kd-coachrights__foot">Ce que {{ name }} crée t'appartient, et tu le gardes si la relation se termine. Tu peux y mettre fin quand tu veux.</p>
+</div>

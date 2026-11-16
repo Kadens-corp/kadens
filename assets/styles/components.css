@@ -10482,6 +10482,89 @@ textarea.kd-inlineedit__input {
     margin: 0;
 }
 
+/* ── Droits du coach (#66) : ce que l'athlète ouvre en acceptant ─────────────
+   Pas de couleur propre : la liste hérite de son conteneur (carte neutre ou
+   bandeau teinté de l'accueil), seules les icônes marquent les trois portées. */
+.kd-coachrights {
+    margin: var(--kd-space-3) 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.kd-coachrights__title {
+    margin: 0 0 var(--kd-space-2);
+    font-weight: var(--kd-weight-semibold);
+}
+
+.kd-coachrights__list {
+    display: grid;
+    gap: var(--kd-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.kd-coachrights__list li {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-3);
+}
+
+.kd-coachrights__list svg {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+}
+
+.kd-coachrights__list strong {
+    font-weight: var(--kd-weight-semibold);
+}
+
+.kd-coachrights__foot {
+    margin: var(--kd-space-2) 0 0;
+    opacity: .85;
+}
+
+/* Variante repliée (relation active, formulaire de demande). */
+.kd-coachcard__rights {
+    margin: var(--kd-space-3) 0 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-coachcard__rights > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    cursor: pointer;
+    list-style: none;
+}
+
+.kd-coachcard__rights > summary::-webkit-details-marker {
+    display: none;
+}
+
+.kd-coachcard__rights > summary svg {
+    width: 14px;
+    height: 14px;
+    transition: transform .12s ease;
+}
+
+.kd-coachcard__rights[open] > summary svg {
+    transform: rotate(180deg);
+}
+
+.kd-coachform__rights {
+    margin: 0 0 var(--kd-space-4);
+}
+
+/* Bandeau d'accueil : la liste prend toute la largeur, les boutons passent dessous. */
+.kd-home__coach .kd-coachrights {
+    flex-basis: 100%;
+    margin: 0;
+}
+
 /* ── Formulaires courts (invitation, création, pose) : une ligne qui s'empile ─ */
 .kd-coachform {
     display: flex;

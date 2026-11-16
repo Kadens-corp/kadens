@@ -43,6 +43,12 @@
         <section class="kd-card kd-section__block">
             <h3 class="kd-card__title">{{ ux_icon('lucide:mail') }} Demander à être coaché</h3>
             <p class="kd-coachform__hint">Saisis l'email exact du compte Kadens de ton coach. Il recevra une demande à accepter.</p>
+            {# Demander, c'est déjà consentir : la liste des droits (#66) se lit
+               avant d'envoyer, comme avant d'accepter. #}
+            <details class="kd-coachcard__rights kd-coachform__rights">
+                <summary>{{ ux_icon('lucide:chevron-down') }} Ce que ton coach pourra faire</summary>
+                {{ include('components/_coaching_rights.html.twig', {coach: null, title: false}) }}
+            </details>
             <form method="post" action="{{ path('app_coaching_request') }}" class="kd-coachform">
                 <input type="hidden" name="_token" value="{{ csrf_token('coaching_request') }}">
                 <input type="hidden" name="role" value="athlete">
@@ -132,7 +138,7 @@
         <div>
             <p class="kd-eyebrow kd-eyebrow--accent">Coaching</p>
             <h1 class="kd-title">Qui t'entraîne, qui tu entraînes</h1>
-            <p class="kd-lead">Un coach accepté crée des séances et des plans, et les pose sur le calendrier. Le contenu appartient toujours à l'athlète : il le garde même si la relation se termine.</p>
+            <p class="kd-lead">Un coach accepté suit les statistiques et l'historique de son athlète, crée et modifie ses séances, ses plans et son agenda. Ses notes privées restent privées. Le contenu appartient toujours à l'athlète : il le garde même si la relation se termine.</p>
         </div>
     </div>
 

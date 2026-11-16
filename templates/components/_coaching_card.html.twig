@@ -7,6 +7,9 @@
     Optionnel :
       - `linkAthlete` : lie la carte à l'espace de travail de l'athlète (dashboard coach)
 
+    Côté athlète, la carte porte la liste des droits du coach (#66,
+    `_coaching_rights`).
+
     Le statut réutilise les tokens de statut de séance via CoachingStatus::modifier
     (done / planned / missed), comme GoalOutcome : pas de nouvelle famille de couleur.
 #}
@@ -43,6 +46,18 @@
                 · depuis le {{ relation.respondedAt|date('d/m/Y') }}
             {% endif %}
         </p>
+
+        {# Ce que le coach voit et fait chez l'athlète (#66), montré à l'athlète
+           seul : en clair tant qu'il doit répondre, replié une fois la relation
+           active (il l'a déjà lu, la carte reste compacte). #}
+        {% if not iAmCoach and canRespond %}
+            {{ include('components/_coaching_rights.html.twig', {coach: other}) }}
+        {% elseif not iAmCoach and relation.isActive %}
+            <details class="kd-coachcard__rights">
+                <summary>{{ ux_icon('lucide:chevron-down') }} Ce que {{ other ? other.displayName : 'ton coach' }} peut faire</summary>
+                {{ include('components/_coaching_rights.html.twig', {coach: other, active: true, title: false}) }}
+            </details>
+        {% endif %}
     </div>
 
     <div class="kd-coachcard__actions">
