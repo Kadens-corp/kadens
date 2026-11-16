@@ -24,6 +24,7 @@
             <a href="{{ path('app_export_workout', {id: workout.id}) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
                 {{ ux_icon('lucide:file-down') }} Excel
             </a>
+            {{ include('components/_help.html.twig', {topic: 'composer', title: 'Comment marche le compositeur'}, with_context = false) }}
         </div>
     </div>
 

@@ -43,6 +43,7 @@
             <a href="{{ path('app_coaching_index') }}#athletes" class="kd-btn kd-btn--ghost">
                 {{ ux_icon('lucide:arrow-left') }} Mes athlètes
             </a>
+            {{ include('components/_help.html.twig', {topic: 'athlete', title: 'Comment marche cette fiche', athlete: athlete}, with_context = false) }}
         </div>
     </header>
 

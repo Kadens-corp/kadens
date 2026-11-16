@@ -1,0 +1,57 @@
+{% extends 'base.html.twig' %}
+
+{# La page d'aide (#72). Les mêmes textes que les « ? » des écrans, plus le
+   mini-guide coach. Le guide et la fiche athlète ne concernent qu'un coach :
+   un athlète n'en verrait que des actions qui ne lui sont pas ouvertes. #}
+{% import 'help/_topics.html.twig' as help %}
+
+{% block title %}Aide — Kadens{% endblock %}
+
+{% block body %}
+    {% set isCoach = app.user.isCoach %}
+
+    <div class="kd-pagehead">
+        <div>
+            <p class="kd-eyebrow kd-eyebrow--accent">Aide</p>
+            <h1 class="kd-title">Comment marche Kadens</h1>
+            <p class="kd-lead">On part d'exercices, on compose des séances, on les assemble en plans, puis on place les plans dans l'agenda. Chaque écran clé a aussi son bouton « Aide ».</p>
+        </div>
+    </div>
+
+    <nav class="kd-helpindex" aria-label="Sommaire de l'aide">
+        <a href="#composer">Le compositeur de séance</a>
+        <a href="#plan">L'éditeur de plan</a>
+        <a href="#calendar">Le calendrier</a>
+        {% if isCoach %}
+            <a href="#coach">Guide du coach</a>
+            <a href="#athlete">La fiche d'un athlète</a>
+        {% endif %}
+    </nav>
+
+    <section class="kd-section kd-helppage" id="composer">
+        <h2 class="kd-title kd-title--sm">Le compositeur de séance</h2>
+        <div class="kd-help__body">{{ help.composer() }}</div>
+    </section>
+
+    <section class="kd-section kd-helppage" id="plan">
+        <h2 class="kd-title kd-title--sm">L'éditeur de plan</h2>
+        <div class="kd-help__body">{{ help.plan() }}</div>
+    </section>
+
+    <section class="kd-section kd-helppage" id="calendar">
+        <h2 class="kd-title kd-title--sm">Le calendrier</h2>
+        <div class="kd-help__body">{{ help.calendar() }}</div>
+    </section>
+
+    {% if isCoach %}
+        <section class="kd-section kd-helppage" id="coach">
+            <h2 class="kd-title kd-title--sm">Guide du coach</h2>
+            <div class="kd-help__body">{{ help.coach_guide() }}</div>
+        </section>
+
+        <section class="kd-section kd-helppage" id="athlete">
+            <h2 class="kd-title kd-title--sm">La fiche d'un athlète</h2>
+            <div class="kd-help__body">{{ help.athlete() }}</div>
+        </section>
+    {% endif %}
+{% endblock %}

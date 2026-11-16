@@ -1,0 +1,72 @@
+{# Les textes d'aide (#72), écrits une seule fois.
+
+   Lus à deux endroits : le « ? » d'un écran (`components/_help`) et la page
+   `/aide`, qui les regroupe. Chaque macro rend 3 à 5 phrases, le principe de
+   l'écran, pas son mode d'emploi complet.
+
+   Chaque phrase décrit ce que fait le code, pas l'intention. À relire si l'un
+   de ces points bouge :
+     - compositeur : une case de plan est une copie (`Workout.planLocal`, fork
+       à la pose), une pose directe au calendrier ne l'est pas ;
+     - plan : `PlanScheduler::resync()` relancé à chaque pose et chaque retrait
+       de case, add-only, les séances faites restent ; `LineageSeed` (dernier
+       réalisé, muscu seulement) ;
+     - calendrier : cycle de statut, modale rapide (`_cal_event`), réalisé
+       logué en muscu, importé d'Intervals.icu en cardio ;
+     - coaching : mêmes sources que `_coaching_rights` (#66) et
+       `Coaching.coachNotes` (#65), effacées à la fin de la relation.
+
+   Pas de HTML chargé à la demande : les pages de consultation doivent rester
+   auto-suffisantes (cache hors ligne), le texte est donc dans la page. #}
+
+{% macro composer() %}
+    <p>Une séance se range en <strong>blocs</strong> : échauffement, corps de séance, retour au calme. Un bloc peut se répéter en plusieurs tours.</p>
+    <p>Pour ajouter un exercice, tape sa carte dans la bibliothèque (il va dans le bloc actif) ou glisse-la dans un bloc.</p>
+    <p>Clique sur un exercice pour régler ses séries, ses répétitions, sa charge ou sa distance. Son menu « … » l'enchaîne avec celui du dessus (superset, sans repos), le déplace ou le retire.</p>
+    <p>Tout s'enregistre au fil de l'eau. Les cases d'un plan sont des copies de la séance : la modifier ici ne les change pas.</p>
+{% endmacro %}
+
+{% macro plan() %}
+    <p>Un plan est une grille de semaines, <strong>sans dates</strong>. Tu le places ensuite dans l'agenda, à partir du jour de ton choix.</p>
+    <p>Choisis une séance dans la liste, puis clique sur les jours où tu veux la faire.</p>
+    <p>Chaque case est une copie de la séance : l'ajuster ne change ni ta bibliothèque ni les autres semaines. C'est ce qui permet de faire progresser une charge d'une semaine à l'autre.</p>
+    <p>En muscu, une séance déjà faite repart de ce que tu as réellement fait la dernière fois. Si le plan est déjà dans l'agenda, une case ajoutée y apparaît aussi, et les séances faites ne bougent jamais.</p>
+{% endmacro %}
+
+{% macro calendar() %}
+    <p>Le « + » d'un jour y pose une séance de ta bibliothèque. « Placer un plan dans l'agenda » pose d'un coup toutes les séances d'un plan, à partir d'une date.</p>
+    <p>Le bouton rond d'une séance change son statut d'un clic : prévue, faite, manquée.</p>
+    <p>Clique sur une séance pour la déplacer, la retirer ou noter ta forme. L'œil ouvre la séance entière.</p>
+    <p>En muscu, tu saisis tes séries sur la séance. Une sortie course, vélo ou natation ne se saisit pas : elle arrive de ta montre, une fois Intervals.icu relié dans tes paramètres.</p>
+{% endmacro %}
+
+{# `athlete` : User suivi, pour le nommer (repli : « ton athlète »). #}
+{% macro athlete(athlete = null) %}
+    {% set name = athlete ? athlete.displayName : 'ton athlète' %}
+    <p>Cette fiche est ton poste de travail pour {{ name }}. Ce que tu crées ici <strong>lui appartient</strong>, et il le voit.</p>
+    <p>« Nouvelle séance » et « Nouveau plan » ouvrent les éditeurs habituels. « Une de mes séances » lui en donne une copie : ton original ne bouge pas.</p>
+    <p>Pose ensuite sur son calendrier une séance précise ou un plan entier.</p>
+    <p>Il saisit lui-même ses séries et sa forme, tu les lis dans « Ce qu'il a fait ». Tes notes sur lui ne sont visibles que de toi.</p>
+{% endmacro %}
+
+{# Le mini-guide coach : les quatre moments d'une relation. #}
+{% macro coach_guide() %}
+    <ol class="kd-help__steps">
+        <li>
+            <strong>Inviter.</strong>
+            Dans « Athlètes », saisis l'email du compte Kadens de ton athlète. Il voit la liste de ce que tu pourras faire, et doit accepter avant que tu aies accès à quoi que ce soit.
+        </li>
+        <li>
+            <strong>Programmer.</strong>
+            Depuis sa fiche, crée une séance ou un plan, ou donne-lui une copie des tiens. Tu les composes dans les mêmes éditeurs que pour toi, puis tu les poses sur son calendrier.
+        </li>
+        <li>
+            <strong>Ce que voit l'athlète.</strong>
+            Tout ce que tu crées : séances, plans, descriptions, consignes de case. Seules tes notes sur lui restent entre toi et toi. De son côté, ses notes privées te restent fermées, et c'est lui qui saisit ses séries et sa forme.
+        </li>
+        <li>
+            <strong>Fin de relation.</strong>
+            L'un ou l'autre peut y mettre fin (« Terminer »). Il garde tout ce que tu as créé pour lui. Tu perds l'accès, et tes notes sur lui sont effacées. Une nouvelle invitation peut renouer la relation.
+        </li>
+    </ol>
+{% endmacro %}

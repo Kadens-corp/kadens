@@ -60,6 +60,7 @@
 {% endif %}
 {% set menuItems = menuItems|merge([
     { label: 'Paramètres',  icon: 'lucide:settings-2',  path: 'app_profile_settings', routes: ['app_profile_settings'] },
+    { label: 'Aide',        icon: 'lucide:circle-help', path: 'app_help',             routes: ['app_help'] },
 ]) %}
 
 {# Le back-office n'existe que pour ROLE_SUPER_ADMIN : ni ROLE_ADMIN ni personne

@@ -98,6 +98,14 @@
         {% endif %}
 
         {% if me.isCoach %}
+            {# Le mini-guide coach (#72), ouvert tant qu'il n'a personne à suivre :
+               c'est là qu'il en a besoin. Même texte que sur /aide. #}
+            {% import 'help/_topics.html.twig' as help %}
+            <details class="kd-card kd-section__block kd-coachguide"{{ athletes is empty ? ' open' }}>
+                <summary class="kd-coachguide__summary">{{ ux_icon('lucide:circle-help') }} Guide du coach : inviter, programmer, ce que voit l'athlète, fin de relation</summary>
+                <div class="kd-help__body">{{ help.coach_guide() }}</div>
+            </details>
+
             <section class="kd-card kd-section__block">
                 <h3 class="kd-card__title">{{ ux_icon('lucide:user-plus') }} Inviter un athlète</h3>
                 <p class="kd-coachform__hint">L'athlète doit déjà avoir un compte Kadens. Il recevra une demande à accepter avant que tu aies accès à son contenu.</p>

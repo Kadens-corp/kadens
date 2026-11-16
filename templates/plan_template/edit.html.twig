@@ -18,6 +18,7 @@
             <a href="{{ path('app_plan_template_show', {id: template.id}|merge(back_carry())) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
                 {{ ux_icon('lucide:arrow-right') }} Voir le plan
             </a>
+            {{ include('components/_help.html.twig', {topic: 'plan', title: 'Comment marche un plan'}, with_context = false) }}
         </div>
     </div>
 

@@ -1,0 +1,36 @@
+{# Le « ? » d'un écran (#72) : un bouton « Aide » qui déplie un panneau de
+   quelques lignes sur le principe de l'écran.
+
+   `<details>` natif, comme les menus kebab : il s'ouvre au clic et au clavier
+   sans JavaScript, et le texte est déjà dans la page (aucun chargement, la
+   page reste lisible hors ligne). Le contrôleur `dismiss` n'ajoute que la
+   fermeture au clic extérieur et à Échap.
+
+   Les textes vivent dans `help/_topics.html.twig`, partagés avec `/aide`.
+
+   Paramètres :
+     - topic   : composer | plan | calendar | athlete
+     - title   : intitulé du panneau (« Comment marche le compositeur »)
+     - athlete : User, pour le sujet `athlete` seulement #}
+{% import 'help/_topics.html.twig' as help %}
+
+<details class="kd-help" data-controller="dismiss">
+    <summary class="kd-help__trigger" aria-label="Aide : {{ title }}">
+        {{ ux_icon('lucide:circle-help') }}<span>Aide</span>
+    </summary>
+    <div class="kd-help__panel">
+        <p class="kd-help__title">{{ title }}</p>
+        <div class="kd-help__body">
+            {% if topic == 'composer' %}
+                {{ help.composer() }}
+            {% elseif topic == 'plan' %}
+                {{ help.plan() }}
+            {% elseif topic == 'calendar' %}
+                {{ help.calendar() }}
+            {% elseif topic == 'athlete' %}
+                {{ help.athlete(athlete|default(null)) }}
+            {% endif %}
+        </div>
+        <a class="kd-help__more" href="{{ path('app_help') }}#{{ topic }}">Toute l'aide {{ ux_icon('lucide:arrow-right') }}</a>
+    </div>
+</details>

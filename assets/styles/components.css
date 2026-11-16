@@ -13490,3 +13490,165 @@ a.kd-coachitem__name:hover {
         font-size: 10px;
     }
 }
+
+/* ----------------------------------------------------------------------------
+   Aide contextuelle (#72) — `components/_help`, page `/aide`
+   ----------------------------------------------------------------------------
+   Un <details> natif, comme les menus kebab : le bouton a l'allure d'un bouton
+   secondaire compact, le panneau s'ancre sous lui, à droite. Sous 560px, le
+   bouton peut avoir glissé à gauche d'une barre repliée : le panneau devient
+   une feuille fixée en bas de l'écran, pour ne jamais déborder. */
+.kd-help {
+    position: relative;
+}
+
+.kd-help__trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    padding: 8px var(--kd-space-5);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-text);
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: var(--kd-weight-bold);
+    letter-spacing: var(--kd-tracking-action);
+    text-transform: uppercase;
+    line-height: 1;
+    cursor: pointer;
+    list-style: none;
+}
+
+.kd-help__trigger::-webkit-details-marker {
+    display: none;
+}
+
+.kd-help__trigger:hover,
+.kd-help[open] > .kd-help__trigger {
+    background: var(--color-text);
+    color: var(--color-surface-raised);
+}
+
+.kd-help__trigger svg {
+    width: 15px;
+    height: 15px;
+}
+
+.kd-help__panel {
+    position: absolute;
+    top: calc(100% + var(--kd-space-2));
+    right: 0;
+    z-index: 40;
+    width: 360px;
+    max-width: calc(100vw - 2 * var(--kd-space-7));
+    padding: var(--kd-space-7);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-text);
+    text-align: left;
+}
+
+.kd-help__title {
+    margin: 0 0 var(--kd-space-4);
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: var(--kd-weight-bold);
+    letter-spacing: var(--kd-tracking-action);
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-help__body {
+    font-family: var(--font-body);
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+}
+
+.kd-help__body p {
+    margin: 0 0 var(--kd-space-3);
+}
+
+.kd-help__body strong {
+    color: var(--color-text);
+}
+
+.kd-help__steps {
+    margin: 0;
+    padding-left: var(--kd-space-8);
+}
+
+.kd-help__steps li {
+    margin-bottom: var(--kd-space-4);
+}
+
+.kd-help__more {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+    margin-top: var(--kd-space-2);
+    font-size: 13px;
+    color: var(--color-text);
+}
+
+.kd-help__more svg {
+    width: 13px;
+    height: 13px;
+}
+
+@media (max-width: 560px) {
+    .kd-help__panel {
+        position: fixed;
+        top: auto;
+        right: var(--kd-space-7);
+        bottom: var(--kd-space-7);
+        left: var(--kd-space-7);
+        width: auto;
+        max-width: none;
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+}
+
+/* Mini-guide coach sur /coaching : replié une fois qu'il a des athlètes. */
+.kd-coachguide > .kd-coachguide__summary {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    font-weight: var(--kd-weight-bold);
+    color: var(--color-text);
+    cursor: pointer;
+    list-style: none;
+}
+
+.kd-coachguide > .kd-coachguide__summary::-webkit-details-marker {
+    display: none;
+}
+
+.kd-coachguide > .kd-coachguide__summary svg {
+    width: 16px;
+    height: 16px;
+    flex: none;
+}
+
+.kd-coachguide[open] > .kd-coachguide__summary {
+    margin-bottom: var(--kd-space-5);
+}
+
+/* Page /aide : sommaire en liens, sections à largeur de lecture. */
+.kd-helpindex {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--kd-space-3) var(--kd-space-8);
+    margin-bottom: var(--kd-space-9);
+    font-size: 14px;
+}
+
+.kd-helppage {
+    max-width: 680px;
+}
+
+.kd-helppage .kd-help__body {
+    margin-top: var(--kd-space-5);
+    font-size: 15px;
+}
