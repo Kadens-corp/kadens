@@ -216,7 +216,7 @@ final class ProfileHistoryPageTest extends WebTestCase
         self::assertGreaterThan(0, $stats->filter('a[href="/profile/history"]')->count());
 
         $history = $this->client->request('GET', '/profile/history');
-        self::assertGreaterThan(0, $history->filter('a[href="/profile/stats"]')->count());
+        self::assertGreaterThan(0, $history->filter('main a[href="/profile/stats"]')->count());
         self::assertGreaterThan(0, $history->filter('a[href="/profile"]')->count());
     }
 

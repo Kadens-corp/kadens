@@ -247,7 +247,7 @@ final class ProfileStatsPageTest extends WebTestCase
         $crawler = $this->client->request('GET', '/profile?tab=stats');
 
         self::assertResponseIsSuccessful();
-        self::assertGreaterThan(0, $crawler->filter('a[href="/profile/stats"]')->count());
+        self::assertGreaterThan(0, $crawler->filter('main a[href="/profile/stats"]')->count());
     }
 
     // ------------------------------------------------------------- fixtures

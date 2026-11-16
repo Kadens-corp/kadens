@@ -1242,7 +1242,8 @@ final class CoachControllerTest extends WebTestCase
         self::assertStringContainsString('1 000', $headline);
         // Le sélecteur de fenêtre reste sur l'athlète.
         self::assertSelectorExists('a[href^="/coach/athlete/'.$athlete->getId().'/stats?range="]');
-        self::assertSelectorNotExists('a[href^="/profile/stats"]');
+        // Dans le contenu : la barre, elle, porte « Progrès » (#71), les stats du coach.
+        self::assertSelectorNotExists('main a[href^="/profile/stats"]');
         // Les rubriques aussi : un onglet ne change pas de sujet en silence.
         self::assertSelectorExists('a.kd-stattab[href="/coach/athlete/'.$athlete->getId().'/stats?range=4w&tab=gym"]');
 

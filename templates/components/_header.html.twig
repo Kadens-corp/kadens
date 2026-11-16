@@ -1,45 +1,66 @@
 {#
     Header applicatif réutilisable — barre de navigation « Carnet clair ».
     Rendu uniquement pour un utilisateur connecté (inclus sous `if app.user`
-    dans base.html.twig). L'état actif est déduit du préfixe de la route courante.
+    dans base.html.twig). L'état actif est déduit de la route courante.
 
-    La barre ne porte que le travail quotidien, en **4 entrées** : l'accueil
-    (« où j'en suis »), puis le fil de la planification (une séance → un plan →
-    une date). Tout le reste — profil, bibliothèque d'exercices, objectifs,
-    coaching, athlètes, paramètres — vit dans le menu de l'avatar : un
-    `<details>` natif, donc utilisable au clavier ET sans JS (condition du cache
-    offline). Le contrôleur `dismiss` n'ajoute que le confort (fermeture au clic
-    extérieur et à Échap).
+    La barre porte le travail quotidien : l'accueil (« où j'en suis »), le fil
+    de la planification (une séance → un plan → une date), puis la lecture de ce
+    qui a été fait (« Progrès » : statistiques, journal, historique). Un coach y
+    trouve en plus « Athlètes », son espace de travail. Avant #71, Progrès et
+    Athlètes ne s'atteignaient que par les tuiles de l'accueil ou le menu de
+    l'avatar : on ne trouvait ni ses progrès ni son espace coach (A-04, C-01).
 
-    Pourquoi 4 et pas plus : sous 560px cette barre devient la barre basse à
-    portée de pouce, où chaque entrée doit rester tapotable. Les exercices sont
-    un matériau qu'on consulte en composant une séance, pas une destination
-    quotidienne — ils restent dans le menu de compte, et dans les raccourcis de
-    l'accueil.
+    Le reste (profil, bibliothèque d'exercices, objectifs, paramètres) vit dans
+    le menu de l'avatar : un `<details>` natif, donc utilisable au clavier ET
+    sans JS (condition du cache offline). Le contrôleur `dismiss` n'ajoute que
+    le confort (fermeture au clic extérieur et à Échap).
+
+    Combien d'entrées : sous 560px cette barre devient la barre basse à portée
+    de pouce. Cinq pour un athlète, six pour un coach. Mesuré en Barlow
+    Condensed 600 à 11px : « CALENDRIER », le plus large, fait 52px ; six
+    entrées à 390px en laissent 65 chacune. Une septième ne tiendrait plus :
+    la prochaine entrée devra en remplacer une, pas s'ajouter.
+
+    Chaque entrée s'allume par `match` (préfixe de route) ou par `routes`
+    (liste exacte) quand le préfixe déborderait : « app_profile » couvrirait
+    sinon app_profile_settings, et deux entrées s'allumeraient en même temps.
 #}
-{% set route = app.request.attributes.get('_route') %}
+{% set route = app.request.attributes.get('_route') ?? '' %}
 {% set items = [
     { label: 'Accueil',     icon: 'lucide:calendar-check', path: 'app_home',                 match: 'app_home' },
     { label: 'Séances',     icon: 'lucide:clipboard-list', path: 'app_workout_index',        match: 'app_workout' },
     { label: 'Plans',       icon: 'lucide:layers',         path: 'app_plan_template_index',  match: 'app_plan_template' },
     { label: 'Calendrier',  icon: 'lucide:calendar-days',  path: 'app_calendar_index',       match: 'app_calendar' },
+    { label: 'Progrès',     icon: 'lucide:chart-column',   path: 'app_profile_stats',        routes: ['app_profile_stats', 'app_profile_log', 'app_profile_history'] },
 ] %}
 
+{# « Athlètes » mène à /coaching, qui ouvre sur « Mes athlètes » pour un coach.
+   Il s'allume aussi sur la fiche d'un athlète et ses pages (`app_coach_*`) :
+   d'où le préfixe en plus de la route exacte, `app_coach` seul ne captant pas
+   `app_coaching_index`. #}
+{% if is_granted('ROLE_COACH') %}
+    {% set items = items|merge([
+        { label: 'Athlètes', icon: 'lucide:users', path: 'app_coaching_index', routes: ['app_coaching_index'], match: 'app_coach' },
+    ]) %}
+{% endif %}
+
 {# Entrées du menu de compte. « Coaching » couvre les deux sens de la relation
-   (mes coachs / mes athlètes) : une seule entrée, quel que soit le rôle. Elle
-   s'allume aussi sur la fiche athlète (app_coach_athlete), qui n'a pas d'entrée
-   propre — d'où la liste exacte : `app_coach` comme préfixe ne capterait pas
-   `app_coaching_index`, et `app_coaching` raterait la fiche athlète. #}
-{# `routes` (liste exacte) plutôt que `match` (préfixe) quand le préfixe
-   déborderait : « app_profile » couvrirait sinon app_profile_settings, et deux
-   entrées s'allumeraient en même temps. #}
+   (mes coachs / mes athlètes). Pour un coach, c'est la page de l'entrée
+   « Athlètes » : la garder ici ferait deux portes vers la même page, allumées
+   en même temps. Elle reste pour l'athlète, qui y trouve ses coachs. #}
 {% set menuItems = [
     { label: 'Mon profil',  icon: 'lucide:user',        path: 'app_profile',          routes: ['app_profile', 'app_profile_edit'] },
     { label: 'Exercices',   icon: 'lucide:dumbbell',    path: 'app_exercise_index',   match: 'app_exercise' },
     { label: 'Objectifs',   icon: 'lucide:target',      path: 'app_goal_index',       match: 'app_goal' },
-    { label: 'Coaching',    icon: 'lucide:users',       path: 'app_coaching_index',   routes: ['app_coaching_index', 'app_coach_athlete'] },
-    { label: 'Paramètres',  icon: 'lucide:settings-2',  path: 'app_profile_settings', routes: ['app_profile_settings'] },
 ] %}
+{% if not is_granted('ROLE_COACH') %}
+    {% set menuItems = menuItems|merge([
+        { label: 'Coaching', icon: 'lucide:users', path: 'app_coaching_index', routes: ['app_coaching_index'] },
+    ]) %}
+{% endif %}
+{% set menuItems = menuItems|merge([
+    { label: 'Paramètres',  icon: 'lucide:settings-2',  path: 'app_profile_settings', routes: ['app_profile_settings'] },
+]) %}
 
 {# Le back-office n'existe que pour ROLE_SUPER_ADMIN : ni ROLE_ADMIN ni personne
    d'autre ne doit savoir qu'il y a des messages en attente. #}
@@ -53,22 +74,23 @@
    dans le menu : le déclencheur s'allume quand la route courante y appartient. #}
 {% set activeMenuItem = null %}
 {% for item in menuItems %}
-    {% set hit = item.routes is defined
-        ? route in item.routes
-        : (route == item.match or route starts with item.match ~ '_') %}
-    {% if hit %}{% set activeMenuItem = item.label %}{% endif %}
+    {% if (item.routes is defined and route in item.routes)
+        or (item.match is defined and (route == item.match or route starts with item.match ~ '_')) %}
+        {% set activeMenuItem = item.label %}
+    {% endif %}
 {% endfor %}
 
 <header class="kd-header">
     <div class="kd-header__inner">
         <a href="{{ path('app_home') }}" class="kd-brand">
             <img src="{{ asset('icons/kadens.png') }}" alt="" width="32" height="32">
-            Kadens
+            <span class="kd-brand__name">Kadens</span>
         </a>
 
         <nav class="kd-nav" aria-label="Navigation principale">
             {% for item in items %}
-                {% set active = route == item.match or route starts with item.match ~ '_' %}
+                {% set active = (item.routes is defined and route in item.routes)
+                    or (item.match is defined and (route == item.match or route starts with item.match ~ '_')) %}
                 <a href="{{ path(item.path) }}"
                    class="kd-nav__link{{ active ? ' is-active' }}"
                    {{ active ? 'aria-current="page"' }}>
@@ -85,7 +107,13 @@
                     {{ ux_icon('lucide:chevron-down') }}
                 </summary>
                 <div class="kd-usermenu__panel">
-                    <p class="kd-usermenu__who">{{ app.user.displayName }}</p>
+                    {# Le rôle sous le pseudo : un coach doit savoir dès la
+                       connexion que son compte l'est, sans passer par les
+                       paramètres (C-02). #}
+                    <div class="kd-usermenu__id">
+                        <p class="kd-usermenu__who">{{ app.user.displayName }}</p>
+                        <p class="kd-usermenu__role">{{ app.user.isCoach ? 'Athlète et coach' : 'Athlète' }}</p>
+                    </div>
                     <nav class="kd-usermenu__list" aria-label="Menu du compte">
                         {% for item in menuItems %}
                             {% set active = activeMenuItem == item.label %}

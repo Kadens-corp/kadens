@@ -122,7 +122,7 @@ turbo-frame {
 
 /* Menu de compte — <details> natif (clavier + sans-JS), panneau flottant.
    Porte tout ce qui relève du compte et non du travail quotidien : profil,
-   objectifs, coaching, paramètres, déconnexion. */
+   exercices, objectifs, coaching (athlète seulement), paramètres, déconnexion. */
 .kd-usermenu {
     position: relative;
 }
@@ -187,14 +187,26 @@ turbo-frame {
     border: 1px solid var(--color-text);
 }
 
-.kd-usermenu__who {
+/* Qui est connecté, et à quel titre : le pseudo puis le rôle (C-02). */
+.kd-usermenu__id {
     margin: 0 0 var(--kd-space-2);
     padding: 0 var(--kd-space-3) var(--kd-space-3);
     border-bottom: 1px solid var(--color-divider);
+}
+
+.kd-usermenu__who {
+    margin: 0;
     font-family: var(--font-mono);
     font-size: 10px;
     color: var(--color-text-faint);
     overflow-wrap: anywhere;
+}
+
+.kd-usermenu__role {
+    margin: var(--kd-space-1) 0 0;
+    font-size: 12px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-secondary);
 }
 
 .kd-usermenu__list {
@@ -237,7 +249,7 @@ turbo-frame {
 }
 
 /* Nav condensée (tablette) : les libellés rétrécissent, ils ne disparaissent
-   pas. Les masquer laissait quatre icônes sans nom accessible — `display: none`
+   pas. Les masquer laissait des icônes sans nom accessible — `display: none`
    retire l'élément de l'arbre d'accessibilité, le lien perdait donc son nom. */
 @media (max-width: 900px) {
     .kd-nav {
@@ -257,6 +269,21 @@ turbo-frame {
     .kd-header__inner {
         padding: 0 var(--kd-space-5);
         gap: var(--kd-space-5);
+    }
+}
+
+/* Entre la barre basse (560px) et ~680px, six entrées (coach) + la marque +
+   l'avatar demandent ~620px : la barre débordait. Le mot « Kadens » cède sa
+   place, le logo reste. Masqué pour l'œil seulement (même technique que
+   .kd-sr-only) : il reste le nom accessible du lien d'accueil. */
+@media (min-width: 561px) and (max-width: 680px) {
+    .kd-brand__name {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 }
 
@@ -323,6 +350,15 @@ turbo-frame {
 
     .kd-nav__link.is-active {
         border-top-color: var(--color-text);
+    }
+
+    /* Jusqu'à six entrées (coach). À 390px chacune a 65px pour un libellé de
+     52px au plus (« CALENDRIER »). Sous 360px la marge fond : on retire
+     l'interlettrage, qui rend 4px au libellé le plus long. */
+    @media (max-width: 360px) {
+        .kd-nav__link {
+            letter-spacing: 0;
+        }
     }
 
     /* Le panneau de compte porte désormais cinq entrées : sur un écran de 560px de
