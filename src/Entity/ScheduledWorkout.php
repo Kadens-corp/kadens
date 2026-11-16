@@ -121,6 +121,21 @@ class ScheduledWorkout
     #[ORM\OneToMany(targetEntity: LoggedExercise::class, mappedBy: 'scheduledWorkout', cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $loggedExercises;
 
+    /**
+     * Qui, autre que le propriétaire, a mis ce contenu chez lui (#80) : le coach
+     * qui l'a créé, copié, posé ou donné. Null = le propriétaire lui-même, c'est
+     * le cas courant. Posé une fois pour toutes par `ContentAuthorListener` à la
+     * création (et par `PlanTransfer` au don d'un plan), jamais réécrit : c'est
+     * un fait d'origine, que l'athlète retouche ensuite le contenu ou non.
+     *
+     * Ne donne aucun droit : les voters passent par `Coaching`, pas par ce champ.
+     * Il ne sert qu'à dire à l'athlète « ceci vient de ton coach ». SET NULL :
+     * supprimer le compte du coach laisse le contenu, sans badge.
+     */
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(onDelete: 'SET NULL')]
+    private ?User $addedBy = null;
+
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
 
@@ -375,6 +390,31 @@ class ScheduledWorkout
     public function hasLog(): bool
     {
         return !$this->loggedExercises->isEmpty();
+    }
+
+
+    public function getAddedBy(): ?User
+    {
+        return $this->addedBy;
+    }
+
+    public function setAddedBy(?User $addedBy): static
+    {
+        $this->addedBy = $addedBy;
+
+        return $this;
+    }
+
+    /**
+     * Le coach à qui l'athlète doit cette séance datée, pour le badge (#80) :
+     * celui qui l'a posée au calendrier, sinon celui qui a écrit la séance
+     * qu'elle référence. Le second cas est le plus courant : le coach compose
+     * le plan, l'athlète le place lui-même dans son agenda, et chaque case
+     * reste « du coach ». Une séance libre (sans source) n'a que le premier.
+     */
+    public function getContributor(): ?User
+    {
+        return $this->addedBy ?? $this->workout?->getAddedBy();
     }
 
     public function getCreatedAt(): ?\DateTimeImmutable

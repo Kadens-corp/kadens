@@ -260,8 +260,22 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   regardent pas — et c'est une portée **de consultation seulement** : les
   sélecteurs de pose gardent `findLibraryForOwnerWithContent` (un seul
   propriétaire), celui de l'entité qu'on garnit — soi pour son calendrier,
-  `$template->getOwner()` pour une trame. Pas de
-  champ « créé par » : le coach voit/édite déjà tout le contenu de son athlète.
+  `$template->getOwner()` pour une trame. Aucun **droit** ne dérive de l'auteur :
+  le coach voit/édite déjà tout le contenu de son athlète.
+  **Origine coach (#80, règle révisée le 17/11/2026)** : `addedBy` (nullable, SET
+  NULL) sur `Workout`, `PlanTemplate` et `ScheduledWorkout` dit **de qui vient** un
+  contenu, jamais qui peut y toucher. Null = le propriétaire lui-même. Il est posé
+  à un seul endroit, `ContentAuthorListener` (prePersist : utilisateur connecté ≠
+  propriétaire), plus `PlanTransfer` (un don n'est pas une création ; il remet aussi
+  `createdAt` au jour du don). Fait d'origine, jamais réécrit. Déduire des données
+  existantes ne suffisait pas : séances et plans créés vides, poses au calendrier
+  et dons ne laissaient aucune trace. Côté athlète : `components/_added_by`
+  (pastille « Coach » des cartes et du calendrier, bandeau des pages), qui ne se
+  rend que si l'auteur n'est pas le lecteur ; `ScheduledWorkout::getContributor()`
+  crédite aussi le coach d'une séance datée posée par l'athlète depuis un plan du
+  coach. Encart d'accueil sur sept jours glissants (`CoachContributions`, sans
+  état « vu »). Corollaire en test : un `persist` fait après `loginUser()` passe
+  par l'écouteur au nom de l'utilisateur connecté.
   À l'écran, une facette `owner` avec **« Moi » actif par défaut** et un badge de
   propriétaire sur les cartes des autres. Corollaire (#75) : les effectifs des
   puces se recalculent selon les puces actives des autres groupes, et une liste

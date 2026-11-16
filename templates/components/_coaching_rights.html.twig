@@ -15,7 +15,8 @@
      - ne pas : notes privées (propriétaire seul, cf. `_private_notes`), séries
        et ressenti (`ScheduledWorkoutVoter::LOG`), partage et publication
        (`share` / `publish` réservés au propriétaire) ;
-     - le contenu est posé chez l'athlète (`setOwner($athlete)`) et y reste.
+     - le contenu est posé chez l'athlète (`setOwner($athlete)`) et y reste,
+       marqué `addedBy` (#80, badge « Coach » : `_added_by`).
 
    Paramètres :
      - coach : User|null, pour nommer le coach (repli : « ton coach »)
@@ -45,5 +46,5 @@
             <span><strong>Mais pas</strong> lire tes notes privées, saisir tes séries et ton ressenti à ta place, ni partager ou publier ton contenu.</span>
         </li>
     </ul>
-    <p class="kd-coachrights__foot">Ce que {{ name }} crée t'appartient, et tu le gardes si la relation se termine. Tu peux y mettre fin quand tu veux.</p>
+    <p class="kd-coachrights__foot">Ce que {{ name }} crée t'appartient et porte la mention « Coach ». Tu le gardes si la relation se termine. Tu peux y mettre fin quand tu veux.</p>
 </div>

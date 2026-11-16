@@ -14,6 +14,8 @@
     {% endfor %}
     {# Séance d'un athlète ouverte par son coach : à qui elle est (#64). #}
     {{ include('components/_owner_banner.html.twig', {owner: workout.owner, kind: 'Séance'}, with_context = false) }}
+    {# Et dans l'autre sens, ce qui vient du coach, chez l'athlète (#80). #}
+    {{ include('components/_added_by.html.twig', {by: workout.addedBy, banner: true, verb: 'Ajoutée par', on: workout.createdAt}, with_context = false) }}
 
     {# Vue de consultation auto-suffisante : aucun chargement AJAX post-rendu,
        condition du cache offline. Consomme PlanFlattener + WorkoutMetrics.

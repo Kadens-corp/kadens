@@ -24,6 +24,8 @@
 
     {# Plan d'un athlète édité par son coach : à qui il est (#64). #}
     {{ include('components/_owner_banner.html.twig', {owner: template.owner, kind: 'Plan'}, with_context = false) }}
+    {# Et dans l'autre sens, ce qui vient du coach, chez l'athlète (#80). #}
+    {{ include('components/_added_by.html.twig', {by: template.addedBy, banner: true, on: template.createdAt}, with_context = false) }}
 
     {# En-tête à édition en ligne : cliquer le titre ou la description pour les
        modifier (contrôleur `inline-edit`, champs semi-invisibles). C'est le seul

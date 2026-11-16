@@ -1317,6 +1317,30 @@ a.kd-scope--link:hover {
     color: var(--color-primary);
 }
 
+/* Origine coach (#80) : « Coach · CoachAudit » sur ce que le coach a ajouté
+   chez l'athlète. Un cran plus lisible que la portée : c'est l'information de
+   la carte, pas une méta. Le nom garde sa casse (règle 4). */
+.kd-scope--coach {
+    max-width: 100%;
+    color: var(--color-text-secondary);
+}
+
+.kd-scope__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+/* Dans une pastille de calendrier, la couleur suit le texte de la pastille :
+   sur l'aplat d'une activité, le gris décroché ne se lirait plus. */
+.kd-calevent .kd-scope--coach {
+    color: inherit;
+    opacity: .8;
+}
+
 /* ----------------------------------------------------------------------------
    Bandeau propriétaire (#64) : « Séance de Trailer38 » sur le contenu d'un
    athlète ouvert par son coach. Encre et gris seulement : ce n'est ni une
@@ -1376,6 +1400,18 @@ a.kd-scope--link:hover {
 .kd-ownerbar__link svg {
     width: 12px;
     height: 12px;
+}
+
+/* Variante côté athlète (#80) : « Ajoutée par CoachAudit, ton coach ». Même
+   encre, filet en pointillé : ce n'est pas « chez qui on est » mais « d'où ça
+   vient ». */
+.kd-ownerbar--coach {
+    border-left-style: dashed;
+}
+
+.kd-ownerbar__note {
+    font-size: 13px;
+    color: var(--color-text-secondary);
 }
 
 /* ----------------------------------------------------------------------------
@@ -12684,6 +12720,12 @@ a.kd-coachitem__date:hover {
 }
 
 .kd-home__coachtext strong {
+    font-weight: var(--kd-weight-semibold);
+}
+
+/* Encart « ajouté par ton coach » (#80) : chaque morceau mène au contenu. */
+.kd-home__coachtext a {
+    color: inherit;
     font-weight: var(--kd-weight-semibold);
 }
 

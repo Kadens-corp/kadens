@@ -23,6 +23,12 @@ use App\Entity\Workout;
  * ceux du coach, et le partage par lien (#61) : publier est un choix du
  * propriétaire, et l'athlète n'a pas fait celui du coach. Le plan arrive privé.
  *
+ * Ce qui se marque (#80) : le plan et ses cases portent `addedBy` = le coach
+ * qui donne, posé ici puisqu'un don n'est pas une création et que
+ * `ContentAuthorListener` ne le voit pas. `createdAt` repart du don : c'est la
+ * date à laquelle le plan entre dans la bibliothèque de l'athlète, celle que
+ * trient ses « plus récents » et que compte l'encart « ajouté cette semaine ».
+ *
  * Les gardes (propriétaire, athlète accepté, plan jamais posé au calendrier)
  * sont au contrôleur. Ne flushe pas.
  */
@@ -37,7 +43,10 @@ final class PlanTransfer
 
     public function transfer(PlanTemplate $plan, User $athlete): void
     {
-        $plan->setOwner($athlete)->setNotes(null);
+        $giver = $plan->getOwner();
+        $plan->setOwner($athlete)->setNotes(null)
+            ->setAddedBy($giver)
+            ->setCreatedAt(new \DateTimeImmutable());
         $this->shareLink->close($plan);
 
         foreach ($plan->getGoals()->toArray() as $goal) {
@@ -47,7 +56,7 @@ final class PlanTransfer
         foreach ($plan->getPlanItems() as $item) {
             $cell = $item->getWorkout();
             if (null !== $cell) {
-                $item->setWorkout($this->cellFor($cell, $athlete));
+                $item->setWorkout($this->cellFor($cell, $athlete)->setAddedBy($giver));
             }
         }
     }

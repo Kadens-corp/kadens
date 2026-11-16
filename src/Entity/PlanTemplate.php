@@ -55,6 +55,21 @@ class PlanTemplate
     #[ORM\Column(length: 32, unique: true, nullable: true)]
     private ?string $shareToken = null;
 
+    /**
+     * Qui, autre que le propriétaire, a mis ce contenu chez lui (#80) : le coach
+     * qui l'a créé, copié, posé ou donné. Null = le propriétaire lui-même, c'est
+     * le cas courant. Posé une fois pour toutes par `ContentAuthorListener` à la
+     * création (et par `PlanTransfer` au don d'un plan), jamais réécrit : c'est
+     * un fait d'origine, que l'athlète retouche ensuite le contenu ou non.
+     *
+     * Ne donne aucun droit : les voters passent par `Coaching`, pas par ce champ.
+     * Il ne sert qu'à dire à l'athlète « ceci vient de ton coach ». SET NULL :
+     * supprimer le compte du coach laisse le contenu, sans badge.
+     */
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(onDelete: 'SET NULL')]
+    private ?User $addedBy = null;
+
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
 
@@ -203,6 +218,19 @@ class PlanTemplate
     public function isShared(): bool
     {
         return null !== $this->shareToken;
+    }
+
+
+    public function getAddedBy(): ?User
+    {
+        return $this->addedBy;
+    }
+
+    public function setAddedBy(?User $addedBy): static
+    {
+        $this->addedBy = $addedBy;
+
+        return $this;
     }
 
     public function getCreatedAt(): ?\DateTimeImmutable

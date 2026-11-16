@@ -29,6 +29,9 @@
    souris uniquement, refermé au clic qui ouvre la modale (cf.
    `assets/hover_preview.js`).
 
+   Pastille « Coach » sous le titre quand la séance vient du coach de
+   l'athlète (#80, `ScheduledWorkout::getContributor()`).
+
    Attend :
      - scheduled : ScheduledWorkout
      - fw        : PlanFlattener::flattenWorkout(scheduled.workout) (aperçu + méta),
@@ -74,6 +77,8 @@
     <a href="{{ path('app_scheduled_workout_show', {id: scheduled.id}|merge(back)) }}"
        class="kd-calevent__open" data-action="dialog#openFine" title="{{ title }}">
         <span class="kd-calevent__title">{{ title }}</span>
+        {# Ce qui vient du coach (#80) : posé par lui, ou écrit par lui. #}
+        {{ include('components/_added_by.html.twig', {by: scheduled.contributor, short: true}, with_context = false) }}
         {% if freeform %}
             <span class="kd-calevent__meta">
                 {{ include('components/_freeform_mark.html.twig') }}

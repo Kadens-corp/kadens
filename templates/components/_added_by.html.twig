@@ -1,0 +1,38 @@
+{# ============================================================================
+   Origine coach (#80) : « ceci vient de ton coach », côté athlète.
+
+   Pendant de `_owner_badge` / `_owner_banner`, qui disent au coach À QUI est un
+   contenu ; celui-ci dit à l'athlète DE QUI il vient. Il ne se rend donc que
+   quand l'auteur n'est pas le lecteur : le coach ne voit pas son propre nom
+   partout, un second coach du même athlète voit celui du premier.
+
+   La donnée est `addedBy` (cf. `ContentAuthorListener`), ou
+   `ScheduledWorkout::getContributor()` pour une séance datée. Comparaison par
+   `id`, comme `_owner_banner` : `by` peut être un proxy Doctrine.
+
+   Paramètres :
+     - by     : User|null, le coach à l'origine du contenu
+     - banner : bool (défaut false). false = pastille « Coach » des cartes et du
+                calendrier ; true = bandeau de page, sous le titre
+     - short  : bool (défaut false), pastille sans le nom (case du calendrier)
+     - verb   : libellé du bandeau (défaut « Ajouté par »), accordé par
+                l'appelant : « Ajoutée par », « Préparée par »
+     - on     : DateTimeInterface|null, date affichée dans le bandeau
+   ============================================================================ #}
+{% set banner = banner|default(false) %}
+{% set short = short|default(false) %}
+{% set on = on|default(null) %}
+{% if by is defined and by is not null and app.user and by.id != app.user.id %}
+    {% if banner %}
+        <p class="kd-ownerbar kd-ownerbar--coach">
+            {{ ux_icon('lucide:user-check') }}
+            <span class="kd-ownerbar__kicker">{{ verb|default('Ajouté par') }}</span>
+            <span class="kd-ownerbar__name">{{ by.displayName }}</span>
+            <span class="kd-ownerbar__note">ton coach{% if on %}, le {{ on|date('d/m/Y') }}{% endif %}</span>
+        </p>
+    {% else %}
+        <span class="kd-scope kd-scope--coach" title="Ajouté par {{ by.displayName }}, ton coach">
+            {{ ux_icon('lucide:user-check') }} Coach{% if not short %}<span class="kd-scope__name">· {{ by.displayName }}</span>{% endif %}
+        </span>
+    {% endif %}
+{% endif %}

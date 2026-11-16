@@ -69,6 +69,7 @@
                                     <span class="kd-dot">·</span>{{ ux_icon('lucide:clipboard-list') }} {{ template.planItems|length }} séance{{ template.planItems|length > 1 ? 's' }}
                                 </div>
                                 {{ include('components/_owner_badge.html.twig', {owner: template.owner}) }}
+                                {{ include('components/_added_by.html.twig', {by: template.addedBy}, with_context = false) }}
                             </div>
                         </div>
 

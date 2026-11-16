@@ -30,6 +30,8 @@
 
     {# Séance d'un athlète composée par son coach : à qui elle est (#64). #}
     {{ include('components/_owner_banner.html.twig', {owner: workout.owner, kind: 'Séance'}, with_context = false) }}
+    {# Et dans l'autre sens, ce qui vient du coach, chez l'athlète (#80). #}
+    {{ include('components/_added_by.html.twig', {by: workout.addedBy, banner: true, verb: 'Ajoutée par', on: workout.createdAt}, with_context = false) }}
 
     {% set exCount = 0 %}
     {% for b in workout.blocks %}{% set exCount = exCount + b.prescribedExercises|length %}{% endfor %}

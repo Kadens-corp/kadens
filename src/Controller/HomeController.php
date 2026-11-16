@@ -9,6 +9,7 @@ use App\Repository\GoalRepository;
 use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
 use App\Repository\WorkoutRepository;
+use App\Service\CoachContributions;
 use App\Service\StatsPeriod;
 use App\Service\TrainingStats;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -18,7 +19,8 @@ use Symfony\Component\Routing\Attribute\Route;
 /**
  * Page d'accueil : « où j'en suis ». La prochaine séance, le prochain
  * objectif, l'observance et la répartition du mois, une demande de coaching en
- * attente ou la réponse à la sienne, et des raccourcis vers les pages de lecture. La fiche de l'athlète
+ * attente ou la réponse à la sienne, ce que le coach a ajouté ces sept derniers
+ * jours, et des raccourcis vers les pages de lecture. La fiche de l'athlète
  * (records, mesures, stats depuis le début) vit sur `/profile`.
  *
  * Un compte dont l'agenda est encore vide voit d'abord un démarrage en trois
@@ -46,6 +48,7 @@ final class HomeController extends AbstractController
         ScheduledWorkoutRepository $scheduledRepository,
         WorkoutRepository $workoutRepository,
         PlanTemplateRepository $planRepository,
+        CoachContributions $coachContributions,
     ): Response {
         $user = $this->getUser();
         if (!$user instanceof User) {
@@ -71,6 +74,9 @@ final class HomeController extends AbstractController
             // Et dans l'autre sens, la réponse à une demande qu'on a envoyée
             // (#79) : sans elle, il fallait revenir sur /coaching pour savoir.
             'coachingAnswered' => $coachingRepository->findUnseenResponsesFor($user),
+            // Ce que le coach a ajouté chez soi ces derniers jours (#80) : sans
+            // cet encart, la seule trace était un « 7 prévues » au lieu de 6.
+            'coachAdded' => $coachContributions->recentFor($user),
             'nextSessions' => $scheduledRepository->findNextPlannedDay($user, $today),
             'onboarding' => $this->onboarding($user, $athleteCount, $scheduledRepository, $workoutRepository, $planRepository),
             'athleteCount' => $athleteCount,

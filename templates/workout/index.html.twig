@@ -73,6 +73,7 @@
                                     {% endif %}
                                 </div>
                                 {{ include('components/_owner_badge.html.twig', {owner: workout.owner}) }}
+                                {{ include('components/_added_by.html.twig', {by: workout.addedBy}, with_context = false) }}
                             </div>
                         </div>
 

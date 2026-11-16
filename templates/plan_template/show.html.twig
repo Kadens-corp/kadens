@@ -43,6 +43,8 @@
 
     {# Plan d'un athlète ouvert par son coach : à qui il est (#64). #}
     {{ include('components/_owner_banner.html.twig', {owner: flat.template.owner, kind: 'Plan'}, with_context = false) }}
+    {# Et dans l'autre sens, ce qui vient du coach, chez l'athlète (#80). #}
+    {{ include('components/_added_by.html.twig', {by: flat.template.addedBy, banner: true, on: flat.template.createdAt}, with_context = false) }}
 
     {# Partage par lien (#61) : privé par défaut, ouvert par le propriétaire seul
        (le composant ne se rend pas pour le coach). Une fois ouvert, on peut aussi

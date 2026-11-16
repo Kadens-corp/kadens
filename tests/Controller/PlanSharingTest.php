@@ -143,6 +143,12 @@ final class PlanSharingTest extends WebTestCase
         self::assertSame($athlete->getId(), $root->getOwner()?->getId());
         self::assertSame($mine->getId(), $root->getCopiedFrom()?->getId());
         self::assertSame($coach->getId(), $this->mustFind(Workout::class, $mine->getId())->getOwner()?->getId());
+
+        // #80 : un don n'est pas une création, mais le plan, ses cases et la
+        // racine recopiée disent tous qu'ils viennent du coach.
+        self::assertSame($coach->getId(), $plan->getAddedBy()?->getId());
+        self::assertSame($coach->getId(), $movedCell->getAddedBy()?->getId());
+        self::assertSame($coach->getId(), $root->getAddedBy()?->getId());
     }
 
     /** Le coach co-édite le plan de son athlète, il ne le réattribue pas. */

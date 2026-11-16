@@ -81,6 +81,32 @@
             </div>
         {% endfor %}
 
+        {# Ce que le coach a ajouté ces sept derniers jours (#80), par coach.
+           Rien à fermer : l'encart s'éteint quand la fenêtre glisse (cf.
+           CoachContributions). Chaque morceau mène là où le contenu se trouve,
+           et le badge « Coach » l'y désigne. #}
+        {% for added in coachAdded %}
+            {% set parts = [] %}
+            {% if added.scheduled %}
+                {% set parts = parts|merge([{n: added.scheduled, label: (added.scheduled > 1 ? 'séances' : 'séance') ~ ' à ton agenda', href: path('app_calendar_index')}]) %}
+            {% endif %}
+            {% if added.workouts %}
+                {% set parts = parts|merge([{n: added.workouts, label: (added.workouts > 1 ? 'séances' : 'séance') ~ ' à ta bibliothèque', href: path('app_workout_index')}]) %}
+            {% endif %}
+            {% if added.plans %}
+                {% set parts = parts|merge([{n: added.plans, label: added.plans > 1 ? 'plans' : 'plan', href: path('app_plan_template_index')}]) %}
+            {% endif %}
+            <div class="kd-home__coach kd-home__coachadded">
+                {{ ux_icon('lucide:user-check') }}
+                <p class="kd-home__coachtext">
+                    <strong>{{ added.coach.displayName }}</strong> a ajouté ces 7 derniers jours :
+                    {% for part in parts -%}
+                        <a href="{{ part.href }}">{{ part.n }} {{ part.label }}</a>{{ loop.last ? '.' : (loop.revindex == 2 ? ' et ' : ', ') }}
+                    {%- endfor %}
+                </p>
+            </div>
+        {% endfor %}
+
         {# ============================== DÉMARRAGE =========================== #}
         {# Un compte qui n'a rien dans son agenda ne sait pas par où commencer
            (A-01). Les étapes se cochent sur l'état réel des données, la
