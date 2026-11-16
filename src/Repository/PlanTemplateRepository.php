@@ -72,6 +72,24 @@ class PlanTemplateRepository extends ServiceEntityRepository
             ->getResult();
     }
 
+    /**
+     * Le plan le plus récent de `$owner` qui porte au moins une séance : la
+     * deuxième étape du démarrage de l'accueil (#70). Un plan créé mais vide
+     * n'assemble rien, il ne coche pas l'étape. Le plan rendu sert aussi de
+     * cible à la troisième étape (« placer le plan dans l'agenda »).
+     */
+    public function findLatestFilledForOwner(User $owner): ?PlanTemplate
+    {
+        return $this->createQueryBuilder('t')
+            ->andWhere('t.owner = :owner')
+            ->andWhere('EXISTS (SELECT 1 FROM App\Entity\PlanItem i WHERE i.planTemplate = t)')
+            ->setParameter('owner', $owner)
+            ->orderBy('t.id', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
     //    /**
     //     * @return PlanTemplate[] Returns an array of PlanTemplate objects
     //     */

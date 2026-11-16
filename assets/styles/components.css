@@ -12558,6 +12558,213 @@ a.kd-coachitem__name:hover {
     color: var(--color-primary-on-tint);
 }
 
+/* Démarrage d'un compte vide (#70) : trois étapes en index à filets, comme les
+   raccourcis. L'étape à faire porte un filet rouge à gauche, les étapes faites
+   passent en secondaire avec une coche. */
+.kd-home__start {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-6);
+}
+
+.kd-home__starthead {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-3);
+}
+
+.kd-home__starttitle {
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-extrabold);
+    font-size: 22px;
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    margin: 0;
+}
+
+.kd-home__startlead {
+    margin: 0;
+    max-width: 60ch;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--color-border);
+    border: 1px solid var(--color-border);
+}
+
+.kd-home__steplink {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-5);
+    height: 100%;
+    padding: var(--kd-space-7);
+    background: var(--color-surface-raised);
+    border-left: 3px solid transparent;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.kd-home__steplink:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+.kd-home__step--current .kd-home__steplink {
+    border-left-color: var(--color-primary);
+}
+
+.kd-home__stepmark {
+    display: inline-flex;
+    flex: none;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__stepmark svg {
+    width: 20px;
+    height: 20px;
+}
+
+.kd-home__step--current .kd-home__stepmark {
+    color: var(--color-primary);
+}
+
+.kd-home__stepbody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-2);
+}
+
+.kd-home__steptitle {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: var(--kd-weight-bold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+}
+
+.kd-home__steptext {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__step--done .kd-home__steptitle {
+    color: var(--color-text-secondary);
+    text-decoration: line-through;
+}
+
+/* Prochaine séance : une carte claire, une ligne par séance du jour visé. Le
+   titre est un intitulé saisi : Barlow en casse normale (règle 4). */
+.kd-home__next {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-5);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-primary);
+    padding: var(--kd-space-8) var(--kd-space-9);
+}
+
+.kd-home__nexteyebrow {
+    margin: 0;
+    color: var(--color-primary);
+}
+
+.kd-home__nextlist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-4);
+}
+
+.kd-home__nextitem {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-3) var(--kd-space-5);
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.kd-home__nextitem:hover {
+    color: var(--color-text);
+}
+
+.kd-home__nextitem:hover .kd-home__nexttitle {
+    text-decoration: underline;
+}
+
+.kd-home__nexttitle {
+    flex: 1 1 14rem;
+    min-width: 0;
+    font-family: var(--font-body);
+    font-weight: var(--kd-weight-bold);
+    font-size: clamp(20px, 3vw, 26px);
+    line-height: 1.1;
+}
+
+.kd-home__nexttitle--empty {
+    font-weight: var(--kd-weight-semibold);
+    font-size: 16px;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__nextplan {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__nextplan svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Tuile « Mes athlètes » du coach (C-01) : une carte du mois en ligne. */
+.kd-home__athletes {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--kd-space-5);
+}
+
+.kd-home__athletes > svg {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__athletesbody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-2);
+}
+
+.kd-home__athletescount {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+@media (max-width: 900px) {
+    .kd-home__steps {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 /* Prochain objectif en aplat encre. Le compte à rebours est le chiffre qu'on
    vient lire : il prend toute la hauteur, en rouge lisible sur encre. */
 .kd-home__goal {

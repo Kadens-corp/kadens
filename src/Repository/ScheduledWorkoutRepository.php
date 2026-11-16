@@ -200,6 +200,50 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
     }
 
     /**
+     * Les séances encore prévues du **prochain jour qui en porte**, à partir de
+     * `$from` inclus : ce que montre le bloc « Ta prochaine séance » de l'accueil
+     * (#70). Un jour peut en porter plusieurs (séance double) : on les rend
+     * toutes, dans l'ordre du calendrier. Les séances faites ou manquées du jour
+     * ne comptent pas, la suivante reste celle qu'il reste à faire.
+     *
+     * Deux requêtes courtes plutôt qu'une sous-requête MIN : la première trouve
+     * le jour, la seconde charge ses séances avec leur source.
+     *
+     * @return list<ScheduledWorkout>
+     */
+    public function findNextPlannedDay(User $owner, \DateTimeImmutable $from): array
+    {
+        $first = $this->createQueryBuilder('s')
+            ->andWhere('s.owner = :owner')
+            ->andWhere('s.status = :planned')
+            ->andWhere('s.scheduledDate >= :from')
+            ->setParameter('owner', $owner)
+            ->setParameter('planned', ScheduledStatus::PLANNED)
+            ->setParameter('from', $from, \Doctrine\DBAL\Types\Types::DATE_IMMUTABLE)
+            ->orderBy('s.scheduledDate', 'ASC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        if (!$first instanceof ScheduledWorkout) {
+            return [];
+        }
+
+        return $this->createQueryBuilder('s')
+            ->addSelect('w')
+            ->leftJoin('s.workout', 'w')
+            ->andWhere('s.owner = :owner')
+            ->andWhere('s.status = :planned')
+            ->andWhere('s.scheduledDate = :day')
+            ->setParameter('owner', $owner)
+            ->setParameter('planned', ScheduledStatus::PLANNED)
+            ->setParameter('day', $first->getScheduledDate(), \Doctrine\DBAL\Types\Types::DATE_IMMUTABLE)
+            ->orderBy('s.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Nombre de séances par statut pour un utilisateur, sur toute la période (pas
      * de borne de date). Alimente l'observance « tous temps » et le total de
      * séances faites de la page profil. Une seule requête agrégée, pas d'hydratation.

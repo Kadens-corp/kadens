@@ -1,9 +1,11 @@
 {% extends 'base.html.twig' %}
 {% import 'components/_activity.html.twig' as activity %}
 
-{# Accueil : « où j'en suis ». Le prochain objectif en aplat encre, le mois en
-   deux cartes (observance, répartition), puis les raccourcis vers les pages de
-   lecture. La fiche de l'athlète est sur /profile. #}
+{# Accueil : « où j'en suis ». Sur un agenda vide, le démarrage en trois
+   étapes ; sinon la prochaine séance. Puis l'espace coach, le prochain
+   objectif en aplat encre, le mois en deux cartes (observance, répartition) et
+   les raccourcis vers les pages de lecture. La fiche de l'athlète est sur
+   /profile. #}
 
 {% block title %}Accueil — Kadens{% endblock %}
 
@@ -52,6 +54,107 @@
             </div>
         {% endfor %}
 
+        {# ============================== DÉMARRAGE =========================== #}
+        {# Un compte qui n'a rien dans son agenda ne sait pas par où commencer
+           (A-01). Les étapes se cochent sur l'état réel des données, la
+           première non faite est mise en avant. Le bloc disparaît dès qu'une
+           séance est dans l'agenda (cf. HomeController::onboarding). #}
+        {% if onboarding %}
+            {% set placeTarget = onboarding.filledPlan
+                ? path('app_calendar_index', {place: onboarding.filledPlan.id})
+                : path('app_calendar_index') %}
+            {% set steps = [
+                { done: onboarding.workout, icon: 'lucide:dumbbell', title: 'Crée une séance',
+                  text: 'Choisis tes exercices et règle séries, charges ou distances.',
+                  href: path('app_workout_index') },
+                { done: onboarding.plan, icon: 'lucide:layers', title: 'Assemble-la dans un plan',
+                  text: 'Répartis tes séances sur les jours de la semaine, pour plusieurs semaines.',
+                  href: path('app_plan_template_index') },
+                { done: false, icon: 'lucide:calendar-plus', title: 'Place le plan dans ton agenda',
+                  text: 'Choisis une date de départ : chaque séance prend sa date.',
+                  href: placeTarget },
+            ] %}
+            {% set current = null %}
+            {% for step in steps %}{% if current is null and not step.done %}{% set current = loop.index %}{% endif %}{% endfor %}
+            <section class="kd-home__start" aria-labelledby="home-start-title">
+                <div class="kd-home__starthead">
+                    <h2 id="home-start-title" class="kd-home__starttitle">Par où commencer</h2>
+                    <p class="kd-home__startlead">Kadens sert à préparer tes entraînements : tu composes tes séances, tu les assembles en plans, puis tu les suis dans ton agenda.</p>
+                </div>
+                <ol class="kd-home__steps">
+                    {% for step in steps %}
+                        <li class="kd-home__step{{ step.done ? ' kd-home__step--done' }}{{ loop.index == current ? ' kd-home__step--current' }}">
+                            <a href="{{ step.href }}" class="kd-home__steplink">
+                                <span class="kd-home__stepmark" aria-hidden="true">
+                                    {{ ux_icon(step.done ? 'lucide:circle-check' : step.icon) }}
+                                </span>
+                                <span class="kd-home__stepbody">
+                                    <span class="kd-eyebrow kd-home__stepnum">Étape {{ loop.index }}{{ step.done ? ' · faite' }}</span>
+                                    <span class="kd-home__steptitle">{{ step.title }}</span>
+                                    <span class="kd-home__steptext">{{ step.text }}</span>
+                                </span>
+                                <span class="kd-home__linkarrow">{{ ux_icon('lucide:arrow-right') }}</span>
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ol>
+            </section>
+        {% else %}
+            {# ========================= PROCHAINE SÉANCE ===================== #}
+            {# La séance qu'il reste à faire, le jour qui en porte une : toutes
+               celles du jour s'il y en a plusieurs (séance double). Chaque ligne
+               ouvre la séance datée. #}
+            {% set first = nextSessions|first %}
+            <section class="kd-home__next" aria-labelledby="home-next-title">
+                {% if first %}
+                    {% set day = first.scheduledDate %}
+                    {% set gap = day.diff(today).days %}
+                    <p id="home-next-title" class="kd-eyebrow kd-home__nexteyebrow">
+                        {%- if gap == 0 -%}
+                            Aujourd'hui
+                        {%- else -%}
+                            Ta prochaine séance · {{ gap == 1 ? 'demain' : dayNames[day|date('N')]|lower ~ ' ' ~ day|date('j') ~ ' ' ~ monthNames[day|date('n')] }}
+                        {%- endif -%}
+                    </p>
+                    <ul class="kd-home__nextlist">
+                        {% for session in nextSessions %}
+                            <li>
+                                <a href="{{ path('app_scheduled_workout_show', {id: session.id}) }}" class="kd-home__nextitem">
+                                    <span class="kd-home__nexttitle">{{ session.displayTitle }}</span>
+                                    {% if session.sourcePlanTemplate %}
+                                        <span class="kd-home__nextplan">{{ ux_icon('lucide:layers') }} {{ session.sourcePlanTemplate.title }}</span>
+                                    {% endif %}
+                                    <span class="kd-home__linkarrow">{{ ux_icon('lucide:arrow-right') }}</span>
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p id="home-next-title" class="kd-eyebrow kd-home__nexteyebrow">Ta prochaine séance</p>
+                    <a href="{{ path('app_calendar_index') }}" class="kd-home__nextitem">
+                        <span class="kd-home__nexttitle kd-home__nexttitle--empty">Rien de prévu pour l'instant. Ouvre ton agenda pour placer ta prochaine séance.</span>
+                        <span class="kd-home__linkarrow">{{ ux_icon('lucide:arrow-right') }}</span>
+                    </a>
+                {% endif %}
+            </section>
+        {% endif %}
+
+        {# ============================= ESPACE COACH ========================= #}
+        {# Seul le menu avatar menait à /coaching (C-01) : la tuile met l'espace
+           du coach à portée dès l'arrivée. #}
+        {% if athleteCount is not null %}
+            <a href="{{ path('app_coaching_index') }}" class="kd-home__card kd-home__athletes">
+                {{ ux_icon('lucide:users') }}
+                <span class="kd-home__athletesbody">
+                    <span class="kd-home__linklabel">Mes athlètes</span>
+                    <span class="kd-home__athletescount">
+                        {{- athleteCount == 0 ? 'Aucun athlète suivi pour l\'instant. Invite ton premier athlète.' : athleteCount ~ ' athlète' ~ (athleteCount > 1 ? 's') ~ ' suivi' ~ (athleteCount > 1 ? 's') -}}
+                    </span>
+                </span>
+                <span class="kd-home__linkarrow">{{ ux_icon('lucide:arrow-right') }}</span>
+            </a>
+        {% endif %}
+
         {# ========================== PROCHAIN OBJECTIF ======================= #}
         {% set goal = goals|first %}
         {% if goal %}
@@ -80,7 +183,9 @@
                     </div>
                 {% endif %}
             </a>
-        {% else %}
+        {% elseif not onboarding %}
+            {# Pas d'objectif : une invitation discrète, mais pas sur un compte
+               qui démarre, où elle doublerait les étapes (A-01). #}
             <div class="kd-card">
                 <div class="kd-empty">
                     {{ ux_icon('lucide:target') }}
