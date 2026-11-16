@@ -26,6 +26,7 @@ use App\Service\ExerciseTrajectory;
 use App\Service\HeartRateZones;
 use App\Service\PlanScheduler;
 use App\Service\ProfileStats;
+use App\Service\RecentSessions;
 use App\Service\SharedPlanCopier;
 use App\Service\SharedWorkoutCopier;
 use App\Service\SlugGenerator;
@@ -60,9 +61,6 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/coach')]
 final class CoachController extends AbstractController
 {
-    /** Profondeur du réalisé montré sur la fiche athlète. Au-delà, ce n'est plus une fiche. */
-    private const LOGGED_SESSIONS = 10;
-
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly CoachingResolver $coachingResolver,
@@ -94,6 +92,7 @@ final class CoachController extends AbstractController
         ProfileStats $profileStats,
         HeartRateZones $heartRateZones,
         TrainingLog $trainingLog,
+        RecentSessions $recentSessions,
         PlanScheduler $planScheduler,
         Request $request,
     ): Response {
@@ -103,11 +102,13 @@ final class CoachController extends AbstractController
         $coach = $this->getUser();
         $today = new \DateTimeImmutable('today');
 
-        // Les dernières séances consignées, en agrégats scalaires : TrainingLog
-        // rend la même ligne ici et sur le journal complet, et ne remonte aucune
-        // série. Le total dit combien il y en a derrière ces dix-là — sans lui,
-        // la fiche laissait croire que l'athlète n'avait fait que ça.
-        $logged = $trainingLog->recent($athlete, self::LOGGED_SESSIONS);
+        // L'agenda garde ce qui est encore à venir, « Ses dernières séances » ce
+        // qui est échu : une séance d'aujourd'hui déjà cochée passe de l'un à
+        // l'autre, jamais dans les deux (#76).
+        $upcoming = array_values(array_filter(
+            $scheduledWorkoutRepository->findByOwnerBetween($athlete, $today, $today->modify('+8 weeks')),
+            static fn (ScheduledWorkout $scheduled): bool => !RecentSessions::isPast($scheduled, $today),
+        ));
         $plans = $planTemplateRepository->findBy(['owner' => $athlete], ['title' => 'ASC']);
 
         return $this->render('coach/athlete.html.twig', [
@@ -123,8 +124,11 @@ final class CoachController extends AbstractController
             'planPlacement' => $planScheduler->placementPreviews($plans, $athlete),
             'preselectPlanId' => $request->query->getInt('plan'),
             'coachPlans' => $planTemplateRepository->findBy(['owner' => $coach], ['title' => 'ASC']),
-            'upcoming' => $scheduledWorkoutRepository->findByOwnerBetween($athlete, $today, $today->modify('+8 weeks')),
-            'logged' => $logged,
+            'upcoming' => $upcoming,
+            // Faites, manquées ou pas cochées, consignées ou non (C-10, C-11) :
+            // le journal ne listait que le réalisé consigné.
+            'recent' => $recentSessions->for($athlete, $today),
+            'recentWeeks' => RecentSessions::WEEKS,
             'loggedTotal' => $trainingLog->total($athlete),
             'unloggedStrength' => $trainingLog->unloggedStrength($athlete),
             'goals' => $goalRepository->findUpcomingForOwner($athlete, 3),
@@ -228,9 +232,9 @@ final class CoachController extends AbstractController
      * d'autre, même template et même service (`TrainingLog` prend n'importe quel
      * `User`).
      *
-     * C'est la sortie de la fiche, qui ne montre que les dix dernières : au-delà,
-     * ce n'était plus une fiche, mais il fallait bien un endroit où lire la
-     * suite. La fenêtre est un paramètre d'URL, comme pour les statistiques.
+     * C'est la sortie de la fiche, qui ne montre que ses dernières semaines :
+     * au-delà, ce n'était plus une fiche, mais il fallait bien un endroit où lire
+     * la suite. La fenêtre est un paramètre d'URL, comme pour les statistiques.
      */
     #[Route('/athlete/{id}/log', name: 'app_coach_athlete_log', methods: ['GET'], requirements: ['id' => '\d+'])]
     public function athleteLog(

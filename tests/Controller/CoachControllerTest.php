@@ -975,8 +975,9 @@ final class CoachControllerTest extends WebTestCase
     // --- KL-45 : la lecture du réalisé par le coach --------------------------
 
     /**
-     * La fiche athlète montre ses séances réalisées, et le lien mène à la séance
-     * datée — que le coach a le droit d'ouvrir (VIEW), pas d'effacer (LOG).
+     * La fiche athlète montre ses séances consignées avec leurs chiffres, et le
+     * lien mène à la séance datée — que le coach a le droit d'ouvrir (VIEW),
+     * pas d'effacer (LOG).
      */
     public function testAthletePageShowsLoggedSessions(): void
     {
@@ -985,15 +986,7 @@ final class CoachControllerTest extends WebTestCase
         $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
 
         $exercise = $this->createExercise($athlete, 'Squat');
-        $logged = $this->logSession($athlete, $exercise, '2026-03-08', [[SetType::WARMUP, 10, 40.0], [SetType::NORMAL, 5, 100.0], [SetType::NORMAL, 5, 100.0]]);
-        // Une séance simplement cochée « faite » n'a rien à montrer ici.
-        $bare = (new ScheduledWorkout())
-            ->setOwner($athlete)
-            ->setTitle('Sortie longue')
-            ->setScheduledDate(new \DateTimeImmutable('2026-03-09'))
-            ->setStatus(ScheduledStatus::DONE);
-        $this->em->persist($bare);
-        $this->em->flush();
+        $logged = $this->logSession($athlete, $exercise, $this->daysAgo(5), [[SetType::WARMUP, 10, 40.0], [SetType::NORMAL, 5, 100.0], [SetType::NORMAL, 5, 100.0]]);
 
         $this->client->loginUser($coach);
         $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
@@ -1001,15 +994,100 @@ final class CoachControllerTest extends WebTestCase
         self::assertResponseIsSuccessful();
         // Le lien porte le contexte de retour : d'ici, la séance datée revient à
         // la fiche de l'athlète, pas au calendrier du coach.
-        self::assertSelectorExists('a[href="/schedule/'.$logged->getId().'?from=athlete-'.$athlete->getId().'"]');
-        self::assertSelectorNotExists('a[href^="/schedule/'.$bare->getId().'"]');
+        self::assertSelectorExists('#dernieres-seances a[href="/schedule/'.$logged->getId().'?from=athlete-'.$athlete->getId().'"]');
         // Deux séries de travail, 1000 kg : l'échauffement ne compte pas.
-        self::assertSelectorTextContains('body', '2 séries');
-        self::assertSelectorTextContains('body', '1 000 kg');
+        self::assertSelectorTextContains('#dernieres-seances', '2 séries');
+        self::assertSelectorTextContains('#dernieres-seances', '1 000 kg');
     }
 
     /**
-     * Le journal complet : la fiche ne montre que dix séances, il fallait un
+     * #76 (C-10, C-11) : la séance manquée et la séance faite sans détail
+     * apparaissent sur la fiche, chacune avec son statut, et s'ouvrent. Seul le
+     * réalisé consigné y figurait : « 1 manquée » et « 1 faite » se lisaient dans
+     * les compteurs sans qu'on puisse les retrouver.
+     */
+    public function testAthletePageListsPastSessionsDoneOrMissed(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $missed = $this->createScheduled($athlete, 'Fractionné 6 x 400 m', $this->daysAgo(2), ScheduledStatus::MISSED);
+        $bare = $this->createScheduled($athlete, 'Haut du corps', $this->daysAgo(4), ScheduledStatus::DONE);
+        $unchecked = $this->createScheduled($athlete, 'Mobilité', $this->daysAgo(6), ScheduledStatus::PLANNED);
+        // Faite avec une sortie de la montre : il y a quelque chose à lire.
+        $imported = $this->createScheduled($athlete, 'Footing', $this->daysAgo(8), ScheduledStatus::DONE);
+        $day = new \DateTimeImmutable($this->daysAgo(8));
+        $this->em->persist((new ImportedActivity($athlete, ActivitySource::INTERVALS, 'r1', 'Run', $day->setTime(7, 0), $day))
+            ->setActivity(ActivityType::RUNNING)
+            ->setScheduledWorkout($imported));
+        // Hors de la fenêtre de quatre semaines : c'est le journal qui la garde.
+        $old = $this->createScheduled($athlete, 'Vieille séance', $this->daysAgo(40), ScheduledStatus::MISSED);
+        $this->em->flush();
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseIsSuccessful();
+        $from = '?from=athlete-'.$athlete->getId();
+        $line = static fn (ScheduledWorkout $s): string => '#dernieres-seances a[href="/schedule/'.$s->getId().$from.'"]';
+
+        self::assertSelectorTextContains($line($missed), 'Fractionné 6 x 400 m');
+        self::assertSelectorTextContains($line($missed), 'Manquée');
+        self::assertSelectorTextContains($line($bare), 'Faite');
+        self::assertSelectorTextContains($line($bare), 'sans détail');
+        self::assertSelectorTextContains($line($unchecked), 'pas cochée');
+        self::assertStringNotContainsString('sans détail', $crawler->filter($line($imported))->text());
+        self::assertSelectorNotExists('#dernieres-seances a[href^="/schedule/'.$old->getId().'"]');
+
+        // La plus récente d'abord, comme le journal.
+        $titles = $crawler->filter('#dernieres-seances .kd-logline__title')->each(static fn ($n): string => $n->text());
+        self::assertSame(['Fractionné 6 x 400 m', 'Haut du corps', 'Mobilité', 'Footing'], $titles);
+    }
+
+    /**
+     * Une séance d'aujourd'hui passe de l'agenda aux dernières séances dès
+     * qu'elle est cochée : jamais dans les deux listes à la fois.
+     */
+    public function testTodaysSessionMovesToRecentOnceChecked(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $done = $this->createScheduled($athlete, 'Faite ce matin', $this->daysAgo(0), ScheduledStatus::DONE);
+        $this->createScheduled($athlete, 'Prévue ce soir', $this->daysAgo(0), ScheduledStatus::PLANNED);
+        $this->em->flush();
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorExists('#dernieres-seances a[href^="/schedule/'.$done->getId().'"]');
+        $recent = $crawler->filter('#dernieres-seances')->text();
+        self::assertStringContainsString('Faite ce matin', $recent);
+        self::assertStringNotContainsString('Prévue ce soir', $recent);
+        $agenda = $crawler->filter('.kd-coachitem__name')->each(static fn ($n): string => $n->text());
+        self::assertContains('Prévue ce soir', $agenda);
+        self::assertNotContains('Faite ce matin', $agenda);
+    }
+
+    /** Rien d'échu sur la fenêtre : la section le dit au lieu de disparaître. */
+    public function testAthletePageSaysWhenNothingIsRecent(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorTextContains('#dernieres-seances', 'Aucune séance datée sur ses 4 dernières semaines.');
+    }
+
+    /**
+     * Le journal complet : la fiche ne montre que quatre semaines, il fallait un
      * endroit où lire la suite. La fenêtre s'y choisit comme sur les statistiques.
      */
     public function testAthleteLogPageListsTheWholeWindow(): void
@@ -1395,6 +1473,25 @@ final class CoachControllerTest extends WebTestCase
         $this->em->flush();
 
         return $scheduled;
+    }
+
+    /** Une séance datée sans réalisé, titrée en propre. */
+    private function createScheduled(User $owner, string $title, string $date, ScheduledStatus $status): ScheduledWorkout
+    {
+        $scheduled = (new ScheduledWorkout())
+            ->setOwner($owner)
+            ->setTitle($title)
+            ->setScheduledDate(new \DateTimeImmutable($date))
+            ->setStatus($status);
+        $this->em->persist($scheduled);
+        $this->em->flush();
+
+        return $scheduled;
+    }
+
+    private function daysAgo(int $days): string
+    {
+        return (new \DateTimeImmutable('today'))->modify(sprintf('-%d days', $days))->format('Y-m-d');
     }
 
     /** @param list<string> $roles */

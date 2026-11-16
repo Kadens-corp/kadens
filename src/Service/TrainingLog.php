@@ -69,6 +69,18 @@ final readonly class TrainingLog
     }
 
     /**
+     * Les séances consignées entre deux dates (bornes incluses), quand la
+     * fenêtre n'est pas un `StatsPeriod` choisi par le lecteur : l'aperçu des
+     * dernières semaines de la fiche athlète (`RecentSessions`, #76).
+     *
+     * @return list<LogEntry>
+     */
+    public function between(User $owner, \DateTimeImmutable $start, \DateTimeImmutable $end): array
+    {
+        return $this->compose($owner, $start, $end, null);
+    }
+
+    /**
      * La même fenêtre, groupée par mois et sous-totalisée : ce que le journal
      * affiche réellement.
      *

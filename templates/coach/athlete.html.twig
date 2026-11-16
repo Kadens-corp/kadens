@@ -318,16 +318,19 @@
         {% endif %}
     </section>
 
-    {# ------------------------------ SON RÉALISÉ ----------------------------- #}
-    {# KL-45 : la séance datée porte désormais le réalisé, et le coach a déjà VIEW
-       dessus. Il ne restait qu'à l'afficher. **Lecture stricte** : chaque ligne
-       mène à la page de séance datée, dont le bloc de suppression du réalisé est
-       gardé par l'attribut LOG — réservé au propriétaire. Personne ne déclare à la
-       place de quelqu'un d'autre ce qu'il a soulevé.
+    {# ------------------------- SES DERNIÈRES SÉANCES ------------------------- #}
+    {# #76 : tout ce qui est échu sur ses quatre dernières semaines, consigné ou
+       non (`RecentSessions`). Le journal ne listait que le réalisé consigné :
+       une séance manquée n'apparaissait nulle part, une séance cochée « faite »
+       sans détail non plus, et « aucune séance consignée » côtoyait « 1 faite »
+       (C-10, C-11). Une séance consignée garde sa ligne de journal, chiffres
+       compris ; les autres disent leur statut, et « sans détail » quand il n'y
+       a rien derrière.
 
-       La fiche montre les dix dernières et **dit combien il y en a derrière** :
-       sans ce compte, elle laissait croire que l'athlète n'avait fait que ça. La
-       suite se lit sur le journal, qui est la même liste sur une fenêtre choisie.
+       **Lecture stricte** : chaque ligne mène à la page de séance datée, dont le
+       bloc de suppression du réalisé est gardé par l'attribut LOG, réservé au
+       propriétaire. Personne ne déclare à la place de quelqu'un d'autre ce
+       qu'il a soulevé.
 
        Chaque ligne pose son contexte de retour (`athlete-<id>`) : sans lui, le
        retour de la séance datée renvoyait le coach à SON calendrier — un lien ne
@@ -335,12 +338,12 @@
 
        Le bloc-notes privé de l'athlète (`Workout.notes`) n'apparaît ni ici ni
        là-bas : il ne se rend que dans les éditeurs, et pour son seul propriétaire. #}
-    <section class="kd-section">
+    <section class="kd-section" id="dernieres-seances">
         <div class="kd-pagehead kd-pagehead--sub">
             <div>
                 <p class="kd-eyebrow kd-eyebrow--accent">Réalisé</p>
-                <h2 class="kd-title kd-title--sm">Ce qu'il a fait</h2>
-                <p class="kd-lead">Ses dernières séances consignées série par série. Lecture seule : consigner appartient à l'athlète.</p>
+                <h2 class="kd-title kd-title--sm">Ses dernières séances</h2>
+                <p class="kd-lead">Ses {{ recentWeeks }} dernières semaines : faites, manquées ou pas encore cochées. Lecture seule : consigner appartient à l'athlète.</p>
             </div>
             {% if loggedTotal > 0 %}
                 <a href="{{ path('app_coach_athlete_log', {id: athlete.id}) }}" class="kd-btn kd-btn--ghost">
@@ -350,19 +353,19 @@
         </div>
 
         {# Ses séances de force faites sans réalisé, depuis le début : elles
-           comptent « faites » sur ses statistiques et n'ont pas de ligne ici. Sans
-           ce compte, « aucune séance consignée » côtoyait « 1 faite » (C-11, #63). #}
+           comptent « faites » sur ses statistiques et ne portent aucun chiffre.
+           La phrase dit où ces chiffres se saisissent (C-11, #63). #}
         {% if unloggedStrength > 0 %}
             {{ include('components/_log_in_app.html.twig', {
                 count: unloggedStrength, third: true
             }, with_context = false) }}
         {% endif %}
 
-        {% if logged is empty %}
+        {% if recent is empty %}
             <div class="kd-card kd-section__block">
                 <div class="kd-empty">
                     {{ ux_icon('lucide:history') }}
-                    <div>Aucune séance consignée pour l'instant.</div>
+                    <div>Aucune séance datée sur ses {{ recentWeeks }} dernières semaines.{% if loggedTotal > 0 %} Les plus anciennes se lisent dans son journal.{% endif %}</div>
                     {% if unloggedStrength == 0 %}
                         {{ include('components/_log_in_app.html.twig', {third: true}, with_context = false) }}
                     {% endif %}
@@ -375,22 +378,13 @@
                déclaré plus loin dans la feuille et l'emporte. #}
             <div class="kd-card kd-section__block">
                 <ul class="kd-loglist">
-                    {% for entry in logged %}
+                    {% for entry in recent %}
                         {{ include('components/_log_entry.html.twig', {
-                            entry: entry, back: back_to('athlete', athlete.id)
+                            entry: entry, back: back_to('athlete', athlete.id), statusAlways: true
                         }) }}
                     {% endfor %}
                 </ul>
             </div>
-            {% if loggedTotal > logged|length %}
-                <p class="kd-loglist__more">
-                    <a href="{{ path('app_coach_athlete_log', {id: athlete.id}) }}"
-                       class="kd-btn kd-btn--ghost kd-btn--sm">
-                        Voir les {{ loggedTotal }} séances consignées
-                        {{ ux_icon('lucide:arrow-right') }}
-                    </a>
-                </p>
-            {% endif %}
         {% endif %}
     </section>
 

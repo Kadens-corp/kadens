@@ -771,8 +771,8 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
     /**
      * Le nombre de séances consignées d'un utilisateur, toutes fenêtres
      * confondues. Un COUNT, pas un `count()` sur des lignes remontées : c'est ce
-     * qui permet à la fiche du coach de dire « les 10 dernières **sur 214** »
-     * sans lire les 214.
+     * qui permet à la fiche du coach d'annoncer « Son journal (214) » sans lire
+     * les 214.
      */
     public function countLoggedForOwner(User $owner): int
     {
