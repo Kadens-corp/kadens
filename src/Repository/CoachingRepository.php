@@ -133,6 +133,27 @@ class CoachingRepository extends ServiceEntityRepository
             ->getResult();
     }
 
+    /**
+     * Réponses que `$user` n'a pas encore vues à ses propres demandes (#79) :
+     * acceptées ou refusées, bandeau d'accueil tant qu'il ne l'a pas fermé. Une
+     * relation acceptée puis terminée avant qu'il passe n'a plus rien à annoncer.
+     *
+     * @return list<Coaching>
+     */
+    public function findUnseenResponsesFor(User $user): array
+    {
+        return $this->createQueryBuilder('c')
+            ->andWhere('c.requestedBy = :user')
+            ->andWhere('c.status IN (:statuses)')
+            ->andWhere('c.respondedAt IS NOT NULL')
+            ->andWhere('c.responseSeenAt IS NULL')
+            ->setParameter('user', $user)
+            ->setParameter('statuses', [CoachingStatus::ACCEPTED, CoachingStatus::DECLINED])
+            ->orderBy('c.respondedAt', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
     /** Compteur pour la pastille de navigation (demandes à traiter). */
     public function countPendingReceivedBy(User $user): int
     {

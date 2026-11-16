@@ -15,7 +15,9 @@
 #}
 {% set other = relation.otherParty(me) %}
 {% set iAmCoach = relation.coach == me %}
-{% set canRespond = relation.status.value == 'pending' and relation.isRecipient(me) %}
+{% set pending = relation.status.value == 'pending' %}
+{% set canRespond = pending and relation.isRecipient(me) %}
+{% set canCancel = pending and relation.isRequester(me) %}
 {% set workspace = iAmCoach and relation.isActive and (linkAthlete ?? false) %}
 
 <article class="kd-coachcard{{ relation.isActive ? '' : ' is-muted' }}">
@@ -38,11 +40,21 @@
         <p class="kd-coachcard__role">
             {# Le coaching se noue par email : sous un pseudo, on le rappelle. #}
             {% if other and other.username %}{{ other.email }} · {% endif %}
-            {{ iAmCoach ? 'Tu entraînes cette personne' : 'Cette personne t\'entraîne' }}
-            {% if relation.status.value == 'pending' %}
-                · {{ relation.isRecipient(me) ? 'demande reçue' : 'demande envoyée' }}
-                le {{ relation.createdAt|date('d/m/Y') }}
-            {% elseif relation.respondedAt %}
+            {# Tant qu'elle attend, la relation se dit comme une proposition (#79) :
+               « Tu entraînes » contredisait le badge En attente. La date est celle
+               de la demande : une ligne rouverte (refusée, terminée) garde son
+               `createdAt` d'origine, sa réouverture est sa dernière mise à jour. #}
+            {% if pending %}
+                {% if iAmCoach %}
+                    {{ canCancel ? 'Tu as proposé d\'entraîner cette personne' : 'Cette personne te demande de l\'entraîner' }}
+                {% else %}
+                    {{ canCancel ? 'Tu as demandé à cette personne de t\'entraîner' : 'Cette personne propose de t\'entraîner' }}
+                {% endif %}
+                · le {{ (relation.updatedAt ?? relation.createdAt)|date('d/m/Y') }}
+            {% else %}
+                {{ iAmCoach ? 'Tu entraînes cette personne' : 'Cette personne t\'entraîne' }}
+            {% endif %}
+            {% if not pending and relation.respondedAt %}
                 · depuis le {{ relation.respondedAt|date('d/m/Y') }}
             {% endif %}
         </p>
@@ -74,6 +86,16 @@
                 <input type="hidden" name="decision" value="decline">
                 <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm">
                     {{ ux_icon('lucide:user-x') }} Refuser
+                </button>
+            </form>
+        {% elseif canCancel %}
+            {# Seul moyen de corriger une faute dans l'email (#79). La demande
+               disparaît aussi chez l'autre : pas de confirmation, la renvoyer
+               suffit à revenir en arrière. #}
+            <form method="post" action="{{ path('app_coaching_cancel', {id: relation.id}) }}">
+                <input type="hidden" name="_token" value="{{ csrf_token('coaching_cancel' ~ relation.id) }}">
+                <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm">
+                    {{ ux_icon('lucide:x') }} Annuler la demande
                 </button>
             </form>
         {% elseif relation.isActive %}

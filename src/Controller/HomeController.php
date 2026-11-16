@@ -18,7 +18,7 @@ use Symfony\Component\Routing\Attribute\Route;
 /**
  * Page d'accueil : « où j'en suis ». La prochaine séance, le prochain
  * objectif, l'observance et la répartition du mois, une demande de coaching en
- * attente, et des raccourcis vers les pages de lecture. La fiche de l'athlète
+ * attente ou la réponse à la sienne, et des raccourcis vers les pages de lecture. La fiche de l'athlète
  * (records, mesures, stats depuis le début) vit sur `/profile`.
  *
  * Un compte dont l'agenda est encore vide voit d'abord un démarrage en trois
@@ -68,6 +68,9 @@ final class HomeController extends AbstractController
             // seulement dans /coaching. Les relations actives, elles, n'appellent
             // aucune action : elles restent dans /coaching.
             'coachingReceived' => $coachingRepository->findPendingReceivedBy($user),
+            // Et dans l'autre sens, la réponse à une demande qu'on a envoyée
+            // (#79) : sans elle, il fallait revenir sur /coaching pour savoir.
+            'coachingAnswered' => $coachingRepository->findUnseenResponsesFor($user),
             'nextSessions' => $scheduledRepository->findNextPlannedDay($user, $today),
             'onboarding' => $this->onboarding($user, $athleteCount, $scheduledRepository, $workoutRepository, $planRepository),
             'athleteCount' => $athleteCount,

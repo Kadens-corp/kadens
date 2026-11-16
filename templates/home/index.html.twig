@@ -54,6 +54,33 @@
             </div>
         {% endfor %}
 
+        {# La réponse à une demande qu'on a envoyée (#79), jusqu'à ce qu'on ferme
+           le bandeau. « Programmer » le ferme aussi, en ouvrant la fiche. #}
+        {% for relation in coachingAnswered %}
+            {% set other = relation.otherParty(u) %}
+            {% set name = other ? other.displayName : 'Quelqu\'un' %}
+            {% set iAmCoach = relation.coach and relation.coach.id == u.id %}
+            {% set accepted = relation.isActive %}
+            <div class="kd-home__coach">
+                {{ ux_icon(accepted ? 'lucide:user-check' : 'lucide:user-x') }}
+                <p class="kd-home__coachtext">
+                    <strong>{{ name }}</strong>
+                    {% if accepted %}
+                        {{ iAmCoach ? 'a accepté ton invitation. Tu peux programmer ses séances.' : 'a accepté de t\'entraîner.' }}
+                    {% else %}
+                        {{ iAmCoach ? 'a refusé ton invitation.' : 'a refusé ta demande de coaching.' }}
+                    {% endif %}
+                </p>
+                <form method="post" action="{{ path('app_coaching_acknowledge', {id: relation.id}) }}" class="kd-home__coachacts">
+                    <input type="hidden" name="_token" value="{{ csrf_token('coaching_acknowledge' ~ relation.id) }}">
+                    {% if accepted and iAmCoach and u.isCoach %}
+                        <button type="submit" name="then" value="athlete" class="kd-btn kd-btn--primary kd-btn--sm">Programmer</button>
+                    {% endif %}
+                    <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm kd-home__decline">Compris</button>
+                </form>
+            </div>
+        {% endfor %}
+
         {# ============================== DÉMARRAGE =========================== #}
         {# Un compte qui n'a rien dans son agenda ne sait pas par où commencer
            (A-01). Les étapes se cochent sur l'état réel des données, la

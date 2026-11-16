@@ -57,6 +57,13 @@ class Coaching
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $respondedAt = null;
 
+    // Moment où l'initiateur a pris connaissance de la réponse (#79). Tant
+    // qu'il est null sur une demande tranchée, son accueil porte un bandeau
+    // « X a accepté ton invitation ». Remis à null à chaque réponse et à chaque
+    // réouverture : une nouvelle réponse est une nouvelle nouvelle.
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $responseSeenAt = null;
+
     // Notes privées du coach sur son athlète (#65) : santé, contexte, rappels.
     // Portées par la relation et non par le contenu, parce que tout ce qui vit
     // sur une séance ou un plan appartient à l'athlète et lui est visible. Lues
@@ -152,6 +159,18 @@ class Coaching
         return $this;
     }
 
+    public function getResponseSeenAt(): ?\DateTimeImmutable
+    {
+        return $this->responseSeenAt;
+    }
+
+    public function setResponseSeenAt(?\DateTimeImmutable $responseSeenAt): static
+    {
+        $this->responseSeenAt = $responseSeenAt;
+
+        return $this;
+    }
+
     public function getCoachNotes(): ?string
     {
         return $this->coachNotes;
@@ -173,6 +192,12 @@ class Coaching
     public function otherParty(User $user): ?User
     {
         return $this->coach === $user ? $this->athlete : $this->coach;
+    }
+
+    /** `$user` a-t-il envoyé la demande (donc seul habilité à l'annuler) ? */
+    public function isRequester(User $user): bool
+    {
+        return null !== $this->requestedBy && $this->requestedBy === $user;
     }
 
     /** `$user` est-il le destinataire de la demande (donc seul habilité à répondre) ? */

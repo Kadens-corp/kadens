@@ -20,7 +20,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * cohabitent. Seule la fiche de travail d'un athlète vit ailleurs (/coach,
  * ROLE_COACH).
  *
- * On ne gère ici que le lien : demander, accepter, refuser, terminer. Aucun
+ * On ne gère ici que le lien : demander, annuler, accepter, refuser, terminer. Aucun
  * contenu n'est créé ni consulté depuis ces routes.
  */
 #[Route('/coaching')]
@@ -38,11 +38,26 @@ final class CoachingController extends AbstractController
         /** @var User $user */
         $user = $this->getUser();
 
+        // Une demande envoyée se range dans la section de la relation qu'elle
+        // propose (#79) : une invitation d'athlète sous « Mes athlètes », une
+        // demande à un coach sous « Mes coachs ». Rangée à part en bas de page,
+        // le coach la croyait perdue pendant que sa section disait « aucun athlète ».
+        $sentAsCoach = [];
+        $sentAsAthlete = [];
+        foreach ($this->coachingRepository->findPendingSentBy($user) as $relation) {
+            if ($relation->getCoach() === $user) {
+                $sentAsCoach[] = $relation;
+            } else {
+                $sentAsAthlete[] = $relation;
+            }
+        }
+
         return $this->render('coaching/index.html.twig', [
             'coaches' => $this->coachingRepository->findAcceptedCoaches($user),
             'athletes' => $this->coachingRepository->findAcceptedAthletes($user),
             'received' => $this->coachingRepository->findPendingReceivedBy($user),
-            'sent' => $this->coachingRepository->findPendingSentBy($user),
+            'sentAsCoach' => $sentAsCoach,
+            'sentAsAthlete' => $sentAsAthlete,
         ]);
     }
 
@@ -50,6 +65,13 @@ final class CoachingController extends AbstractController
      * Demande de mise en relation par email exact (pas de recherche floue : on ne
      * veut pas d'annuaire parcourable). L'athlète cible forcément un ROLE_COACH ;
      * un coach, lui, peut démarcher n'importe quel utilisateur.
+     *
+     * Le pseudo n'est pas accepté (#79), et c'est voulu : il s'affiche partout,
+     * se devine et se change à volonté, quand l'email reste l'identifiant du
+     * compte. L'accepter ferait de ce formulaire un annuaire à tâtons, puisque
+     * la réponse (et la carte « En attente ») dit qu'un compte existe. Le champ
+     * est donc un texte libre, pour que ce soit le site, et non la bulle du
+     * navigateur, qui explique pourquoi un pseudo ne suffit pas.
      *
      * Une relation refusée ou terminée est **réouverte en place** (retour à
      * PENDING) plutôt que dupliquée : l'UniqueConstraint l'interdirait de toute façon.
@@ -68,6 +90,13 @@ final class CoachingController extends AbstractController
         $redirect = $this->redirectToRoute('app_coaching_index');
 
         $email = trim($payload->getString('email'));
+
+        if ('' !== $email && !str_contains($email, '@')) {
+            $this->addFlash('error', sprintf('« %s » n\'est pas une adresse email. On invite avec l\'email du compte Kadens, pas avec le pseudo.', $email));
+
+            return $redirect;
+        }
+
         $target = '' === $email ? null : $userRepository->findOneBy(['email' => $email]);
 
         if (null === $target) {
@@ -118,6 +147,7 @@ final class CoachingController extends AbstractController
             $existing->setStatus(CoachingStatus::PENDING);
             $existing->setRequestedBy($user);
             $existing->setRespondedAt(null);
+            $existing->setResponseSeenAt(null);
             $this->entityManager->flush();
 
             $this->addFlash('success', sprintf('Demande renvoyée à %s.', $email));
@@ -163,6 +193,8 @@ final class CoachingController extends AbstractController
         $accepted = 'accept' === $payload->getString('decision');
         $coaching->setStatus($accepted ? CoachingStatus::ACCEPTED : CoachingStatus::DECLINED);
         $coaching->setRespondedAt(new \DateTimeImmutable());
+        // L'initiateur l'apprend sur son accueil (#79), jusqu'à ce qu'il ferme le bandeau.
+        $coaching->setResponseSeenAt(null);
         $this->entityManager->flush();
 
         /** @var User $user */
@@ -206,6 +238,78 @@ final class CoachingController extends AbstractController
         $this->addFlash('success', sprintf('Relation terminée avec %s. Le contenu déjà créé reste chez son propriétaire.', $other));
 
         return $this->redirectToRoute('app_coaching_index');
+    }
+
+    /**
+     * Retrait d'une demande encore sans réponse, par son seul initiateur (#79).
+     * La ligne est supprimée : une demande annulée n'a jamais eu lieu, et c'est
+     * le seul moyen de corriger une faute dans l'email. Le destinataire perd sa
+     * demande reçue (bandeau d'accueil, carte « À traiter ») au chargement suivant.
+     */
+    #[Route('/{id}/cancel', name: 'app_coaching_cancel', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function cancel(Request $request, Coaching $coaching): Response
+    {
+        $this->denyAccessUnlessGranted(CoachingVoter::CANCEL, $coaching);
+
+        if (!$this->isCsrfTokenValid('coaching_cancel'.$coaching->getId(), $request->getPayload()->getString('_token'))) {
+            throw $this->createAccessDeniedException('Jeton CSRF invalide.');
+        }
+
+        // L'autre a pu répondre entre l'affichage et le clic.
+        if (CoachingStatus::PENDING !== $coaching->getStatus()) {
+            $this->addFlash('error', 'Cette demande a déjà reçu une réponse.');
+
+            return $this->redirectToRoute('app_coaching_index');
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+        $other = $coaching->otherParty($user)?->getDisplayName() ?? 'cet utilisateur';
+
+        $this->entityManager->remove($coaching);
+        $this->entityManager->flush();
+
+        $this->addFlash('success', sprintf('Demande à %s annulée.', $other));
+
+        return $this->redirectToRoute('app_coaching_index');
+    }
+
+    /**
+     * Ferme le bandeau d'accueil qui annonce la réponse à une demande (#79),
+     * pour son seul initiateur.
+     *
+     * `then=athlete` (bouton « Programmer » d'un coach accepté) ouvre ensuite la
+     * fiche de l'athlète. La destination est une route fixe, jamais une URL
+     * reçue : rien à rediriger ailleurs.
+     */
+    #[Route('/{id}/acknowledge', name: 'app_coaching_acknowledge', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function acknowledge(Request $request, Coaching $coaching): Response
+    {
+        $this->denyAccessUnlessGranted(CoachingVoter::ACKNOWLEDGE, $coaching);
+
+        $payload = $request->getPayload();
+
+        if (!$this->isCsrfTokenValid('coaching_acknowledge'.$coaching->getId(), $payload->getString('_token'))) {
+            throw $this->createAccessDeniedException('Jeton CSRF invalide.');
+        }
+
+        $coaching->setResponseSeenAt(new \DateTimeImmutable());
+        $this->entityManager->flush();
+
+        /** @var User $user */
+        $user = $this->getUser();
+        $athlete = $coaching->getAthlete();
+
+        if ('athlete' === $payload->getString('then')
+            && $coaching->isActive()
+            && $coaching->getCoach() === $user
+            && $user->isCoach()
+            && null !== $athlete
+        ) {
+            return $this->redirectToRoute('app_coach_athlete', ['id' => $athlete->getId()]);
+        }
+
+        return $this->redirectToRoute('app_home');
     }
 
     /**

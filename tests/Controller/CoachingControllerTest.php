@@ -346,6 +346,212 @@ final class CoachingControllerTest extends WebTestCase
         self::assertCount(1, $this->em->getRepository(Coaching::class)->findAll());
     }
 
+    // ------------------------------------------------- #79 : demandes en attente
+
+    /**
+     * #79 : l'invitation envoyée se range sous « Mes athlètes », pas en bas de
+     * page, et la section ne dit plus « aucun athlète » pendant ce temps.
+     */
+    public function testSentInvitationIsListedUnderMyAthletes(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $this->createUser('athlete@example.com');
+
+        $this->client->loginUser($coach);
+        $this->submitRequest('athlete@example.com');
+        $crawler = $this->client->request('GET', '/coaching');
+
+        $athletes = $crawler->filter('#athletes');
+        self::assertStringContainsString('athlete@example.com', $athletes->text());
+        self::assertStringContainsString('En attente', $athletes->text());
+        self::assertStringContainsString('Tu as proposé d\'entraîner cette personne', $athletes->text());
+        self::assertStringNotContainsString('Aucun athlète pour l\'instant', $athletes->text());
+        self::assertStringNotContainsString('Tu entraînes cette personne', $crawler->html());
+        self::assertStringNotContainsString('Demandes envoyées', $crawler->html());
+    }
+
+    /** #79 : la demande d'un athlète à son coach se range sous « Mes coachs ». */
+    public function testSentRequestToCoachIsListedUnderMyCoaches(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::PENDING, $athlete);
+
+        $this->client->loginUser($athlete);
+        $crawler = $this->client->request('GET', '/coaching');
+
+        $coaches = $crawler->filter('#coachs');
+        self::assertStringContainsString('coach@example.com', $coaches->text());
+        self::assertStringContainsString('Tu as demandé à cette personne de t\'entraîner', $coaches->text());
+        self::assertStringNotContainsString('Personne ne t\'entraîne', $coaches->text());
+    }
+
+    /** #79 : côté athlète, une proposition reçue ne se dit pas au présent. */
+    public function testReceivedProposalIsNotWordedAsActive(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::PENDING, $coach);
+
+        $this->client->loginUser($athlete);
+        $crawler = $this->client->request('GET', '/coaching');
+
+        self::assertStringContainsString('Cette personne propose de t\'entraîner', $crawler->html());
+        self::assertStringNotContainsString('Cette personne t\'entraîne', $crawler->html());
+    }
+
+    /** #79 : un pseudo reçoit l'explication du site, et rien n'est créé. */
+    public function testUsernameIsRejectedWithAnExplanation(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $athlete->setUsername('Trailer38');
+        $this->em->flush();
+
+        $this->client->loginUser($coach);
+        $this->submitRequest('Trailer38');
+        $crawler = $this->client->followRedirect();
+
+        self::assertStringContainsString('n\'est pas une adresse email', $crawler->filter('.kd-flash--error')->text());
+        self::assertCount(0, $this->em->getRepository(Coaching::class)->findAll());
+        // Le champ ne laisse plus la bulle du navigateur trancher à sa place.
+        self::assertSame('text', $crawler->filter('#coach_invite_email')->attr('type'));
+    }
+
+    /** #79 : l'initiateur retire sa demande, la ligne disparaît. */
+    public function testRequesterCanCancelPendingRequest(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::PENDING, $coach);
+        $id = $relation->getId();
+
+        $this->client->loginUser($coach);
+        $this->client->request('POST', '/coaching/'.$id.'/cancel', [
+            '_token' => $this->cardToken($relation, 'cancel'),
+        ]);
+
+        self::assertResponseRedirects('/coaching');
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(Coaching::class)->find($id));
+    }
+
+    /** Le destinataire refuse, il n'annule pas : sinon le refus ne laisserait pas de trace. */
+    public function testRecipientCannotCancelRequest(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::PENDING, $coach);
+
+        $this->client->loginUser($athlete);
+        $crawler = $this->client->request('GET', '/coaching');
+        self::assertCount(0, $crawler->filter('form[action$="/cancel"]'));
+
+        $this->client->request('POST', '/coaching/'.$relation->getId().'/cancel', ['_token' => 'invalid']);
+        self::assertResponseStatusCodeSame(403);
+        self::assertSame(CoachingStatus::PENDING, $this->reload($relation)->getStatus());
+    }
+
+    /** L'autre a répondu entre l'affichage et le clic : l'annulation ne défait pas une relation. */
+    public function testAnsweredRequestCannotBeCancelled(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::PENDING, $coach);
+
+        $this->client->loginUser($coach);
+        $token = $this->cardToken($relation, 'cancel');
+
+        $this->reload($relation)->setStatus(CoachingStatus::ACCEPTED);
+        $this->em->flush();
+
+        $this->client->request('POST', '/coaching/'.$relation->getId().'/cancel', ['_token' => $token]);
+
+        self::assertResponseRedirects('/coaching');
+        self::assertSame(CoachingStatus::ACCEPTED, $this->reload($relation)->getStatus());
+    }
+
+    /**
+     * #79 : le coach apprend l'acceptation sur son accueil, jusqu'à ce qu'il
+     * ferme le bandeau.
+     */
+    public function testAcceptanceIsAnnouncedOnRequesterHomeUntilAcknowledged(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $athlete->setUsername('Trailer38');
+        $this->em->flush();
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::PENDING, $coach);
+
+        $this->client->loginUser($athlete);
+        $this->respond($relation, 'accept', $this->cardToken($relation, 'respond'));
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/');
+        self::assertStringContainsString('Trailer38 a accepté ton invitation', $crawler->filter('.kd-home__coach')->text());
+
+        $token = (string) $crawler->filter('form[action$="/acknowledge"] input[name="_token"]')->attr('value');
+        $this->client->request('POST', '/coaching/'.$relation->getId().'/acknowledge', ['_token' => $token]);
+        self::assertResponseRedirects('/');
+
+        $crawler = $this->client->request('GET', '/');
+        self::assertCount(0, $crawler->filter('form[action$="/acknowledge"]'));
+        self::assertNotNull($this->reload($relation)->getResponseSeenAt());
+    }
+
+    /** « Programmer » ferme le bandeau et ouvre la fiche de l'athlète. */
+    public function testAcknowledgingCanOpenTheAthleteSheet(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::PENDING, $coach);
+
+        $this->client->loginUser($athlete);
+        $this->respond($relation, 'accept', $this->cardToken($relation, 'respond'));
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/');
+        $token = (string) $crawler->filter('form[action$="/acknowledge"] input[name="_token"]')->attr('value');
+        $this->client->request('POST', '/coaching/'.$relation->getId().'/acknowledge', [
+            '_token' => $token,
+            'then' => 'athlete',
+        ]);
+
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId());
+    }
+
+    /** Un refus s'annonce aussi : une demande ne s'évapore plus en silence. */
+    public function testDeclineIsAnnouncedOnRequesterHome(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::PENDING, $athlete);
+
+        $this->client->loginUser($coach);
+        $this->respond($relation, 'decline', $this->cardToken($relation, 'respond'));
+
+        $this->client->loginUser($athlete);
+        $crawler = $this->client->request('GET', '/');
+        self::assertStringContainsString('a refusé ta demande de coaching', $crawler->filter('.kd-home__coach')->text());
+    }
+
+    /** Seul l'initiateur ferme le bandeau ; le destinataire n'en a pas. */
+    public function testOnlyRequesterCanAcknowledge(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::PENDING, $coach);
+
+        $this->client->loginUser($athlete);
+        $this->respond($relation, 'accept', $this->cardToken($relation, 'respond'));
+
+        $crawler = $this->client->request('GET', '/');
+        self::assertCount(0, $crawler->filter('form[action$="/acknowledge"]'));
+
+        $this->client->request('POST', '/coaching/'.$relation->getId().'/acknowledge', ['_token' => 'invalid']);
+        self::assertResponseStatusCodeSame(403);
+    }
+
     // ---------------------------------------------------------------- helpers
     //
     // Les jetons CSRF sont lus dans les formulaires rendus (convention du projet,
@@ -417,8 +623,11 @@ final class CoachingControllerTest extends WebTestCase
             ->setStatus($status)
             ->setRequestedBy($requestedBy);
 
+        // Une réponse déjà donnée est déjà vue, comme après la migration (#79) :
+        // sans quoi chaque relation de test poserait un bandeau sur l'accueil.
         if (CoachingStatus::PENDING !== $status) {
             $coaching->setRespondedAt(new \DateTimeImmutable());
+            $coaching->setResponseSeenAt(new \DateTimeImmutable());
         }
 
         $this->em->persist($coaching);
