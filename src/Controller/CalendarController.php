@@ -7,6 +7,7 @@ use App\Form\PlanInstantiationType;
 use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
 use App\Repository\WorkoutRepository;
+use App\Service\PlanScheduler;
 use App\Service\WorkoutMetrics;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Cookie;
@@ -43,15 +44,20 @@ final class CalendarController extends AbstractController
     {
         $now = new \DateTimeImmutable('today');
 
+        // « Placer dans mon agenda » depuis la page d'un plan (#68) arrive ici avec
+        // `place` : on le reconduit, la vue ouvrira la modale sur ce plan.
+        $carry = $request->query->getInt('place') > 0 ? ['place' => $request->query->getInt('place')] : [];
+
         // Respecte la dernière vue choisie (cookie posé au rendu mois/semaine) :
         // l'entrée « Calendrier » et un refresh retombent sur la bonne vue.
         if ('week' === $request->cookies->get('kd_calview')) {
-            return $this->redirectToRoute('app_calendar_week', ['date' => $now->format('Y-m-d')]);
+            return $this->redirectToRoute('app_calendar_week', ['date' => $now->format('Y-m-d'), ...$carry]);
         }
 
         return $this->redirectToRoute('app_calendar_month', [
             'year' => (int) $now->format('Y'),
             'month' => (int) $now->format('n'),
+            ...$carry,
         ]);
     }
 
@@ -65,6 +71,7 @@ final class CalendarController extends AbstractController
         PlanTemplateRepository $planTemplateRepository,
         \App\Repository\GoalRepository $goalRepository,
         \App\Service\PlanFlattener $planFlattener,
+        PlanScheduler $planScheduler,
     ): Response {
         if ($month < 1 || $month > 12) {
             throw $this->createNotFoundException('Mois invalide.');
@@ -125,7 +132,7 @@ final class CalendarController extends AbstractController
             'viewRemembered' => $request->cookies->has('kd_calview'),
             'prev' => ['year' => (int) $prev->format('Y'), 'month' => (int) $prev->format('n')],
             'next' => ['year' => (int) $next->format('Y'), 'month' => (int) $next->format('n')],
-            ...$this->buildAddContext($workoutRepository, $planTemplateRepository, $scheduledWorkoutRepository),
+            ...$this->buildAddContext($request, $workoutRepository, $planTemplateRepository, $scheduledWorkoutRepository, $planScheduler),
         ]), 'month');
     }
 
@@ -171,11 +178,13 @@ final class CalendarController extends AbstractController
     #[Route('/week/{date}', name: 'app_calendar_week', methods: ['GET'], requirements: ['date' => '\d{4}-\d{2}-\d{2}'])]
     public function week(
         string $date,
+        Request $request,
         ScheduledWorkoutRepository $scheduledWorkoutRepository,
         WorkoutRepository $workoutRepository,
         PlanTemplateRepository $planTemplateRepository,
         \App\Repository\GoalRepository $goalRepository,
         \App\Service\PlanFlattener $planFlattener,
+        PlanScheduler $planScheduler,
     ): Response {
         try {
             $ref = new \DateTimeImmutable($date);
@@ -246,7 +255,7 @@ final class CalendarController extends AbstractController
             'prevDate' => $monday->modify('-7 days')->format('Y-m-d'),
             'nextDate' => $monday->modify('+7 days')->format('Y-m-d'),
             'monthPivot' => ['year' => (int) $monday->modify('+3 days')->format('Y'), 'month' => (int) $monday->modify('+3 days')->format('n')],
-            ...$this->buildAddContext($workoutRepository, $planTemplateRepository, $scheduledWorkoutRepository),
+            ...$this->buildAddContext($request, $workoutRepository, $planTemplateRepository, $scheduledWorkoutRepository, $planScheduler),
         ]), 'week');
     }
 
@@ -289,14 +298,24 @@ final class CalendarController extends AbstractController
     /**
      * Contexte commun aux vues mois et semaine : cartes de séances (modale « poser
      * une séance » ouverte par le « + » d'un jour), formulaire + cartes de plans
-     * (modale « instancier un plan »), plans instanciés (retrait rapide) et statuts.
+     * (modale « placer un plan dans l'agenda »), plans déjà posés (retrait rapide)
+     * et statuts.
+     *
+     * Deux paramètres de query, tous deux des réglages d'affichage (une valeur
+     * inconnue est ignorée, pas une erreur) :
+     * - `place` : id d'un plan à présélectionner, la modale s'ouvre dessus (#68,
+     *   bouton « Placer dans mon agenda » de la page du plan) ;
+     * - `focus` : date (Y-m-d) à faire défiler à l'écran, posée par la redirection
+     *   qui suit une pose de plan (la première séance).
      *
      * @return array<string, mixed>
      */
     private function buildAddContext(
+        Request $request,
         WorkoutRepository $workoutRepository,
         PlanTemplateRepository $planTemplateRepository,
         ScheduledWorkoutRepository $scheduledWorkoutRepository,
+        PlanScheduler $planScheduler,
     ): array {
         $plans = $planTemplateRepository->findBy(['owner' => $this->getUser()], ['title' => 'ASC']);
 
@@ -308,9 +327,17 @@ final class CalendarController extends AbstractController
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
 
+        $place = $request->query->getInt('place');
+        $placeable = array_filter($plans, static fn ($plan): bool => $plan->getId() === $place);
+        $focus = $request->query->getString('focus');
+
         return [
             'instantiateForm' => $instantiateForm,
             'instantiatedPlans' => $scheduledWorkoutRepository->findInstantiatedPlansForOwner($user),
+            // Aperçu des dates dans la modale : la règle d'ancrage reste au service.
+            'planPlacement' => $planScheduler->placementPreviews($plans, $user),
+            'preselectPlanId' => [] !== $placeable ? $place : null,
+            'focusDate' => 1 === preg_match('/^\d{4}-\d{2}-\d{2}$/', $focus) ? $focus : null,
             'statuses' => \App\Enum\ScheduledStatus::cases(),
             // Abonnement ICS : jeton (null tant que non activé) consommé par la
             // modale « S'abonner » ; les URLs de flux sont bâties côté Twig via url().

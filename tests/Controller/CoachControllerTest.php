@@ -337,6 +337,40 @@ final class CoachControllerTest extends WebTestCase
         self::assertCount(1, $scheduled);
         self::assertSame($athlete->getId(), $scheduled[0]->getOwner()?->getId());
         self::assertSame($monday->format('Y-m-d'), $scheduled[0]->getScheduledDate()->format('Y-m-d'));
+
+        // #68 : le verbe simple, et l'aperçu sait désormais que le plan est placé.
+        $crawler = $this->client->followRedirect();
+        self::assertSelectorTextContains('body', 'Plan « Bloc 2 semaines » placé dans l\'agenda de');
+        $plans = json_decode((string) $crawler->filter('form[action$="/instantiate"]')->attr('data-plan-preview-plans-value'), true);
+        self::assertTrue($plans[$plan->getId()]['placed']);
+    }
+
+    /**
+     * #68 : la page du plan mène à l'agenda de son propriétaire. L'athlète part
+     * vers son calendrier, le plan présélectionné ; son coach vers la fiche de
+     * l'athlète, où le formulaire de pose a déjà ce plan choisi.
+     */
+    public function testPlanPageLeadsToTheOwnersAgenda(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createPlanTemplate($athlete, 'A Bloc 1', 2);
+        $plan = $this->createPlanTemplate($athlete, 'B Bloc 2', 2);
+        $id = (int) $plan->getId();
+
+        $this->client->loginUser($athlete);
+        $crawler = $this->client->request('GET', '/plan-template/'.$id);
+        self::assertSame('/calendar?place='.$id, $crawler->selectLink('Placer dans mon agenda')->attr('href'));
+        self::assertCount(0, $crawler->selectLink('Placer dans son agenda'));
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/plan-template/'.$id);
+        $href = (string) $crawler->selectLink('Placer dans son agenda')->attr('href');
+        self::assertSame(sprintf('/coach/athlete/%d?plan=%d#placer-un-plan', $athlete->getId(), $id), $href);
+
+        $crawler = $this->client->request('GET', strtok($href, '#'));
+        self::assertSame((string) $id, $crawler->filter('#coach_instantiate_plan option[selected]')->attr('value'));
     }
 
     // ------------------------------------------------- extension des voters

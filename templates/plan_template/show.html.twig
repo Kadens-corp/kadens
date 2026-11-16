@@ -17,6 +17,21 @@
         }) }}
 
         <div class="kd-actionbar__end">
+            {# L'action clé du produit, depuis le plan lui-même (#68) : ouvre la
+               modale du calendrier sur ce plan. Le seul autre lecteur que les
+               voters laissent entrer est le coach du propriétaire (cf.
+               `_owner_banner`) : il le place depuis la fiche de son athlète.
+               Comparaison par `id` : `owner` peut être un proxy. #}
+            {% set planOwner = flat.template.owner %}
+            {% if planOwner is not null and app.user and planOwner.id == app.user.id %}
+                <a href="{{ path('app_calendar_index', {place: flat.template.id}) }}" class="kd-btn kd-btn--primary kd-btn--sm">
+                    {{ ux_icon('lucide:calendar-plus') }} Placer dans mon agenda
+                </a>
+            {% elseif planOwner is not null and app.user %}
+                <a href="{{ path('app_coach_athlete', {id: planOwner.id, plan: flat.template.id}) }}#placer-un-plan" class="kd-btn kd-btn--primary kd-btn--sm">
+                    {{ ux_icon('lucide:calendar-plus') }} Placer dans son agenda
+                </a>
+            {% endif %}
             <a href="{{ path('app_plan_template_edit', {id: flat.template.id}|merge(back_carry())) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
                 {{ ux_icon('lucide:square-pen') }} Éditer
             </a>

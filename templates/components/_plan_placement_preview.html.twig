@@ -1,0 +1,21 @@
+{# Aperçu d'une pose de plan dans l'agenda (#68), partagé par la modale du
+   calendrier et la fiche coach.
+
+   Le texte fixe dit la règle, celle de `PlanScheduler` (semaine 1 = semaine ISO
+   de la date de départ, chaque case garde son jour). La ligne vivante est
+   réécrite par le contrôleur `plan-preview`, qui doit englober ce fragment et
+   lui fournir select, date et décalages des cases. Sans JS, la règle reste : elle
+   suffit à prévoir où tombent les séances.
+
+   Attend : whose ('ton' | 'son'), à qui est l'agenda. #}
+<div class="kd-placement">
+    <p class="kd-placement__rule">
+        La semaine 1 du plan est la semaine, du lundi au dimanche, qui contient la date de départ.
+        Chaque séance garde son jour : une séance du mercredi tombe un mercredi.
+    </p>
+    <p class="kd-placement__preview" data-plan-preview-target="output" data-whose="{{ whose }}"
+       role="status" aria-live="polite" hidden></p>
+    <p class="kd-placement__rule">
+        Relancer sur un plan déjà placé ajoute les nouvelles séances sans déplacer celles qui y sont.
+    </p>
+</div>

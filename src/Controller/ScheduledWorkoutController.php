@@ -95,8 +95,12 @@ final class ScheduledWorkoutController extends AbstractController
     }
 
     /**
-     * Instancie un plan complet à partir d'une date : PlanScheduler projette
-     * la trame sur des dates réelles et crée N ScheduledWorkout.
+     * Place un plan complet dans l'agenda à partir d'une date : PlanScheduler
+     * projette la trame sur des dates réelles et crée N ScheduledWorkout. Relancer
+     * sur un plan déjà placé n'ajoute que les nouvelles cases (resync add-only).
+     *
+     * Ouvre ensuite l'agenda sur la première séance posée (#68) : avant, on
+     * restait en haut du mois de la date de départ, les séances plus bas.
      */
     #[Route('/plan', name: 'app_scheduled_workout_instantiate', methods: ['POST'])]
     public function instantiate(
@@ -122,14 +126,41 @@ final class ScheduledWorkoutController extends AbstractController
             $alreadyOnCalendar = $planScheduler->isInstantiated($template, $user);
             $created = $planScheduler->instantiate($template, $user, $startDate);
 
-            $this->addFlash('success', $alreadyOnCalendar
-                ? sprintf('Plan resynchronisé : %d nouvelle(s) séance(s) ajoutée(s).', count($created))
-                : sprintf('Plan instancié : %d séance(s) planifiée(s).', count($created)));
+            $first = null;
+            foreach ($created as $scheduled) {
+                if (null === $first || $scheduled->getScheduledDate() < $first) {
+                    $first = $scheduled->getScheduledDate();
+                }
+            }
 
-            return $this->redirectToMonth($startDate);
+            $count = \count($created);
+            if (!$alreadyOnCalendar) {
+                $this->addFlash('success', 0 === $count
+                    ? 'Ce plan n\'a encore aucune séance : rien n\'a été placé dans ton agenda.'
+                    : sprintf(
+                        'Plan placé dans ton agenda : %d séance%s, la première le %s.',
+                        $count,
+                        $count > 1 ? 's' : '',
+                        $first->format('d/m/Y'),
+                    ));
+            } else {
+                $this->addFlash('success', 0 === $count
+                    ? 'Ce plan est déjà dans ton agenda et à jour : aucune séance ajoutée.'
+                    : sprintf(
+                        'Ce plan était déjà dans ton agenda : %d nouvelle%s séance%s ajoutée%s, les autres n\'ont pas bougé.',
+                        $count,
+                        $count > 1 ? 's' : '',
+                        $count > 1 ? 's' : '',
+                        $count > 1 ? 's' : '',
+                    ));
+                // Rien d'ajouté : on ouvre là où le plan commence déjà.
+                $first ??= $planScheduler->firstScheduledDate($template, $user);
+            }
+
+            return $this->redirectToDay($first ?? $startDate);
         }
 
-        $this->addFlash('error', 'Impossible d\'instancier ce plan.');
+        $this->addFlash('error', 'Impossible de placer ce plan dans l\'agenda.');
 
         return $this->redirectToCurrentMonth();
     }
@@ -570,6 +601,27 @@ final class ScheduledWorkoutController extends AbstractController
         return $this->redirectToRoute('app_calendar_month', [
             'year' => (int) $date->format('Y'),
             'month' => (int) $date->format('n'),
+        ]);
+    }
+
+    /**
+     * Comme `redirectToMonth`, mais pour montrer UN jour : la vue semaine ouvre sa
+     * semaine, la vue mois ouvre son mois et le fait défiler jusqu'à lui
+     * (`focus`, lu par le contrôleur Stimulus `caladd`). Pas d'ancre `#` : Turbo
+     * suit la redirection en fetch et la perdrait.
+     */
+    private function redirectToDay(\DateTimeImmutable $date): Response
+    {
+        $focus = $date->format('Y-m-d');
+
+        if ('week' === $this->preferredCalendarView()) {
+            return $this->redirectToRoute('app_calendar_week', ['date' => $focus, 'focus' => $focus]);
+        }
+
+        return $this->redirectToRoute('app_calendar_month', [
+            'year' => (int) $date->format('Y'),
+            'month' => (int) $date->format('n'),
+            'focus' => $focus,
         ]);
     }
 

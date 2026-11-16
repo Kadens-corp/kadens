@@ -110,19 +110,123 @@ final class CalendarControllerTest extends WebTestCase
         $this->client->loginUser($user);
         $crawler = $this->client->request('GET', '/calendar/2026/1');
 
-        // Le bouton « Instancier » est désactivé tant qu'aucune carte de plan n'est
-        // choisie (piloté par JS) : on soumet le formulaire de la modale directement.
+        // Le bouton « Placer dans l'agenda » est désactivé tant qu'aucune carte de
+        // plan n'est choisie (piloté par JS) : on soumet le formulaire directement.
         // 2026-01-07 est un mercredi -> ancre lundi 2026-01-05, item tombe le 07.
         $form = $crawler->filter('form[action$="/schedule/plan"]')->form();
         $form['plan_instantiation[planTemplate]'] = (string) $template->getId();
         $form['plan_instantiation[startDate]'] = '2026-01-07';
         $this->client->submit($form);
 
+        // L'agenda s'ouvre sur la première séance posée (#68).
+        self::assertResponseRedirects('/calendar/2026/1?focus=2026-01-07');
+
         $this->em->clear();
         $scheduled = $this->em->getRepository(ScheduledWorkout::class)->findAll();
         self::assertCount(1, $scheduled);
         self::assertSame('2026-01-07', $scheduled[0]->getScheduledDate()->format('Y-m-d'));
         self::assertNotNull($scheduled[0]->getSourcePlanTemplate());
+    }
+
+    /**
+     * #68 : l'agenda s'ouvre là où tombe la première séance, pas sur le mois de
+     * la date de départ. Ici la trame commence en semaine 3 : départ le
+     * 2026-01-28 (mercredi, ancre lundi 26/01), première séance lundi 9 février.
+     */
+    public function testPlacingAPlanOpensTheMonthOfItsFirstSession(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Sortie longue');
+        $template = $this->createPlanTemplate($user, 'Plan tardif', 3);
+        $item = (new PlanItem())->setWeekNumber(3)->setDayOfWeek(1)->setWorkout($workout);
+        $template->addPlanItem($item);
+        $this->em->persist($item);
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/calendar/2026/1');
+        $form = $crawler->filter('form[action$="/schedule/plan"]')->form();
+        $form['plan_instantiation[planTemplate]'] = (string) $template->getId();
+        $form['plan_instantiation[startDate]'] = '2026-01-28';
+        $this->client->submit($form);
+
+        self::assertResponseRedirects('/calendar/2026/2?focus=2026-02-09');
+
+        // La page d'arrivée passe le jour à amener à l'écran, et le porte.
+        $crawler = $this->client->followRedirect();
+        self::assertSame('2026-02-09', $crawler->filter('[data-controller="caladd"]')->attr('data-caladd-focus-value'));
+        self::assertCount(1, $crawler->filter('[data-day="2026-02-09"]'));
+        self::assertSelectorTextContains('.kd-flash', 'Plan placé dans ton agenda : 1 séance, la première le 09/02/2026.');
+    }
+
+    /**
+     * Relancer sur un plan déjà placé ne redate rien : sans case nouvelle, on
+     * ouvre la semaine où le plan commence déjà, pas la date saisie.
+     */
+    public function testReplacingAnUpToDatePlanOpensWhereItAlreadyStarts(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Sortie longue');
+        $template = $this->createPlanTemplate($user, 'Plan 5k', 1);
+        $item = (new PlanItem())->setWeekNumber(1)->setDayOfWeek(3)->setWorkout($workout);
+        $template->addPlanItem($item);
+        $this->em->persist($item);
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/calendar/2026/1');
+        $form = $crawler->filter('form[action$="/schedule/plan"]')->form();
+        $form['plan_instantiation[planTemplate]'] = (string) $template->getId();
+        $form['plan_instantiation[startDate]'] = '2026-01-07';
+        $this->client->submit($form);
+
+        $crawler = $this->client->request('GET', '/calendar/2026/1');
+        $form = $crawler->filter('form[action$="/schedule/plan"]')->form();
+        $form['plan_instantiation[planTemplate]'] = (string) $template->getId();
+        $form['plan_instantiation[startDate]'] = '2026-04-01';
+        $this->client->submit($form);
+
+        self::assertResponseRedirects('/calendar/2026/1?focus=2026-01-07');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-flash', 'Ce plan est déjà dans ton agenda et à jour : aucune séance ajoutée.');
+        self::assertCount(1, $this->em->getRepository(ScheduledWorkout::class)->findAll());
+    }
+
+    /**
+     * « Placer dans mon agenda » depuis la page du plan : l'entrée du calendrier
+     * reconduit le plan, la vue le présélectionne et fournit l'aperçu des dates
+     * (décalages des cases depuis le lundi de la semaine 1, déjà placé ou non).
+     */
+    public function testPlaceParameterPreselectsThePlanWithItsPreview(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Sortie longue');
+        $template = $this->createPlanTemplate($user, 'Plan 5k', 2);
+        foreach ([[2, 1], [1, 3]] as [$week, $day]) {
+            $item = (new PlanItem())->setWeekNumber($week)->setDayOfWeek($day)->setWorkout($workout);
+            $template->addPlanItem($item);
+            $this->em->persist($item);
+        }
+        $this->em->flush();
+        $id = (int) $template->getId();
+
+        $this->client->loginUser($user);
+        $this->client->request('GET', '/calendar?place='.$id);
+        $now = new \DateTimeImmutable('today');
+        self::assertResponseRedirects(sprintf('/calendar/%d/%d?place=%d', $now->format('Y'), $now->format('n'), $id));
+
+        $crawler = $this->client->followRedirect();
+        $wrapper = $crawler->filter('[data-controller="caladd"]');
+        self::assertSame((string) $id, $wrapper->attr('data-caladd-preselect-value'));
+
+        $plans = json_decode((string) $crawler->filter('form[action$="/schedule/plan"]')->attr('data-plan-preview-plans-value'), true);
+        // Mercredi S1 = 2, lundi S2 = 7 : triés, quelle que soit l'ordre des cases.
+        self::assertSame(['offsets' => [2, 7], 'placed' => false], $plans[$id]);
+
+        // Un plan qui n'est pas à moi n'est jamais présélectionné.
+        $other = $this->createPlanTemplate($this->createUser('other@example.com'), 'Pas à moi', 1);
+        $crawler = $this->client->request('GET', sprintf('/calendar/2026/1?place=%d', $other->getId()));
+        self::assertSame('0', $crawler->filter('[data-controller="caladd"]')->attr('data-caladd-preselect-value'));
     }
 
     public function testMoveChangesDate(): void

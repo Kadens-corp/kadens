@@ -94,6 +94,8 @@ final class CoachController extends AbstractController
         ProfileStats $profileStats,
         HeartRateZones $heartRateZones,
         TrainingLog $trainingLog,
+        PlanScheduler $planScheduler,
+        Request $request,
     ): Response {
         $this->denyUnlessCoachOf($athlete);
 
@@ -106,6 +108,7 @@ final class CoachController extends AbstractController
         // série. Le total dit combien il y en a derrière ces dix-là — sans lui,
         // la fiche laissait croire que l'athlète n'avait fait que ça.
         $logged = $trainingLog->recent($athlete, self::LOGGED_SESSIONS);
+        $plans = $planTemplateRepository->findBy(['owner' => $athlete], ['title' => 'ASC']);
 
         return $this->render('coach/athlete.html.twig', [
             'athlete' => $athlete,
@@ -114,7 +117,11 @@ final class CoachController extends AbstractController
             'workouts' => $workoutRepository->findLibraryForOwner($athlete),
             // Le seul élément de la page qui parle du coach : ce qu'il peut donner.
             'coachWorkouts' => $workoutRepository->findLibraryForOwner($coach),
-            'plans' => $planTemplateRepository->findBy(['owner' => $athlete], ['title' => 'ASC']),
+            'plans' => $plans,
+            // Aperçu des dates avant de placer un plan (#68), et présélection
+            // depuis « Placer dans son agenda » sur la page du plan.
+            'planPlacement' => $planScheduler->placementPreviews($plans, $athlete),
+            'preselectPlanId' => $request->query->getInt('plan'),
             'coachPlans' => $planTemplateRepository->findBy(['owner' => $coach], ['title' => 'ASC']),
             'upcoming' => $scheduledWorkoutRepository->findByOwnerBetween($athlete, $today, $today->modify('+8 weeks')),
             'logged' => $logged,
@@ -434,9 +441,9 @@ final class CoachController extends AbstractController
     }
 
     /**
-     * Instancie un plan de l'athlète sur son calendrier. `PlanScheduler` prend un
-     * owner explicite : on lui passe l'athlète, donc l'instanciation et les resync
-     * ultérieurs restent les siens.
+     * Place un plan de l'athlète dans son agenda. `PlanScheduler` prend un owner
+     * explicite : on lui passe l'athlète, donc la pose et les resync ultérieurs
+     * restent les siens.
      */
     #[Route('/athlete/{id}/instantiate', name: 'app_coach_instantiate', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function instantiatePlan(
@@ -455,7 +462,7 @@ final class CoachController extends AbstractController
         $startDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $payload->getString('startDate')) ?: null;
 
         if (null === $template || null === $startDate || $template->getOwner() !== $athlete) {
-            $this->addFlash('error', 'Impossible d\'instancier ce plan.');
+            $this->addFlash('error', 'Impossible de placer ce plan dans l\'agenda.');
 
             return $redirect;
         }
@@ -463,9 +470,17 @@ final class CoachController extends AbstractController
         $alreadyOnCalendar = $planScheduler->isInstantiated($template, $athlete);
         $created = $planScheduler->instantiate($template, $athlete, $startDate);
 
+        $count = \count($created);
+        $plural = $count > 1 ? 's' : '';
         $this->addFlash('success', $alreadyOnCalendar
-            ? sprintf('Plan « %s » resynchronisé : %d nouvelle(s) séance(s).', $template->getTitle(), \count($created))
-            : sprintf('Plan « %s » posé chez %s : %d séance(s).', $template->getTitle(), $athlete->getDisplayName(), \count($created)));
+            ? sprintf(
+                'Le plan « %s » était déjà dans l\'agenda de %s : %d nouvelle%s séance%s ajoutée%s, les autres n\'ont pas bougé.',
+                $template->getTitle(), $athlete->getDisplayName(), $count, $plural, $plural, $plural,
+            )
+            : sprintf(
+                'Plan « %s » placé dans l\'agenda de %s : %d séance%s.',
+                $template->getTitle(), $athlete->getDisplayName(), $count, $plural,
+            ));
 
         return $redirect;
     }

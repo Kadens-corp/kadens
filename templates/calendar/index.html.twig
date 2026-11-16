@@ -64,7 +64,9 @@
 
     {% if nextGoal %}{{ include('calendar/_goal_banner.html.twig', {goal: nextGoal}) }}{% endif %}
 
-    <div data-controller="caladd">
+    <div data-controller="caladd"
+         data-caladd-preselect-value="{{ preselectPlanId ?? 0 }}"
+         data-caladd-focus-value="{{ focusDate ?? '' }}">
         {{ include('calendar/_addbar.html.twig') }}
 
         {{ include('calendar/_activity_legend.html.twig') }}
@@ -79,7 +81,7 @@
                     {% for cell in week %}
                         {% set weekend = cell.date|date('N') in ['6', '7'] %}
                         {% set cellGoals = goalsByDate[cell.date|date('Y-m-d')] ?? [] %}
-                        <div class="kd-calday{{ not cell.inMonth ? ' kd-calday--out' }}{{ cell.isToday ? ' kd-calday--today' }}{{ weekend ? ' kd-calday--weekend' }}{{ cellGoals is not empty ? ' kd-calday--goal' }}">
+                        <div data-day="{{ cell.date|date('Y-m-d') }}" class="kd-calday{{ not cell.inMonth ? ' kd-calday--out' }}{{ cell.isToday ? ' kd-calday--today' }}{{ weekend ? ' kd-calday--weekend' }}{{ cellGoals is not empty ? ' kd-calday--goal' }}">
                             {# Le jour de la semaine n'est porté que par l'en-tête
                                de colonne : en agenda vertical (téléphone) il n'y
                                a plus de colonne, chaque jour doit se nommer. #}

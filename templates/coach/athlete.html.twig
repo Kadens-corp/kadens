@@ -251,29 +251,37 @@
                 </ul>
             </div>
 
-            {# Instanciation idempotente : relancer resynchronise (add-only), ne duplique pas. #}
-            <section class="kd-card kd-section__block">
-                <h3 class="kd-card__title">{{ ux_icon('lucide:calendar-range') }} Poser un plan sur son calendrier</h3>
-                <form method="post" action="{{ path('app_coach_instantiate', {id: athlete.id}) }}" class="kd-coachform">
+            {# Pose idempotente : relancer ajoute les cases nouvelles (add-only), ne
+               duplique ni ne redate rien. L'aperçu (#68) dit où tomberont les
+               séances avant validation ; `?plan=` (bouton de la page du plan)
+               présélectionne le plan et amène la section à l'écran. #}
+            <section class="kd-card kd-section__block" id="placer-un-plan">
+                <h3 class="kd-card__title">{{ ux_icon('lucide:calendar-range') }} Placer un plan dans son agenda</h3>
+                <form method="post" action="{{ path('app_coach_instantiate', {id: athlete.id}) }}" class="kd-coachform"
+                      data-controller="plan-preview"
+                      data-plan-preview-plans-value="{{ planPlacement|json_encode }}"
+                      data-action="change->plan-preview#update input->plan-preview#update">
                     <input type="hidden" name="_token" value="{{ csrf_token('coach_instantiate' ~ athlete.id) }}">
                     <div class="kd-field kd-coachform__field">
                         <label class="kd-label" for="coach_instantiate_plan">Plan</label>
-                        <select class="kd-input" id="coach_instantiate_plan" name="planId" required>
+                        <select class="kd-input" id="coach_instantiate_plan" name="planId" required
+                                data-plan-preview-target="plan">
                             {% for plan in plans %}
-                                <option value="{{ plan.id }}">{{ plan.title }}</option>
+                                <option value="{{ plan.id }}"{{ plan.id == preselectPlanId ? ' selected' }}>{{ plan.title }}</option>
                             {% endfor %}
                         </select>
                     </div>
                     <div class="kd-field kd-coachform__field kd-coachform__field--narrow">
                         <label class="kd-label" for="coach_instantiate_start">Début</label>
                         <input class="kd-input" type="date" id="coach_instantiate_start" name="startDate"
-                               value="{{ 'monday this week'|date('Y-m-d') }}" required>
+                               value="{{ 'monday this week'|date('Y-m-d') }}" required
+                               data-plan-preview-target="date">
                     </div>
                     <button type="submit" class="kd-btn kd-btn--primary">
-                        {{ ux_icon('lucide:calendar-range') }} Instancier
+                        {{ ux_icon('lucide:calendar-range') }} Placer dans l'agenda
                     </button>
+                    {{ include('components/_plan_placement_preview.html.twig', {whose: 'son'}, with_context = false) }}
                 </form>
-                <p class="kd-coachform__hint">Relancer sur un plan déjà posé resynchronise sans redater : les séances existantes et leur statut sont préservés.</p>
             </section>
         {% endif %}
     </section>

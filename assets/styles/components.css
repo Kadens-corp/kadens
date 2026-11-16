@@ -4251,7 +4251,7 @@ a.kd-planday__item:hover svg {
    modale, pour garder les cases lisibles malgré la densité.
    ---------------------------------------------------------------------------- */
 
-/* Barre d'ajout : poser une séance / instancier un plan (deux replis) */
+/* Barre d'ajout : poser une séance / placer un plan (deux replis) */
 .kd-calbar {
     display: flex;
     flex-wrap: wrap;
@@ -8344,7 +8344,7 @@ textarea.kd-inlineedit__input {
 
 /* ============================================================================
    Ajout au calendrier : « + » par jour + modales de sélection (poser une séance /
-   instancier un plan). Remplacent les anciens dropdowns de la barre d'ajout.
+   placer un plan). Remplacent les anciens dropdowns de la barre d'ajout.
    ============================================================================ */
 
 /* Bouton « + » d'un jour (grille mois) : poussé en bas de la case, révélé au
@@ -8570,7 +8570,7 @@ textarea.kd-inlineedit__input {
     display: inline-flex;
 }
 
-/* Pied de la modale plan : date de départ + bouton « Instancier ». */
+/* Pied de la modale plan : date de départ + bouton « Placer dans l'agenda ». */
 .kd-picker__foot {
     display: flex;
     align-items: flex-end;
@@ -8583,6 +8583,36 @@ textarea.kd-inlineedit__input {
 .kd-picker__foot .kd-field {
     flex: 1 1 160px;
     margin: 0;
+}
+
+/* Aperçu d'une pose de plan (#68) : la règle d'ancrage en petit, et la ligne
+   vivante (dates, nombre de séances) en texte courant, filet rouge à gauche. */
+.kd-placement {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-2);
+    padding-top: var(--kd-space-4);
+    flex-basis: 100%;
+}
+
+.kd-placement__rule {
+    margin: 0;
+    font-size: 12px;
+    color: var(--color-text-faint);
+}
+
+.kd-placement__preview {
+    margin: 0;
+    padding-left: var(--kd-space-3);
+    border-left: 2px solid var(--color-primary);
+    font-size: 13px;
+    color: var(--color-text);
+}
+
+/* Jour amené à l'écran après une pose de plan (`caladd`, valeur `focus`). */
+.kd-calfocus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
 }
 
 /* ----------------------------------------------------------------------------

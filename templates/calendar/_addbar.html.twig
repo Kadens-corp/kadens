@@ -1,17 +1,18 @@
 {# Barre d'ajout + modales de sélection (vues mois et semaine). « Poser une
    séance » n'est plus un dropdown : elle s'ouvre via le « + » d'un jour (grille)
-   et présente les séances en cartes cherchables/triables/filtrables. « Instancier
-   un plan » garde un bouton en tête mais ouvre lui aussi une vraie modale à cartes.
+   et présente les séances en cartes cherchables/triables/filtrables. « Placer un
+   plan dans l'agenda » garde un bouton en tête mais ouvre lui aussi une vraie
+   modale à cartes, avec l'aperçu des dates (contrôleur `plan-preview`, #68).
    Recherche/tri/filtre 100 % client (contrôleur `caladd`), le wrapper porte
    data-controller="caladd" (posé par index/week, il englobe la grille et ses « + »).
 
    Attend : workoutCards, workoutActivities, planCards, instantiateForm,
-   instantiatedPlans, statuses, year, month. #}
+   instantiatedPlans, planPlacement, statuses, year, month. #}
 {% import 'components/_activity.html.twig' as activity %}
 
 <div class="kd-calbar">
     <button type="button" class="kd-btn kd-btn--secondary kd-btn--sm" data-action="caladd#openPlan">
-        {{ ux_icon('lucide:layers') }} Instancier un plan
+        {{ ux_icon('lucide:layers') }} Placer un plan dans l'agenda
     </button>
 
     {% if instantiatedPlans|length %}
@@ -24,7 +25,7 @@
                 <input type="hidden" name="month" value="{{ month }}">
                 <div class="kd-field">
                     <select name="planId" class="kd-input kd-select" required>
-                        <option value="" disabled selected>Choisir un plan instancié…</option>
+                        <option value="" disabled selected>Choisir un plan…</option>
                         {% for plan in instantiatedPlans %}
                             <option value="{{ plan.id }}">{{ plan.title }}</option>
                         {% endfor %}
@@ -113,14 +114,15 @@
 </dialog>
 
 {# ---------------------------------------------------------------------------
-   Modale « instancier un plan » — cartes de plans (sélection) + date + confirmer.
-   Le <select> du PlanInstantiationType est caché et piloté par les cartes.
+   Modale « placer un plan dans l'agenda » : cartes de plans (sélection) + date
+   + aperçu + confirmer. Le <select> du PlanInstantiationType est caché et piloté
+   par les cartes ; `plan-preview` relit select et date à chaque changement.
    --------------------------------------------------------------------------- #}
 <dialog class="kd-modal kd-modal--picker" data-caladd-target="planDialog" data-action="click->caladd#backdrop">
     <div class="kd-modal__card kd-modal__card--picker">
         <div class="kd-modal__head">
             <div>
-                <h2 class="kd-modal__title">Instancier un plan</h2>
+                <h2 class="kd-modal__title">Placer un plan dans l'agenda</h2>
                 <p class="kd-modal__sub">Choisis un plan, puis sa date de départ.</p>
             </div>
             <button type="button" class="kd-modal__close" data-action="caladd#close" aria-label="Fermer">
@@ -139,9 +141,14 @@
             </select>
         </div>
 
-        {{ form_start(instantiateForm, {attr: {class: 'kd-picker'}}) }}
+        {{ form_start(instantiateForm, {attr: {
+            class: 'kd-picker',
+            'data-controller': 'plan-preview',
+            'data-plan-preview-plans-value': planPlacement|json_encode,
+            'data-action': 'change->plan-preview#update input->plan-preview#update',
+        }}) }}
             <div class="kd-picker__hidden" data-caladd-target="planSelectWrap" hidden>
-                {{ form_row(instantiateForm.planTemplate) }}
+                {{ form_row(instantiateForm.planTemplate, {attr: {'data-plan-preview-target': 'plan'}}) }}
             </div>
 
             <div class="kd-picker__list" data-caladd-target="planList">
@@ -170,11 +177,12 @@
             </div>
 
             <div class="kd-picker__foot">
-                {{ form_row(instantiateForm.startDate, {attr: {'data-caladd-target': 'planDate'}}) }}
+                {{ form_row(instantiateForm.startDate, {attr: {'data-caladd-target': 'planDate', 'data-plan-preview-target': 'date'}}) }}
                 <button type="submit" class="kd-btn kd-btn--primary" data-caladd-target="planSubmit" disabled>
-                    {{ ux_icon('lucide:calendar-plus') }} Instancier
+                    {{ ux_icon('lucide:calendar-plus') }} Placer dans l'agenda
                 </button>
             </div>
+            {{ include('components/_plan_placement_preview.html.twig', {whose: 'ton'}, with_context = false) }}
         {{ form_end(instantiateForm) }}
     </div>
 </dialog>
