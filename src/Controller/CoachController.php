@@ -19,6 +19,7 @@ use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
 use App\Repository\WorkoutRepository;
 use App\Security\Voter\ExerciseVoter;
+use App\Service\CalendarWeek;
 use App\Service\CoachingResolver;
 use App\Service\ExerciseBodyMap;
 use App\Service\ExerciseProgress;
@@ -223,6 +224,43 @@ final class CoachController extends AbstractController
         return $this->render('profile/history.html.twig', [
             'history' => $history->calendar($athlete),
             'groups' => MuscleGroup::cases(),
+            'subject' => $athlete,
+        ]);
+    }
+
+    /**
+     * L'agenda de l'athlète, semaine par semaine — `/calendar/week` lu au nom de
+     * quelqu'un d'autre, même template et même service (`CalendarWeek` prend
+     * n'importe quel `User`) (#77, C-14).
+     *
+     * La fiche ne listait ses huit prochaines semaines qu'en texte : le coach ne
+     * pouvait ni ouvrir, ni déplacer, ni retirer une séance prévue. Ici chaque
+     * pastille porte les gestes du calendrier (statut, déplacer, retirer), tous
+     * gardés par `ScheduledWorkoutVoter::EDIT`, qui a déjà sa branche coach. Le
+     * réalisé et le ressenti restent à l'athlète (`LOG`) : la modale ne les
+     * propose pas.
+     *
+     * Ce qui ne s'y trouve PAS, volontairement : la barre d'ajout, l'export et
+     * l'abonnement ICS. La première pose depuis la bibliothèque du lecteur, les
+     * deux autres livrent le calendrier du lecteur. Poser pour l'athlète reste
+     * sur sa fiche, qui sait déjà le faire avec SA bibliothèque.
+     */
+    #[Route('/athlete/{id}/calendar/{date}', name: 'app_coach_athlete_calendar', methods: ['GET'], requirements: ['id' => '\d+', 'date' => '\d{4}-\d{2}-\d{2}'], defaults: ['date' => null])]
+    public function athleteCalendar(
+        #[MapEntity(id: 'id')] User $athlete,
+        CalendarWeek $calendarWeek,
+        ?string $date = null,
+    ): Response {
+        $this->denyUnlessCoachOf($athlete);
+
+        $ref = null === $date ? false : \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        if (false === $ref) {
+            $ref = new \DateTimeImmutable('today');
+        }
+
+        return $this->render('calendar/week.html.twig', [
+            ...$calendarWeek->for($athlete, $ref),
+            'statuses' => ScheduledStatus::cases(),
             'subject' => $athlete,
         ]);
     }

@@ -7,6 +7,7 @@ use App\Form\PlanInstantiationType;
 use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
 use App\Repository\WorkoutRepository;
+use App\Service\CalendarWeek;
 use App\Service\PlanScheduler;
 use App\Service\WorkoutMetrics;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -31,13 +32,6 @@ final class CalendarController extends AbstractController
         private readonly WorkoutMetrics $workoutMetrics,
     ) {
     }
-
-    /** Noms de mois en français (index 1..12), le calendrier étant mono-langue. */
-    private const MONTH_NAMES = [
-        1 => 'Janvier', 2 => 'Février', 3 => 'Mars', 4 => 'Avril',
-        5 => 'Mai', 6 => 'Juin', 7 => 'Juillet', 8 => 'Août',
-        9 => 'Septembre', 10 => 'Octobre', 11 => 'Novembre', 12 => 'Décembre',
-    ];
 
     #[Route('', name: 'app_calendar_index', methods: ['GET'])]
     public function index(Request $request): Response
@@ -87,7 +81,7 @@ final class CalendarController extends AbstractController
         $gridStart = $first->modify(sprintf('-%d days', (int) $first->format('N') - 1));
         $last = $first->modify('last day of this month');
         $gridEnd = $last->modify(sprintf('+%d days', 7 - (int) $last->format('N')));
-        $goalsByDate = $this->indexGoalsByDate($goalRepository->findByOwnerBetween($user, $gridStart, $gridEnd));
+        $goalsByDate = CalendarWeek::goalsByDate($goalRepository->findByOwnerBetween($user, $gridStart, $gridEnd));
         $nextGoal = $goalRepository->findNextForOwner($user);
 
         // Aperçu au survol : une mise à plat par séance distincte du mois,
@@ -118,7 +112,7 @@ final class CalendarController extends AbstractController
         return $this->rememberView($this->render('calendar/index.html.twig', [
             'year' => $year,
             'month' => $month,
-            'monthLabel' => self::MONTH_NAMES[$month].' '.$year,
+            'monthLabel' => CalendarWeek::MONTH_NAMES[$month].' '.$year,
             'weeks' => $weeks,
             'flattened' => $flattened,
             'goalsByDate' => $goalsByDate,
@@ -182,8 +176,7 @@ final class CalendarController extends AbstractController
         ScheduledWorkoutRepository $scheduledWorkoutRepository,
         WorkoutRepository $workoutRepository,
         PlanTemplateRepository $planTemplateRepository,
-        \App\Repository\GoalRepository $goalRepository,
-        \App\Service\PlanFlattener $planFlattener,
+        CalendarWeek $calendarWeek,
         PlanScheduler $planScheduler,
     ): Response {
         try {
@@ -192,69 +185,13 @@ final class CalendarController extends AbstractController
             throw $this->createNotFoundException('Date invalide.');
         }
 
-        // Ancrage au lundi ISO de la semaine contenant la date.
-        $monday = $ref->modify(sprintf('-%d days', (int) $ref->format('N') - 1))->setTime(0, 0);
-        $sunday = $monday->modify('+6 days');
-        $todayKey = (new \DateTimeImmutable('today'))->format('Y-m-d');
-
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
-        $byDate = [];
-        $flattened = [];
-        $ids = [];
-        foreach ($scheduledWorkoutRepository->findByOwnerBetween($user, $monday, $sunday) as $scheduled) {
-            $byDate[$scheduled->getScheduledDate()->format('Y-m-d')][] = $scheduled;
-            $ids[] = (int) $scheduled->getId();
-            $workout = $scheduled->getWorkout();
-            if (null !== $workout) {
-                $flattened[(int) $workout->getId()] ??= $planFlattener->flattenWorkout($workout);
-            }
-        }
 
-        $goalsByDate = $this->indexGoalsByDate($goalRepository->findByOwnerBetween($user, $monday, $sunday));
-
-        $dayNames = [1 => 'Lundi', 2 => 'Mardi', 3 => 'Mercredi', 4 => 'Jeudi', 5 => 'Vendredi', 6 => 'Samedi', 7 => 'Dimanche'];
-        $days = [];
-        $totalMinutes = 0;
-        $cursor = $monday;
-        for ($i = 0; $i < 7; ++$i) {
-            $key = $cursor->format('Y-m-d');
-            $scheduled = $byDate[$key] ?? [];
-            foreach ($scheduled as $s) {
-                $totalMinutes += (int) $s->getWorkout()?->getEstimatedDurationMinutes();
-            }
-            $days[] = [
-                'date' => $cursor,
-                'dayName' => $dayNames[(int) $cursor->format('N')],
-                'isToday' => $key === $todayKey,
-                'isPast' => $key < $todayKey,
-                'weekend' => (int) $cursor->format('N') >= 6,
-                'scheduled' => $scheduled,
-                'goals' => $goalsByDate[$key] ?? [],
-            ];
-            $cursor = $cursor->modify('+1 day');
-        }
-
-        $counts = $scheduledWorkoutRepository->countByStatusForOwnerBetween($user, $monday, $sunday);
-
+        // La semaine se construit au nom d'un propriétaire : ici soi, sur la
+        // fiche athlète le coach la lit au nom de l'athlète (#77).
         return $this->rememberView($this->render('calendar/week.html.twig', [
-            'monday' => $monday,
-            'sunday' => $sunday,
-            'weekLabel' => $this->formatWeekLabel($monday, $sunday),
-            'isoWeek' => (int) $monday->format('W'),
-            'days' => $days,
-            'flattened' => $flattened,
-            // Le ressenti des séances faites, sur la carte haute : une requête
-            // pour la semaine. La vue mois ne l'affiche pas, faute de place.
-            'ratings' => $scheduledWorkoutRepository->ratingsFor($ids),
-            'nextGoal' => $goalRepository->findNextForOwner($user),
-            'counts' => $counts,
-            'sessionCount' => array_sum($counts),
-            'totalMinutes' => $totalMinutes,
-            'todayKey' => $todayKey,
-            'prevDate' => $monday->modify('-7 days')->format('Y-m-d'),
-            'nextDate' => $monday->modify('+7 days')->format('Y-m-d'),
-            'monthPivot' => ['year' => (int) $monday->modify('+3 days')->format('Y'), 'month' => (int) $monday->modify('+3 days')->format('n')],
+            ...$calendarWeek->for($user, $ref),
             ...$this->buildAddContext($request, $workoutRepository, $planTemplateRepository, $scheduledWorkoutRepository, $planScheduler),
         ]), 'week');
     }
@@ -272,27 +209,6 @@ final class CalendarController extends AbstractController
         );
 
         return $response;
-    }
-
-    /**
-     * Libellé lisible d'une semaine : « 21 – 27 juillet 2026 », en compactant le
-     * mois/l'année communs aux deux bornes.
-     */
-    private function formatWeekLabel(\DateTimeImmutable $monday, \DateTimeImmutable $sunday): string
-    {
-        $mFrom = self::MONTH_NAMES[(int) $monday->format('n')];
-        $mTo = self::MONTH_NAMES[(int) $sunday->format('n')];
-        $yFrom = $monday->format('Y');
-        $yTo = $sunday->format('Y');
-
-        if ($yFrom !== $yTo) {
-            return sprintf('%d %s %s – %d %s %s', (int) $monday->format('j'), $mFrom, $yFrom, (int) $sunday->format('j'), $mTo, $yTo);
-        }
-        if ($mFrom !== $mTo) {
-            return sprintf('%d %s – %d %s %s', (int) $monday->format('j'), $mFrom, (int) $sunday->format('j'), $mTo, $yTo);
-        }
-
-        return sprintf('%d – %d %s %s', (int) $monday->format('j'), (int) $sunday->format('j'), $mTo, $yTo);
     }
 
     /**
@@ -406,27 +322,6 @@ final class CalendarController extends AbstractController
             'workoutActivities' => $activityFilters,
             'planCards' => $planCards,
         ];
-    }
-
-    /**
-     * Indexe des objectifs par date d'échéance (Y-m-d). Plusieurs objectifs peuvent
-     * tomber le même jour, d'où une liste par clé.
-     *
-     * @param list<\App\Entity\Goal> $goals
-     *
-     * @return array<string, list<\App\Entity\Goal>>
-     */
-    private function indexGoalsByDate(array $goals): array
-    {
-        $byDate = [];
-        foreach ($goals as $goal) {
-            $date = $goal->getTargetDate();
-            if (null !== $date) {
-                $byDate[$date->format('Y-m-d')][] = $goal;
-            }
-        }
-
-        return $byDate;
     }
 
     /**

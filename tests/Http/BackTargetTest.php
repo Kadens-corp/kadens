@@ -31,6 +31,8 @@ final class BackTargetTest extends TestCase
         // Même piège d'alternance que `plan-edit` : `athlete-log-7` n'est pas un
         // athlète dont l'identifiant serait « log-7 ».
         yield 'journal d\'un athlète' => ['athlete-log-7', BackTarget::ATHLETE_LOG, '7'];
+        // L'agenda d'un athlète porte deux clés, gardées ensemble dans la valeur.
+        yield 'agenda d\'un athlète' => ['athlete-cal-7-2026-08-10', BackTarget::ATHLETE_CAL, '7-2026-08-10'];
         // Le seul contexte sans identifiant : mon journal, il n'y en a qu'un.
         yield 'mon journal' => ['log', BackTarget::LOG, ''];
         yield 'mois' => ['cal-month-2026-08', BackTarget::CAL_MONTH, '2026-08'];
@@ -69,6 +71,9 @@ final class BackTargetTest extends TestCase
         yield 'jeton avec suffixe' => ['plan-12-bis'];
         yield 'athlète sans identifiant' => ['athlete-'];
         yield 'athlète non numérique' => ['athlete-moi'];
+        yield 'agenda sans semaine' => ['athlete-cal-7'];
+        yield 'agenda sans athlète' => ['athlete-cal-2026-08-10'];
+        yield 'agenda à jour impossible' => ['athlete-cal-7-2026-02-31'];
         // « log » est le type nu ; « log-3 » n'est pas un journal numéroté.
         yield 'journal numéroté' => ['log-3'];
     }

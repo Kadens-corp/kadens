@@ -1,8 +1,27 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Semaine — {{ weekLabel }}{% endblock %}
+{# ============================================================================
+   Vue semaine du calendrier, servie à deux lecteurs.
+
+   `subject` = l'athlète dont on lit l'agenda (`/coach/athlete/{id}/calendar`,
+   #77), ou null pour soi. Règle des templates partagés : tous les liens se
+   calculent depuis `subject`, sinon le clic suivant ramène le coach sur ses
+   propres données. Côté coach, la page garde les gestes sur une séance prévue
+   (ouvrir, statut, déplacer, retirer : `ScheduledWorkoutVoter::EDIT`) et perd ce
+   qui parle du calendrier du lecteur : bascule mois, ajout depuis SA
+   bibliothèque, export et abonnement ICS.
+   ============================================================================ #}
+{% block title %}{% if subject|default(null) %}Agenda de {{ subject.displayName }} — {% endif %}Semaine — {{ weekLabel }}{% endblock %}
 
 {% block body %}
+    {% set subject = subject|default(null) %}
+    {% set weekRoute = subject ? 'app_coach_athlete_calendar' : 'app_calendar_week' %}
+    {% set weekParams = subject ? {id: subject.id} : {} %}
+    {# Ancre des liens sortants : la séance ouverte d'ici repart vers cette
+       semaine, chez soi ou dans l'agenda de l'athlète. #}
+    {% set backFrom = subject
+        ? back_token('athlete-cal', subject.id ~ '-' ~ monday|date('Y-m-d'))
+        : back_token('cal-week', monday|date('Y-m-d')) %}
     {% for message in app.flashes('success') %}
         <div class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }}{{ message }}</div>
     {% endfor %}
@@ -12,11 +31,13 @@
 
     <div class="kd-pagehead">
         <div>
-            <p class="kd-eyebrow">Planning · Semaine {{ isoWeek }}</p>
+            <p class="kd-eyebrow">{{ subject ? 'Son agenda' : 'Planning' }} · Semaine {{ isoWeek }}</p>
             <h1 class="kd-title">{{ weekLabel }}</h1>
+            {% if subject %}<p class="kd-pagehead__lead">{{ subject.displayName }}</p>{% endif %}
         </div>
 
         <div class="kd-calhead">
+            {% if not subject %}
             <div class="kd-viewtoggle" role="group" aria-label="Type de vue">
                 <a class="kd-viewtoggle__btn" href="{{ path('app_calendar_month', {year: monthPivot.year, month: monthPivot.month}) }}">
                     {{ ux_icon('lucide:calendar-days') }} Mois
@@ -25,25 +46,37 @@
                     {{ ux_icon('lucide:calendar-range') }} Semaine
                 </a>
             </div>
+            {% endif %}
 
             <nav class="kd-actionbar__end" aria-label="Navigation de la semaine">
-                <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_calendar_week', {date: prevDate}) }}" aria-label="Semaine précédente">
+                <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path(weekRoute, weekParams|merge({date: prevDate})) }}" aria-label="Semaine précédente">
                     {{ ux_icon('lucide:arrow-left') }}
                 </a>
-                <a class="kd-btn kd-btn--ghost kd-btn--sm" href="{{ path('app_calendar_week_index') }}">Cette semaine</a>
-                <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_calendar_week', {date: nextDate}) }}" aria-label="Semaine suivante">
+                <a class="kd-btn kd-btn--ghost kd-btn--sm" href="{{ subject ? path(weekRoute, weekParams) : path('app_calendar_week_index') }}">Cette semaine</a>
+                <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path(weekRoute, weekParams|merge({date: nextDate})) }}" aria-label="Semaine suivante">
                     {{ ux_icon('lucide:arrow-right') }}
                 </a>
-                {# L'historique (calendrier annuel du fait) est rangé sous le profil ;
-                   le jeton `from` y ramène à la vue quittée au lieu du profil. #}
-                <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_profile_history', back_to('cal-week', monday|date('Y-m-d'))) }}">
-                    {{ ux_icon('lucide:history') }} Historique
-                </a>
-                <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_export_schedule', {year: monthPivot.year, month: monthPivot.month}) }}">
-                    {{ ux_icon('lucide:file-down') }} Exporter
-                </a>
-                {{ include('calendar/_subscribe.html.twig') }}
-                {{ include('components/_help.html.twig', {topic: 'calendar', title: 'Comment marche le calendrier'}, with_context = false) }}
+                {% if subject %}
+                    {# Son historique a sa page coach, gardée par la relation ; le
+                       retour de la fiche suffit, il n'y a qu'un chemin d'arrivée. #}
+                    <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_coach_athlete_history', {id: subject.id}) }}">
+                        {{ ux_icon('lucide:history') }} Historique
+                    </a>
+                    <a class="kd-btn kd-btn--ghost kd-btn--sm" href="{{ path('app_coach_athlete', {id: subject.id}) }}">
+                        {{ ux_icon('lucide:arrow-left') }} Retour à sa fiche
+                    </a>
+                {% else %}
+                    {# L'historique (calendrier annuel du fait) est rangé sous le profil ;
+                       le jeton `from` y ramène à la vue quittée au lieu du profil. #}
+                    <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_profile_history', back_to('cal-week', monday|date('Y-m-d'))) }}">
+                        {{ ux_icon('lucide:history') }} Historique
+                    </a>
+                    <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_export_schedule', {year: monthPivot.year, month: monthPivot.month}) }}">
+                        {{ ux_icon('lucide:file-down') }} Exporter
+                    </a>
+                    {{ include('calendar/_subscribe.html.twig') }}
+                    {{ include('components/_help.html.twig', {topic: 'calendar', title: 'Comment marche le calendrier'}, with_context = false) }}
+                {% endif %}
             </nav>
         </div>
     </div>
@@ -80,7 +113,16 @@
     <div data-controller="caladd"
          data-caladd-preselect-value="{{ preselectPlanId ?? 0 }}"
          data-caladd-focus-value="{{ focusDate ?? '' }}">
-        {{ include('calendar/_addbar.html.twig', {year: monthPivot.year, month: monthPivot.month}) }}
+        {% if subject %}
+            {# Poser pour l'athlète part de SA bibliothèque : c'est sa fiche qui le
+               fait, la barre d'ajout d'ici puise dans celle du lecteur. #}
+            <p class="kd-lead">
+                Ouvre une séance pour la lire, la déplacer, changer son statut ou la retirer. Pour en poser une nouvelle, passe par
+                <a href="{{ path('app_coach_athlete', {id: subject.id}) }}">sa fiche</a>.
+            </p>
+        {% else %}
+            {{ include('calendar/_addbar.html.twig', {year: monthPivot.year, month: monthPivot.month}) }}
+        {% endif %}
 
         {{ include('calendar/_activity_legend.html.twig') }}
 
@@ -91,12 +133,14 @@
                         <span class="kd-weekday__name">{{ day.dayName }}</span>
                         <span class="kd-weekday__right">
                             <span class="kd-weekday__num">{{ day.date|date('j') }}</span>
-                            <button type="button" class="kd-calday__add kd-calday__add--week"
-                                    data-action="caladd#openWorkout"
-                                    data-caladd-date-param="{{ day.date|date('Y-m-d') }}"
-                                    aria-label="Ajouter une séance le {{ day.date|date('d/m') }}">
-                                {{ ux_icon('lucide:plus') }}
-                            </button>
+                            {% if not subject %}
+                                <button type="button" class="kd-calday__add kd-calday__add--week"
+                                        data-action="caladd#openWorkout"
+                                        data-caladd-date-param="{{ day.date|date('Y-m-d') }}"
+                                        aria-label="Ajouter une séance le {{ day.date|date('d/m') }}">
+                                    {{ ux_icon('lucide:plus') }}
+                                </button>
+                            {% endif %}
                         </span>
                     </header>
                     {% for goal in day.goals %}
@@ -113,7 +157,7 @@
                                 detailed: true,
                                 rating: ratings[scheduled.id] ?? null,
                                 overdue: day.isPast and scheduled.status.value == 'planned',
-                                backFrom: back_token('cal-week', monday|date('Y-m-d')),
+                                backFrom: backFrom,
                             }) }}
                         {% else %}
                             <p class="kd-weekday__rest">Repos</p>

@@ -373,9 +373,14 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   ce que faisait « Voir la trajectoire », qui envoyait le coach de l'athlète à
   lui-même. Le coach a donc son propre espace de lecture, gardé par
   `CoachController::denyUnlessCoachOf()` : `/coach/athlete/{id}/exercise/{exId}`,
-  `/stats`, `/history`, qui rendent les **mêmes** templates au nom de quelqu'un
-  d'autre (paramètre `subject`, null = soi ; les services `ExerciseTrajectory`,
-  `TrainingStats` et `TrainingHistory` prennent déjà n'importe quel `User`). Règle
+  `/stats`, `/history`, `/calendar/{date}` (#77), qui rendent les **mêmes**
+  templates au nom de quelqu'un d'autre (paramètre `subject`, null = soi ; les
+  services `ExerciseTrajectory`, `TrainingStats`, `TrainingHistory` et
+  `CalendarWeek` prennent n'importe quel `User`). L'agenda coach garde les gestes
+  `EDIT` (statut, déplacer, retirer) et perd ce qui parle du calendrier du
+  lecteur (ajout depuis sa bibliothèque, export, ICS) ; après un geste sur la
+  séance d'un autre, `ScheduledWorkoutController::redirectToCalendarOf()` ramène
+  dans l'agenda du **propriétaire**, jamais dans celui du lecteur. Règle
   à tenir de ce côté : un template servi aux deux calcule ses destinations depuis
   `subject` — un lien interne oublié (fenêtre `?range=`, retour) ramènerait le
   coach sur ses propres données au clic suivant.
@@ -395,7 +400,8 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   un type et une clé résolus contre une table fermée de routes
   (`App\Http\BackTarget`, garde-fou testé) — aucune redirection ouverte n'est
   possible ; les droits se vérifient **avant** le libellé, un titre de plan étant
-  privé — de même pour `athlete-<id>` / `athlete-log-<id>`, gardés par la relation
+  privé — de même pour `athlete-<id>` / `athlete-log-<id>` /
+  `athlete-cal-<id>-<Y-m-d>`, gardés par la relation
   acceptée : l'adresse d'un athlète ne se laisse pas deviner dans la query ; et
   un jeton illisible, périmé ou hors droits **n'est pas une erreur**, il se lit
   comme une absence et la page retombe sur son retour d'origine.

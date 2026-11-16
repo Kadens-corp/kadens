@@ -10730,6 +10730,19 @@ a.kd-coachitem__name:hover {
     color: var(--color-text-secondary);
 }
 
+/* La date d'une séance à venir mène à sa semaine dans l'agenda de l'athlète
+   (#77) : elle reste discrète, le soulignement dit qu'elle se clique. */
+a.kd-coachitem__date {
+    text-decoration: underline;
+    text-decoration-color: var(--color-divider);
+    text-underline-offset: 3px;
+    transition: color .12s ease;
+}
+
+a.kd-coachitem__date:hover {
+    color: var(--color-primary);
+}
+
 @media (max-width: 560px) {
     .kd-coachcard__actions {
         margin-left: 0;

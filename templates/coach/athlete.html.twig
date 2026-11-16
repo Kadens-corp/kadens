@@ -288,12 +288,20 @@
     </section>
 
     {# --------------------------- SON CALENDRIER ----------------------------- #}
-    <section class="kd-section">
+    {# #77 (C-14) : la liste n'était que du texte. Chaque ligne ouvre désormais
+       la séance datée (le titre) ou sa semaine dans l'agenda de l'athlète (la
+       date), où se trouvent les gestes du calendrier : statut, déplacer,
+       retirer. Les deux posent un contexte de retour, sans quoi le clic suivant
+       renvoyait le coach à SON calendrier. #}
+    <section class="kd-section" id="agenda">
         <div class="kd-pagehead kd-pagehead--sub">
             <div>
                 <p class="kd-eyebrow kd-eyebrow--accent">Calendrier</p>
                 <h2 class="kd-title kd-title--sm">Ses 8 prochaines semaines</h2>
             </div>
+            <a href="{{ path('app_coach_athlete_calendar', {id: athlete.id}) }}" class="kd-btn kd-btn--ghost">
+                {{ ux_icon('lucide:calendar-range') }} Son agenda
+            </a>
         </div>
 
         {% if upcoming is empty %}
@@ -308,8 +316,11 @@
                 <ul class="kd-coachitems">
                     {% for scheduled in upcoming %}
                         <li class="kd-coachitem">
-                            <span class="kd-coachitem__date">{{ scheduled.scheduledDate|date('d/m') }}</span>
-                            <span class="kd-coachitem__name">{{ scheduled.displayTitle }}</span>
+                            <a class="kd-coachitem__date"
+                               href="{{ path('app_coach_athlete_calendar', {id: athlete.id, date: scheduled.scheduledDate|date('Y-m-d')}) }}"
+                               title="Voir sa semaine dans l'agenda">{{ scheduled.scheduledDate|date('d/m') }}</a>
+                            <a class="kd-coachitem__name"
+                               href="{{ path('app_scheduled_workout_show', {id: scheduled.id}|merge(back_to('athlete', athlete.id))) }}">{{ scheduled.displayTitle }}</a>
                             <span class="kd-badge kd-badge--{{ scheduled.status.value }}">{{ scheduled.status.label }}</span>
                         </li>
                     {% endfor %}

@@ -39,6 +39,7 @@ final class BackTarget
     public const LOG = 'log';
     public const ATHLETE = 'athlete';
     public const ATHLETE_LOG = 'athlete-log';
+    public const ATHLETE_CAL = 'athlete-cal';
 
     private function __construct(
         public readonly string $kind,
@@ -65,6 +66,12 @@ final class BackTarget
         // Même précaution d'ordre que ci-dessus : `athlete-log` avant `athlete`.
         if (1 === preg_match('/^(athlete-log|athlete)-(\d+)$/', $raw, $m)) {
             return new self($m[1], $m[2]);
+        }
+
+        // L'agenda d'un athlète porte deux clés : qui, et quelle semaine. La
+        // valeur les garde ensemble (`<id>-<Y-m-d>`), `athleteWeek()` les sépare.
+        if (1 === preg_match('/^athlete-cal-(\d+)-(\d{4}-\d{2}-\d{2})$/', $raw, $m)) {
+            return self::isRealDate($m[2], 'Y-m-d') ? new self(self::ATHLETE_CAL, $m[1].'-'.$m[2]) : null;
         }
 
         // Le journal de son propre réalisé n'a pas d'identifiant : il n'y en a
@@ -94,6 +101,21 @@ final class BackTarget
         // n'y en a qu'un) est le type nu, pas un type suivi d'un tiret orphelin
         // — que `parse()` rejetterait.
         return '' === (string) $value ? $kind : $kind.'-'.$value;
+    }
+
+    /**
+     * Les deux clés d'un jeton `athlete-cal` : l'athlète et le jour de la
+     * semaine affichée. `null` sur tout autre type.
+     *
+     * @return array{int, string}|null
+     */
+    public function athleteWeek(): ?array
+    {
+        if (self::ATHLETE_CAL !== $this->kind || 1 !== preg_match('/^(\d+)-(\d{4}-\d{2}-\d{2})$/', $this->value, $m)) {
+            return null;
+        }
+
+        return [(int) $m[1], $m[2]];
     }
 
     /**

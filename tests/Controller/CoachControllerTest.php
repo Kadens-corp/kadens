@@ -1271,6 +1271,153 @@ final class CoachControllerTest extends WebTestCase
         self::assertSelectorExists('a[href="/schedule/'.$scheduled->getId().'"]');
     }
 
+    // ------------------------------------------------ agenda de l'athlète (#77)
+
+    /**
+     * « Ses 8 prochaines semaines » n'était que du texte (C-14). Le titre ouvre
+     * la séance datée avec le retour vers la fiche, la date ouvre sa semaine
+     * dans l'agenda de l'athlète, et un bouton mène à l'agenda.
+     */
+    public function testUpcomingRowsOpenTheSessionAndItsWeek(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $date = (new \DateTimeImmutable('today'))->modify('+10 days')->format('Y-m-d');
+        $scheduled = $this->createScheduled($athlete, 'Fractionné 6 x 400 m', $date, ScheduledStatus::PLANNED);
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertSelectorExists('a[href="/schedule/'.$scheduled->getId().'?from=athlete-'.$athlete->getId().'"]');
+        self::assertSelectorExists('a[href="/coach/athlete/'.$athlete->getId().'/calendar/'.$date.'"]');
+        self::assertSelectorExists('a[href="/coach/athlete/'.$athlete->getId().'/calendar"]');
+    }
+
+    /**
+     * L'agenda de l'athlète est la vue semaine du calendrier, au nom de
+     * l'athlète : ses séances et pas celles du coach, les gestes du calendrier
+     * (statut, déplacer, retirer), et rien de ce qui parle du calendrier du
+     * lecteur (ajout depuis sa bibliothèque, export, abonnement). Chaque lien
+     * sortant porte le retour vers cette semaine de cet agenda.
+     */
+    public function testAthleteCalendarShowsHisWeekWithTheCalendarGestures(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $athlete->setUsername('Trailer38');
+        $this->em->flush();
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $scheduled = $this->createScheduled($athlete, 'Sortie longue', '2026-12-03', ScheduledStatus::PLANNED);
+        $this->createScheduled($coach, 'Séance du coach', '2026-12-03', ScheduledStatus::PLANNED);
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId().'/calendar/2026-12-03');
+
+        self::assertResponseIsSuccessful();
+        $html = $crawler->html();
+        self::assertStringContainsString('Sortie longue', $html);
+        self::assertStringContainsString('Trailer38', $html);
+        self::assertStringNotContainsString('Séance du coach', $html);
+
+        // Le lundi de la semaine, comme le jeton du calendrier de soi.
+        $from = '?from=athlete-cal-'.$athlete->getId().'-2026-11-30';
+        self::assertSelectorExists('a[href="/schedule/'.$scheduled->getId().$from.'"]');
+        self::assertSelectorExists('form[action="/schedule/'.$scheduled->getId().'/move"]');
+        self::assertSelectorExists('form[action="/schedule/'.$scheduled->getId().'/delete"]');
+        self::assertSelectorExists('form[action="/schedule/'.$scheduled->getId().'/cycle-status"] input[name="from"][value="athlete-cal-'.$athlete->getId().'-2026-11-30"]');
+
+        // La navigation reste dans son agenda.
+        self::assertSelectorExists('a[href="/coach/athlete/'.$athlete->getId().'/calendar/2026-11-23"]');
+        self::assertSelectorExists('a[href="/coach/athlete/'.$athlete->getId().'/calendar/2026-12-07"]');
+        self::assertSelectorExists('a[href="/coach/athlete/'.$athlete->getId().'/history"]');
+
+        // Ce qui parle du calendrier du lecteur n'y est pas (le menu principal
+        // garde son entrée « Calendrier », hors de la page).
+        self::assertSelectorNotExists('[data-action="caladd#openWorkout"]');
+        self::assertSelectorNotExists('.kd-pagehead a[href^="/calendar"]');
+        self::assertSelectorNotExists('.kd-week a[href^="/calendar"]');
+        self::assertSelectorNotExists('a[href^="/export"]');
+        // Le ressenti se consigne : propriétaire seul.
+        self::assertSelectorNotExists('.kd-modal__rating');
+    }
+
+    /** Comme la fiche : ROLE_COACH ne suffit pas, il faut la relation acceptée. */
+    public function testAthleteCalendarIsDeniedWithoutAcceptedRelation(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::PENDING);
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId().'/calendar');
+
+        self::assertResponseStatusCodeSame(403);
+    }
+
+    /**
+     * Déplacer ou retirer une séance de l'athlète ramène le coach dans l'agenda
+     * de l'athlète, sur la semaine de la séance — et non sur SON calendrier.
+     */
+    public function testCoachGesturesReturnToTheAthleteCalendar(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $scheduled = $this->createScheduled($athlete, 'Sortie longue', '2026-12-03', ScheduledStatus::PLANNED);
+        $id = (int) $scheduled->getId();
+        $calendar = '/coach/athlete/'.$athlete->getId().'/calendar/';
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', $calendar.'2026-12-03');
+        $form = $crawler->filter('form[action="/schedule/'.$id.'/move"]')->form();
+        $form['scheduledDate'] = '2026-12-10';
+        $this->client->submit($form);
+
+        self::assertResponseRedirects($calendar.'2026-12-10');
+        $this->em->clear();
+        self::assertSame('2026-12-10', $this->mustFind(ScheduledWorkout::class, $id)->getScheduledDate()->format('Y-m-d'));
+
+        $crawler = $this->client->request('GET', $calendar.'2026-12-10');
+        $this->client->submit($crawler->filter('form[action="/schedule/'.$id.'/delete"]')->form());
+
+        self::assertResponseRedirects($calendar.'2026-12-10');
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(ScheduledWorkout::class)->find($id));
+    }
+
+    /**
+     * Le jeton `athlete-cal` ramène à la semaine quittée, nommée par le pseudo de
+     * l'athlète. Même garde que `athlete-<id>` : un tiers qui le recopie sur sa
+     * propre séance n'apprend rien et retombe sur son calendrier.
+     */
+    public function testTheAthleteCalendarBacklinkIsResolvedOnlyForAnAcceptedCoach(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $scheduled = $this->createScheduled($athlete, 'Sortie longue', '2026-12-03', ScheduledStatus::PLANNED);
+        $token = '?from=athlete-cal-'.$athlete->getId().'-2026-11-30';
+        $target = 'a[href="/coach/athlete/'.$athlete->getId().'/calendar/2026-11-30"]';
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/schedule/'.$scheduled->getId().$token);
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorExists($target);
+
+        $stranger = $this->createUser('curieux@example.com');
+        $own = $this->createScheduled($stranger, 'Ma séance', '2026-12-03', ScheduledStatus::PLANNED);
+
+        $this->client->loginUser($stranger);
+        $crawler = $this->client->request('GET', '/schedule/'.$own->getId().$token);
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorNotExists($target);
+        self::assertStringNotContainsString('athlete@example.com', $crawler->filter('body')->text());
+    }
+
     /** Sans relation acceptée, le journal d'un autre reste fermé. */
     public function testAthleteLogPageIsDeniedWithoutAcceptedRelation(): void
     {

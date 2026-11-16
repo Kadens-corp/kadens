@@ -408,7 +408,7 @@ final class ScheduledWorkoutController extends AbstractController
             return $this->redirectToRoute('app_scheduled_workout_show', ['id' => $scheduled->getId()]);
         }
 
-        return $this->redirectToMonth($date);
+        return $this->redirectToCalendarOf($scheduled->getOwner(), $date);
     }
 
     /**
@@ -434,7 +434,7 @@ final class ScheduledWorkoutController extends AbstractController
             }
         }
 
-        return $this->redirectToMonth($scheduled->getScheduledDate());
+        return $this->redirectToCalendarOf($scheduled->getOwner(), $scheduled->getScheduledDate());
     }
 
     /**
@@ -575,12 +575,37 @@ final class ScheduledWorkoutController extends AbstractController
         $this->denyAccessUnlessGranted(ScheduledWorkoutVoter::DELETE, $scheduled);
 
         $date = $scheduled->getScheduledDate();
+        $owner = $scheduled->getOwner();
 
         if ($this->isCsrfTokenValid('delete'.$scheduled->getId(), $request->getPayload()->getString('_token'))) {
             $this->entityManager->remove($scheduled);
             $this->entityManager->flush();
 
             $this->addFlash('success', 'Séance retirée du planning.');
+        }
+
+        return $this->redirectToCalendarOf($owner, $date);
+    }
+
+    /**
+     * Le calendrier où retomber après un geste sur une séance datée : celui de
+     * son **propriétaire**. Pour soi, c'est son calendrier dans la vue mémorisée ;
+     * pour le coach (seul autre lecteur que `ScheduledWorkoutVoter` laisse
+     * écrire), c'est l'agenda de l'athlète sur la semaine de la séance (#77).
+     * Sans cette branche, déplacer ou retirer une séance de l'athlète envoyait
+     * le coach sur SON calendrier : un lien ne change pas de sujet en silence.
+     *
+     * Comparaison par `id` : `owner` peut être un proxy Doctrine.
+     */
+    private function redirectToCalendarOf(?User $owner, \DateTimeImmutable $date): Response
+    {
+        $viewer = $this->getUser();
+
+        if ($owner instanceof User && $viewer instanceof User && $owner->getId() !== $viewer->getId()) {
+            return $this->redirectToRoute('app_coach_athlete_calendar', [
+                'id' => $owner->getId(),
+                'date' => $date->format('Y-m-d'),
+            ]);
         }
 
         return $this->redirectToMonth($date);

@@ -140,6 +140,7 @@ final class BackLink
             ],
             BackTarget::ATHLETE => $this->athlete($target->value, 'app_coach_athlete', 'Athlète'),
             BackTarget::ATHLETE_LOG => $this->athlete($target->value, 'app_coach_athlete_log', 'Son journal'),
+            BackTarget::ATHLETE_CAL => $this->athleteCalendar($target),
             BackTarget::CAL_WEEK => $this->calendarWeek($target->value),
             BackTarget::CAL_MONTH => $this->calendarMonth($target->value),
             default => null,
@@ -189,6 +190,28 @@ final class BackLink
             'url' => $this->urlGenerator->generate($route, ['id' => $athlete->getId()]),
             'kicker' => $kicker,
             'name' => $athlete->getDisplayName(),
+        ];
+    }
+
+    /**
+     * Retour vers l'agenda d'un athlète, sur la semaine quittée (#77). Même
+     * garde que sa fiche : le droit se vérifie avant de rien nommer.
+     *
+     * @return array{url: string, kicker: string, name: string|null}|null
+     */
+    private function athleteCalendar(BackTarget $target): ?array
+    {
+        $keys = $target->athleteWeek();
+        $sheet = null === $keys ? null : $this->athlete((string) $keys[0], 'app_coach_athlete', 'Agenda de');
+
+        if (null === $keys || null === $sheet) {
+            return null;
+        }
+
+        return [
+            'url' => $this->urlGenerator->generate('app_coach_athlete_calendar', ['id' => $keys[0], 'date' => $keys[1]]),
+            'kicker' => 'Agenda de',
+            'name' => $sheet['name'],
         ];
     }
 
