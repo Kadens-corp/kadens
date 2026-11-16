@@ -16,6 +16,9 @@
 {% import 'components/_activity.html.twig' as activity %}
 {% set dayNames = {1: 'Lun', 2: 'Mar', 3: 'Mer', 4: 'Jeu', 5: 'Ven', 6: 'Sam', 7: 'Dim'} %}
 {% set dayFull = {1: 'lundi', 2: 'mardi', 3: 'mercredi', 4: 'jeudi', 5: 'vendredi', 6: 'samedi', 7: 'dimanche'} %}
+{# Coach sur le plan de son athlète (#65) : comparaison par `id`, comme `_owner_banner`. #}
+{% set caseNoteForAthlete = template.owner is not null and app.user and template.owner.id != app.user.id %}
+{% set caseNotePlaceholder = caseNoteForAthlete ? "+ Consigne pour l'athlète" : '+ note' %}
 
 <div class="kd-planweeks">
     {% for week in flat.weeks %}
@@ -199,17 +202,19 @@
                                             </details>
                                         </div>
                                         {# Note de case éditable en ligne (clic). Toujours présente : une note
-                                           vide devient un discret « + note ». #}
+                                           vide devient un discret « + note ». Chez le coach d'un athlète,
+                                           c'est une consigne que l'athlète lira, et elle se nomme ainsi (#65). #}
                                         <p class="kd-planday__notes kd-inlineedit kd-inlineedit--note{{ entry.item.notes ? '' : ' kd-inlineedit--empty' }}"
                                            data-controller="inline-edit"
                                            data-inline-edit-url-value="{{ path('app_plan_template_item_note', {id: template.id, itemId: entry.item.id}) }}"
                                            data-inline-edit-token-value="{{ csrf_token('item_note' ~ entry.item.id) }}"
                                            data-inline-edit-field-value="notes"
                                            data-inline-edit-type-value="textarea"
-                                           data-inline-edit-placeholder-value="+ note"
+                                           data-inline-edit-placeholder-value="{{ caseNotePlaceholder }}"
                                            data-inline-edit-target="display"
                                            data-value="{{ entry.item.notes }}"
-                                           data-action="click->inline-edit#start">{{ entry.item.notes ?: '+ note' }}</p>
+                                           data-action="click->inline-edit#start"
+                                           {%- if caseNoteForAthlete %} title="Consigne visible par {{ template.owner.displayName }}"{% endif %}>{{ entry.item.notes ?: caseNotePlaceholder }}</p>
 
                                         {# Aperçu au survol (top-layer via Popover API), positionné par le
                                            contrôleur plangrid pour échapper à l'overflow de la grille. #}

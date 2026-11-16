@@ -28,6 +28,22 @@ class CoachingRepository extends ServiceEntityRepository
     }
 
     /**
+     * La relation ACCEPTÉE où `$coach` suit `$athlete`, sinon null. Porte les
+     * notes privées du coach (#65) : n'est rendue qu'au coach lui-même, jamais
+     * dans l'autre sens, et rien pour soi-même.
+     */
+    public function findAcceptedRelation(User $coach, ?User $athlete): ?Coaching
+    {
+        if (null === $athlete || $athlete->getId() === $coach->getId()) {
+            return null;
+        }
+
+        $coaching = $this->findRelation($coach, $athlete);
+
+        return null !== $coaching && $coaching->isActive() ? $coaching : null;
+    }
+
+    /**
      * Relation dans un sens ou dans l'autre : deux utilisateurs ne peuvent pas être
      * à la fois coach l'un de l'autre. Sert au contrôle avant création d'une demande.
      */

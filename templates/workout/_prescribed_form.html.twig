@@ -54,7 +54,15 @@
             <div class="kd-fieldrow__cell">{{ form_row(form.restSeconds, auto ? { attr: { 'data-action': auto } } : {}) }}</div>
             <div class="kd-fieldrow__cell">{{ form_row(form.rpe, auto ? { attr: { 'data-action': auto } } : {}) }}</div>
         </div>
-        {{ form_row(form.notes, auto ? { attr: { 'data-action': auto } } : {}) }}
+        {# Chez le coach d'un athlète, la note d'exercice est une consigne que
+           l'athlète lit : on le dit sous le champ (#65). Une remarque à garder
+           pour soi va dans « Tes notes sur … », en tête du compositeur. #}
+        {% set owner = pe.block.workout.owner ?? null %}
+        {% set notesOpts = auto ? { attr: { 'data-action': auto } } : {} %}
+        {% if owner is not null and app.user and owner.id != app.user.id %}
+            {% set notesOpts = notesOpts|merge({ help: 'Visible par ' ~ owner.displayName ~ '. Pour une remarque à garder pour toi : « Tes notes sur ' ~ owner.displayName ~ ' », en haut de la page.' }) %}
+        {% endif %}
+        {{ form_row(form.notes, notesOpts) }}
 
         {% if not auto %}
             <div class="kd-formactions">

@@ -67,8 +67,14 @@
                     {{ ux_icon('lucide:clipboard-list') }} Programmer
                 </a>
             {% endif %}
+            {# Le coach est prévenu que ses notes privées partent avec la relation
+               (#65). Jamais l'athlète : il ne sait pas qu'elles existent. #}
+            {% set endConfirm = 'Terminer cette relation ? Le contenu déjà créé reste chez son propriétaire.' %}
+            {% if iAmCoach and relation.coachNotes %}
+                {% set endConfirm = endConfirm ~ ' Tes notes privées sur ' ~ other.displayName ~ ' seront effacées.' %}
+            {% endif %}
             <form method="post" action="{{ path('app_coaching_end', {id: relation.id}) }}"
-                  onsubmit="return confirm('Terminer cette relation ? Le contenu déjà créé reste chez son propriétaire.');">
+                  onsubmit="return confirm({{ endConfirm|json_encode|e('html_attr') }});">
                 <input type="hidden" name="_token" value="{{ csrf_token('coaching_end' ~ relation.id) }}">
                 <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm">
                     {{ ux_icon('lucide:x') }} Terminer

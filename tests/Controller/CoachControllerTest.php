@@ -667,7 +667,7 @@ final class CoachControllerTest extends WebTestCase
 
         // Le compositeur s'ouvre (le coach est co-éditeur) mais sans le bloc.
         self::assertResponseIsSuccessful();
-        self::assertCount(0, $crawler->filter('.kd-notes'));
+        self::assertCount(0, $crawler->filter('.kd-notes--owner'));
         self::assertStringNotContainsString('Brouillon perso', $crawler->html());
     }
 
@@ -682,7 +682,7 @@ final class CoachControllerTest extends WebTestCase
         $this->client->loginUser($athlete);
         $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
 
-        self::assertCount(1, $crawler->filter('.kd-notes'));
+        self::assertCount(1, $crawler->filter('.kd-notes--owner'));
         self::assertStringContainsString('Brouillon perso', $crawler->html());
     }
 
@@ -735,7 +735,7 @@ final class CoachControllerTest extends WebTestCase
 
         $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
         $this->client->request('POST', '/workout/'.$workout->getId().'/meta', [
-            '_token' => $crawler->filter('.kd-notes__text')->attr('data-inline-edit-token-value'),
+            '_token' => $crawler->filter('.kd-notes--owner .kd-notes__text')->attr('data-inline-edit-token-value'),
             'field' => 'notes',
             'value' => "Semaine 1 : en vrac\nSemaine 2 : à voir",
         ]);
@@ -743,7 +743,7 @@ final class CoachControllerTest extends WebTestCase
 
         $crawler = $this->client->request('GET', '/plan-template/'.$template->getId().'/edit');
         $this->client->request('POST', '/plan-template/'.$template->getId().'/meta', [
-            '_token' => $crawler->filter('.kd-notes__text')->attr('data-inline-edit-token-value'),
+            '_token' => $crawler->filter('.kd-notes--owner .kd-notes__text')->attr('data-inline-edit-token-value'),
             'field' => 'notes',
             'value' => 'Déroulé provisoire',
         ]);
@@ -758,6 +758,109 @@ final class CoachControllerTest extends WebTestCase
             'Déroulé provisoire',
             $this->mustFind(PlanTemplate::class, $template->getId())->getNotes()
         );
+    }
+
+    /**
+     * #65 : le coach écrit ses notes sur l'athlète depuis sa fiche. Elles vivent
+     * sur la relation, pas sur un contenu de l'athlète.
+     */
+    public function testCoachWritesPrivateNotesOnAthleteSheet(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+        self::assertCount(1, $crawler->filter('.kd-notes--coach'));
+
+        $this->client->request('POST', '/coach/athlete/'.$athlete->getId().'/notes', [
+            '_token' => $crawler->filter('.kd-notes--coach .kd-notes__text')->attr('data-inline-edit-token-value'),
+            'field' => 'notes',
+            'value' => '  Surveiller le genou gauche  ',
+        ]);
+        self::assertResponseIsSuccessful();
+        self::assertSame('Surveiller le genou gauche', $this->client->getResponse()->getContent());
+
+        $this->em->clear();
+        self::assertSame('Surveiller le genou gauche', $this->mustFind(Coaching::class, $relation->getId())->getCoachNotes());
+    }
+
+    /**
+     * Les notes du coach se rappellent dans les éditeurs du contenu de l'athlète,
+     * avec la mention « Visible par » sur les champs que l'athlète lit.
+     */
+    public function testCoachSeesOwnNotesAndVisibilityHintsInAthleteEditors(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED)->setCoachNotes('Surveiller le genou gauche');
+        $workout = $this->createWorkout($athlete, 'Séance athlète');
+        $template = $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
+        $this->em->flush();
+
+        $this->client->loginUser($coach);
+
+        foreach (['/workout/'.$workout->getId().'/edit', '/plan-template/'.$template->getId().'/edit'] as $url) {
+            $crawler = $this->client->request('GET', $url);
+            self::assertResponseIsSuccessful();
+            self::assertCount(1, $crawler->filter('.kd-notes--coach'), $url);
+            self::assertStringContainsString('Surveiller le genou gauche', $crawler->filter('.kd-notes--coach')->text());
+            self::assertStringContainsString('Visible par athlete@example.com', $crawler->filter('.kd-visibleto')->text());
+        }
+    }
+
+    /**
+     * L'athlète ne voit jamais les notes de son coach : ni dans ses éditeurs, ni
+     * sur sa page de relations, ni par l'endpoint (il n'est pas son propre coach).
+     */
+    public function testAthleteNeverSeesCoachNotes(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com', ['ROLE_COACH']);
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED)->setCoachNotes('Surveiller le genou gauche');
+        $workout = $this->createWorkout($athlete, 'Séance athlète');
+        $template = $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
+        $this->em->flush();
+
+        $this->client->loginUser($athlete);
+
+        foreach ([
+            '/workout/'.$workout->getId().'/edit',
+            '/workout/'.$workout->getId(),
+            '/plan-template/'.$template->getId().'/edit',
+            '/plan-template/'.$template->getId(),
+            '/coaching',
+        ] as $url) {
+            $crawler = $this->client->request('GET', $url);
+            self::assertResponseIsSuccessful();
+            self::assertCount(0, $crawler->filter('.kd-notes--coach'), $url);
+            self::assertCount(0, $crawler->filter('.kd-visibleto'), $url);
+            self::assertStringNotContainsString('genou', $crawler->html(), $url);
+        }
+
+        $this->client->request('POST', '/coach/athlete/'.$athlete->getId().'/notes', [
+            '_token' => 'peu-importe',
+            'field' => 'notes',
+            'value' => 'Lu en réponse ?',
+        ]);
+        self::assertResponseStatusCodeSame(403);
+    }
+
+    /** Un coach dont la relation n'est plus active n'écrit plus rien. */
+    public function testEndedCoachCannotWriteNotes(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ENDED);
+
+        $this->client->loginUser($coach);
+        $this->client->request('POST', '/coach/athlete/'.$athlete->getId().'/notes', [
+            '_token' => 'peu-importe',
+            'field' => 'notes',
+            'value' => 'Note',
+        ]);
+        self::assertResponseStatusCodeSame(403);
     }
 
     // ---------------------------------------------------------------- helpers

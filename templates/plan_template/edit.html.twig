@@ -54,6 +54,8 @@
                data-value="{{ template.description }}"
                data-action="click->inline-edit#start"
                title="Cliquer pour modifier">{{ template.description ?: '+ Ajouter une description' }}</p>
+            {# Le coach écrit ici pour l'athlète, pas pour lui (#65). #}
+            {{ include('components/_visible_to.html.twig', {owner: template.owner}, with_context = false) }}
 
             {# Coach sur le plan d'un athlète : ce que fait la pose d'une de ses
                propres séances (#58). À qui est le plan, le bandeau propriétaire
@@ -108,6 +110,9 @@
         token: csrf_token('plan_meta' ~ template.id),
     }, with_context = false) }}
 
+    {# Le pendant côté coach : ses notes privées sur l'athlète (#65). #}
+    {{ include('components/_coach_notes.html.twig', {coaching: coachRelation}, with_context = false) }}
+
     {# À quoi sert ce plan. Conteneur cible d'un Turbo Stream : les mutations de
        rattachement ne touchent que son CONTENU (action="update"), l'id survit. #}
     <div id="plan-goals">
@@ -128,6 +133,9 @@
             progression est propre à cette case, les autres ne bougent pas), et son
             menu porte le reste : déplacer, retirer.
         </p>
+        {# Coach sur le plan de son athlète : la note d'une case est une consigne
+           qu'il lira, pas un pense-bête (#65). #}
+        {{ include('components/_visible_to.html.twig', {owner: template.owner, what: 'Les consignes de case'}, with_context = false) }}
         {# `kd-libsheet` : sous 900px la palette n'est plus un volet empilé au-dessus
            de la trame mais une feuille qui monte du bas, ouverte sur une case précise
            (même mécanique que la bibliothèque du compositeur, cf. components.css). #}

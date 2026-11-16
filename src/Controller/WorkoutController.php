@@ -14,6 +14,7 @@ use App\Enum\PrescriptionType;
 use App\Form\BlockType;
 use App\Form\PrescribedExerciseType;
 use App\Form\PrescribedSetType;
+use App\Repository\CoachingRepository;
 use App\Repository\ExerciseRepository;
 use App\Repository\LoggedExerciseRepository;
 use App\Repository\ScheduledWorkoutRepository;
@@ -199,12 +200,17 @@ final class WorkoutController extends AbstractController
      * métadonnées ici, donc plus de POST sur cette route.
      */
     #[Route('/{id}/edit', name: 'app_workout_edit', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function edit(Workout $workout): Response
+    public function edit(Workout $workout, CoachingRepository $coachingRepository): Response
     {
         $this->denyAccessUnlessGranted(WorkoutVoter::EDIT, $workout);
 
+        /** @var User $user */
+        $user = $this->getUser();
+
         return $this->render('workout/edit.html.twig', [
             'workout' => $workout,
+            // Notes privées du coach sur l'athlète propriétaire (#65), null pour soi.
+            'coachRelation' => $coachingRepository->findAcceptedRelation($user, $workout->getOwner()),
         ] + $this->blocksContext($workout) + $this->libraryContext($workout));
     }
 

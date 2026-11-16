@@ -180,6 +180,11 @@ final class CoachingController extends AbstractController
      * Fin de relation, à l'initiative de l'une ou l'autre partie. Le contenu déjà
      * créé n'est pas touché : il appartient à l'athlète, qui le garde. Seuls les
      * droits du coach tombent (les voters ne voient plus de relation ACCEPTED).
+     *
+     * Les notes privées du coach sur l'athlète (#65), elles, sont effacées : ce
+     * sont des données sur une personne qu'il ne suit plus, souvent de santé.
+     * La ligne survit (ENDED) et une nouvelle demande la rouvre : sans cet
+     * effacement, un coach retrouverait des années plus tard ce qu'il notait.
      */
     #[Route('/{id}/end', name: 'app_coaching_end', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function end(Request $request, Coaching $coaching): Response
@@ -191,6 +196,7 @@ final class CoachingController extends AbstractController
         }
 
         $coaching->setStatus(CoachingStatus::ENDED);
+        $coaching->setCoachNotes(null);
         $this->entityManager->flush();
 
         /** @var User $user */

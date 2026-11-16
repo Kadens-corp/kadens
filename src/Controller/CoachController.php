@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\Coaching;
 use App\Entity\Exercise;
 use App\Entity\PlanTemplate;
 use App\Entity\ScheduledWorkout;
@@ -12,6 +13,7 @@ use App\Enum\ScheduledStatus;
 use App\Enum\StatsRange;
 use App\Enum\StatsTab;
 use App\Http\BackTarget;
+use App\Repository\CoachingRepository;
 use App\Repository\GoalRepository;
 use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
@@ -64,6 +66,7 @@ final class CoachController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly CoachingResolver $coachingResolver,
+        private readonly CoachingRepository $coachingRepository,
     ) {
     }
 
@@ -106,6 +109,8 @@ final class CoachController extends AbstractController
 
         return $this->render('coach/athlete.html.twig', [
             'athlete' => $athlete,
+            // La relation porte les notes privées du coach (#65).
+            'coaching' => $this->acceptedRelation($coach, $athlete),
             'workouts' => $workoutRepository->findLibraryForOwner($athlete),
             // Le seul élément de la page qui parle du coach : ce qu'il peut donner.
             'coachWorkouts' => $workoutRepository->findLibraryForOwner($coach),
@@ -463,6 +468,52 @@ final class CoachController extends AbstractController
             : sprintf('Plan « %s » posé chez %s : %d séance(s).', $template->getTitle(), $athlete->getDisplayName(), \count($created)));
 
         return $redirect;
+    }
+
+    /**
+     * Notes privées du coach sur son athlète (#65), en édition en ligne. Même
+     * contrat que les métadonnées (`inline-edit`) : champ `notes`, réponse = la
+     * valeur persistée en texte brut.
+     *
+     * La garde est celle de la fiche, et elle suffit : la relation lue est celle
+     * où l'utilisateur courant est le COACH. L'athlète n'a aucun chemin vers ce
+     * champ, ni en lecture ni en écriture.
+     */
+    #[Route('/athlete/{id}/notes', name: 'app_coach_athlete_notes', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function notes(Request $request, #[MapEntity(id: 'id')] User $athlete): Response
+    {
+        $this->denyUnlessCoachOf($athlete);
+
+        /** @var User $coach */
+        $coach = $this->getUser();
+        $payload = $request->getPayload();
+
+        if (!$this->isCsrfTokenValid('coach_notes'.$athlete->getId(), $payload->getString('_token'))) {
+            return new Response('', Response::HTTP_FORBIDDEN);
+        }
+        if ('notes' !== $payload->getString('field')) {
+            return new Response('', Response::HTTP_BAD_REQUEST);
+        }
+
+        $value = trim($payload->getString('value'));
+        $this->acceptedRelation($coach, $athlete)->setCoachNotes('' === $value ? null : $value);
+        $this->entityManager->flush();
+
+        return new Response($value);
+    }
+
+    /**
+     * La relation acceptée coach → athlète. À n'appeler qu'après
+     * `denyUnlessCoachOf()`, qui garantit qu'elle existe.
+     */
+    private function acceptedRelation(User $coach, User $athlete): Coaching
+    {
+        $coaching = $this->coachingRepository->findAcceptedRelation($coach, $athlete);
+        if (null === $coaching) {
+            throw $this->createAccessDeniedException('Tu n\'es pas le coach de cet athlète.');
+        }
+
+        return $coaching;
     }
 
     /**

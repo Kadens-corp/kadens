@@ -8093,6 +8093,35 @@ textarea.kd-inlineedit__input {
     }
 }
 
+/* Notes du coach sur son athlète (#65) : même bloc, même geste, mais un filet à
+   gauche comme le bandeau propriétaire juste au-dessus. Sur le contenu d'un
+   athlète, ce bloc est le seul qui ne lui appartient pas, et ça doit se voir. */
+.kd-notes--coach {
+    border-left: 3px solid var(--color-text);
+}
+
+/* « Visible par Trailer38 » sous un champ que le coach remplit chez son athlète.
+   Discret mais pas caché : c'est une information de portée, pas une aide. */
+.kd-visibleto {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-2) 0 0;
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--color-text-soft);
+}
+
+.kd-visibleto svg {
+    width: 13px;
+    height: 13px;
+    flex: none;
+}
+
+.kd-editsection__hint + .kd-visibleto {
+    margin: calc(-1 * var(--kd-space-4)) 0 var(--kd-space-6);
+}
+
 /* ----------------------------------------------------------------------------
    Mini-modale d'édition rapide (éditeur de plan)
    Le panneau (#quick-panel) liste les exercices de la copie locale avec leurs

@@ -68,6 +68,8 @@
                data-value="{{ workout.description }}"
                data-action="click->inline-edit#start"
                title="Cliquer pour modifier">{{ workout.description ?: '+ Ajouter une description' }}</p>
+            {# Le coach écrit ici pour l'athlète, pas pour lui (#65). #}
+            {{ include('components/_visible_to.html.twig', {owner: workout.owner}, with_context = false) }}
         </div>
     </div>
 
@@ -78,6 +80,10 @@
         url: path('app_workout_meta', {id: workout.id}),
         token: csrf_token('workout_meta' ~ workout.id),
     }, with_context = false) }}
+
+    {# Le pendant côté coach : ses notes privées sur l'athlète, rappelées là où il
+       programme (#65). Ne se rend que pour le coach de l'athlète propriétaire. #}
+    {{ include('components/_coach_notes.html.twig', {coaching: coachRelation}, with_context = false) }}
 
     {# Le bandeau « ce que cette séance va charger » : vide au rendu, rempli par le
        contrôleur `composer` puis rafraîchi à chaque mutation. Il est HORS de la

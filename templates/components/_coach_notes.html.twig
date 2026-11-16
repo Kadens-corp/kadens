@@ -1,0 +1,44 @@
+{# Notes privées du coach sur son athlète (#65).
+
+   Le pendant de `_private_notes` côté coach. Tout ce que porte une séance ou un
+   plan appartient à l'athlète et lui est visible : une remarque de santé
+   (« surveiller le genou gauche ») n'y a pas sa place. Elle vit donc sur la
+   relation (`Coaching.coachNotes`), une seule par athlète, écrite depuis sa
+   fiche et rappelée dans les éditeurs de son contenu, là où l'on programme.
+
+   Paramètre : `coaching` (Coaching|null), la relation ACCEPTÉE où le lecteur est
+   le coach. Le contrôleur ne la passe que dans ce cas
+   (`CoachingRepository::findAcceptedRelation`) : null = rien à rendre, et c'est
+   ce qui garantit que l'athlète ne voit jamais ce bloc. Côté serveur, l'endpoint
+   est gardé par `CoachController::denyUnlessCoachOf()`.
+
+   Ouvert quand il contient quelque chose : une note de santé doit se lire avant
+   de programmer, pas après avoir pensé à déplier.
+
+   Jamais dans `PlanFlattener`, l'export Excel, l'ICS ni une page publique : rien
+   de tout ça ne lit la relation. Effacé à la fin de la relation. #}
+{% if coaching %}
+    {% set athlete = coaching.athlete %}
+    <details class="kd-notes kd-notes--coach"{{ coaching.coachNotes ? ' open' : '' }}>
+        <summary class="kd-notes__head">
+            {{ ux_icon('lucide:lock') }}
+            <span class="kd-notes__title">Tes notes sur {{ athlete.displayName }}</span>
+            <span class="kd-notes__hint">visibles de toi seul, jamais de {{ athlete.displayName }}</span>
+        </summary>
+
+        {% set placeholder = "Santé, contexte, ce qu'il faut surveiller : ce que tu gardes pour toi sur " ~ athlete.displayName ~ "…" %}
+        <div class="kd-notes__body">
+            <p class="kd-notes__text kd-inlineedit kd-inlineedit--note{{ coaching.coachNotes ? '' : ' kd-inlineedit--empty' }}"
+               data-controller="inline-edit"
+               data-inline-edit-url-value="{{ path('app_coach_athlete_notes', {id: athlete.id}) }}"
+               data-inline-edit-token-value="{{ csrf_token('coach_notes' ~ athlete.id) }}"
+               data-inline-edit-field-value="notes"
+               data-inline-edit-type-value="textarea"
+               data-inline-edit-placeholder-value="{{ placeholder }}"
+               data-inline-edit-target="display"
+               data-value="{{ coaching.coachNotes }}"
+               data-action="click->inline-edit#start"
+               title="Cliquer pour modifier">{{ coaching.coachNotes ?: placeholder }}</p>
+        </div>
+    </details>
+{% endif %}

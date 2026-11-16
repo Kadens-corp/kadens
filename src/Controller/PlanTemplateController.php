@@ -9,6 +9,7 @@ use App\Entity\User;
 use App\Entity\Workout;
 use App\Enum\ActivityType;
 use App\Enum\ScheduledStatus;
+use App\Repository\CoachingRepository;
 use App\Repository\GoalRepository;
 use App\Repository\ImportedActivityRepository;
 use App\Repository\PlanTemplateRepository;
@@ -240,13 +241,18 @@ final class PlanTemplateController extends AbstractController
      * formulaire de métadonnées ici, donc plus de POST sur cette route.
      */
     #[Route('/{id}/edit', name: 'app_plan_template_edit', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function edit(PlanTemplate $template, SlugGenerator $slugGenerator): Response
+    public function edit(PlanTemplate $template, SlugGenerator $slugGenerator, CoachingRepository $coachingRepository): Response
     {
         $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
         $this->ensureSlug($template, $slugGenerator);
 
+        /** @var User $user */
+        $user = $this->getUser();
+
         return $this->render('plan_template/edit.html.twig',
-            $this->gridContext($template) + $this->paletteContext($template) + $this->goalsContext($template)
+            // Notes privées du coach sur l'athlète propriétaire (#65), null pour soi.
+            ['coachRelation' => $coachingRepository->findAcceptedRelation($user, $template->getOwner())]
+            + $this->gridContext($template) + $this->paletteContext($template) + $this->goalsContext($template)
             + $this->assignContext($template)
         );
     }

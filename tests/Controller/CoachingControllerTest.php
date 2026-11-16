@@ -234,6 +234,27 @@ final class CoachingControllerTest extends WebTestCase
         self::assertSame(CoachingStatus::ENDED, $this->reload($relation)->getStatus());
     }
 
+    /**
+     * #65 : les notes privées du coach partent avec la relation. La ligne survit
+     * et peut se rouvrir : elle ne doit pas les rendre des mois plus tard.
+     */
+    public function testEndingRelationErasesCoachNotes(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED, $coach);
+        $relation->setCoachNotes('Surveiller le genou gauche');
+        $this->em->flush();
+
+        $this->client->loginUser($athlete);
+        $this->client->request('POST', '/coaching/'.$relation->getId().'/end', [
+            '_token' => $this->cardToken($relation, 'end'),
+        ]);
+
+        self::assertResponseRedirects('/coaching');
+        self::assertNull($this->reload($relation)->getCoachNotes());
+    }
+
     /** Une relation terminée se réouvre sur la même ligne (UniqueConstraint). */
     public function testEndedRelationIsReopenedInPlace(): void
     {

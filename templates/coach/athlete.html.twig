@@ -46,6 +46,10 @@
         </div>
     </header>
 
+    {# Tes notes sur lui (#65) : la seule chose de la fiche qu'il ne verra jamais.
+       Aussi rappelées en tête du compositeur et de l'éditeur de plan. #}
+    {{ include('components/_coach_notes.html.twig', {coaching: coaching}, with_context = false) }}
+
     {# ------------------------------ SES OBJECTIFS --------------------------- #}
     {% if goals is not empty %}
         <section class="kd-section">

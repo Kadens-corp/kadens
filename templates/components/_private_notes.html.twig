@@ -15,7 +15,7 @@
    textarea, le blur (ou Ctrl/Cmd+Entrée) enregistre. Comme le titre et la
    description, il n'a pas de repli sans JS — choix assumé du projet. #}
 {% if entity.owner and app.user and entity.owner.id == app.user.id %}
-    <details class="kd-notes"{{ entity.notes ? ' open' : '' }}>
+    <details class="kd-notes kd-notes--owner"{{ entity.notes ? ' open' : '' }}>
         <summary class="kd-notes__head">
             {{ ux_icon('lucide:lock') }}
             <span class="kd-notes__title">Notes privées</span>

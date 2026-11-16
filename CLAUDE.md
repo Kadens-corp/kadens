@@ -289,6 +289,13 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   `PlanFlattener` — c'est ce qui garantit qu'aucune vue de consultation, page
   publique, export Excel ou flux ICS ne le laisse fuiter. `WorkoutCloner` ne le
   copie pas non plus (le fork à la pose le dupliquerait dans chaque case d'un plan).
+  **Le pendant côté coach (#65) vit sur la relation, jamais sur le contenu** :
+  `Coaching.coachNotes`, une note par athlète, écrite depuis la fiche
+  (`/coach/athlete/{id}/notes`) et rappelée dans les éditeurs via
+  `CoachingRepository::findAcceptedRelation()` (null pour l'athlète et pour soi).
+  Tout le reste d'une séance ou d'un plan est lu par l'athlète, et l'écran le dit
+  (`components/_visible_to`). Effacée à la fin de la relation (la ligne survit et
+  peut se rouvrir).
 - **Objectif ↔ Plan : relation N:N, libre et réversible.** Table de jointure
   `plan_template_goal`, côté propriétaire sur `PlanTemplate` (`addGoal`/`removeGoal`,
   qui maintiennent **les deux côtés** — sinon un fragment re-rendu par Turbo Stream

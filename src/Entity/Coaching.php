@@ -4,6 +4,7 @@ namespace App\Entity;
 
 use App\Enum\CoachingStatus;
 use App\Repository\CoachingRepository;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
@@ -55,6 +56,14 @@ class Coaching
     // Date de la réponse (acceptation ou refus), null tant que PENDING.
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $respondedAt = null;
+
+    // Notes privées du coach sur son athlète (#65) : santé, contexte, rappels.
+    // Portées par la relation et non par le contenu, parce que tout ce qui vit
+    // sur une séance ou un plan appartient à l'athlète et lui est visible. Lues
+    // et écrites par le coach seul, jamais par l'athlète, et effacées à la fin de
+    // la relation : le coach n'a plus rien à garder sur quelqu'un qu'il ne suit plus.
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $coachNotes = null;
 
     #[ORM\PrePersist]
     public function onPrePersist(): void
@@ -139,6 +148,18 @@ class Coaching
     public function setRespondedAt(?\DateTimeImmutable $respondedAt): static
     {
         $this->respondedAt = $respondedAt;
+
+        return $this;
+    }
+
+    public function getCoachNotes(): ?string
+    {
+        return $this->coachNotes;
+    }
+
+    public function setCoachNotes(?string $coachNotes): static
+    {
+        $this->coachNotes = $coachNotes;
 
         return $this;
     }
