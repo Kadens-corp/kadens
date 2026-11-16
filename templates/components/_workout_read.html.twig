@@ -26,7 +26,10 @@
    propriétaire sur workout/show, celle du visiteur (partager, copier chez soi)
    sur la page publique, qui n'y met aucune commande sur la séance elle-même.
    D'où un `embed` chez les deux plutôt qu'un `include` (un include ne porte pas
-   de blocs). #}
+   de blocs).
+
+   Le bloc `afterhero`, juste sous le hero, accueille ce qui parle de la séance
+   sans en être le contenu : le partage par lien du propriétaire (#61). #}
 {% import 'components/_activity.html.twig' as activity %}
 {% set workout = flat.workout %}
 {% set summary = summary|default(null) %}
@@ -92,6 +95,8 @@
             {% endif %}
         </div>
     </header>
+
+    {% block afterhero %}{% endblock %}
 
     {# Le volume prévu ouvre l'analyse à lui seul : une séance de cardio pur n'a
        aucune série de travail et avait donc perdu son onglet, alors qu'elle a bien

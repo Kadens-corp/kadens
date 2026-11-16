@@ -1,17 +1,17 @@
 import { Controller } from '@hotwired/stimulus';
 
 /*
- * Copie une URL de partage dans le presse-papiers et affiche un retour bref.
- * Dégrade proprement : sans JS, le lien « Ouvrir la page publique » reste
- * cliquable à côté du bouton.
+ * Copie une URL de partage dans le presse-papiers et le dit, visiblement,
+ * partout : c'est le seul geste d'envoi d'un lien (#61, A-43). Plus de feuille
+ * de partage du système : sur ordinateur elle ne montrait rien, et deux boutons
+ * (« Partager », « Copier le lien ») laissaient deviner leur différence.
  *
- * `share` ouvre la feuille de partage du système (Android, iOS, Safari, Edge) :
- * c'est le geste « envoyer à quelqu'un », vers une messagerie, sans passer par
- * le presse-papiers. Là où elle n'existe pas (Firefox de bureau), il retombe sur
- * la copie : le bouton fait toujours quelque chose d'utile.
+ * Dégrade proprement : sans JS ou sans accès au presse-papiers, l'adresse reste
+ * affichée à côté (champ en lecture seule, ou lien « Voir la page publique »),
+ * et le retour dit de la copier à la main.
  */
 export default class extends Controller {
-    static values = { url: String, title: String };
+    static values = { url: String };
     static targets = ['feedback'];
 
     async copy() {
@@ -19,31 +19,35 @@ export default class extends Controller {
             await navigator.clipboard.writeText(this.urlValue);
             this.notify('Lien copié');
         } catch (error) {
-            this.notify('Copie impossible, copie le lien manuellement');
+            this.notify('Copie impossible, copie le lien à la main');
         }
     }
 
-    async share() {
-        const data = { title: this.titleValue, url: this.urlValue };
+    /** Sélectionne tout le champ d'adresse au clic, pour une copie manuelle. */
+    select(event) {
+        event.currentTarget.select();
+    }
 
-        if (!navigator.share || (navigator.canShare && !navigator.canShare(data))) {
-            await this.copy();
+    /*
+     * Vidé puis réécrit au tour suivant : un second clic rejoue l'annonce
+     * (`aria-live` ne parle que d'un changement), puis le message s'efface.
+     */
+    notify(message) {
+        if (!this.hasFeedbackTarget) {
             return;
         }
 
-        try {
-            await navigator.share(data);
-        } catch (error) {
-            // Fermer la feuille sans choisir est un renoncement, pas une panne.
-            if (error.name !== 'AbortError') {
-                await this.copy();
-            }
-        }
+        clearTimeout(this.timer);
+        this.feedbackTarget.textContent = '';
+        requestAnimationFrame(() => {
+            this.feedbackTarget.textContent = message;
+        });
+        this.timer = setTimeout(() => {
+            this.feedbackTarget.textContent = '';
+        }, 5000);
     }
 
-    notify(message) {
-        if (this.hasFeedbackTarget) {
-            this.feedbackTarget.textContent = message;
-        }
+    disconnect() {
+        clearTimeout(this.timer);
     }
 }

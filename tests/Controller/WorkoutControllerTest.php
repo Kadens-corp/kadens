@@ -88,10 +88,11 @@ final class WorkoutControllerTest extends WebTestCase
     }
 
     /**
-     * Le slug d'un brouillon suit son PREMIER vrai renommage ; une séance déjà
-     * nommée garde le sien, pour ne pas casser son lien de partage public.
+     * Le slug suit le titre à chaque renommage : il ne nomme plus que le fichier
+     * d'export, aucun lien public n'en dépend depuis #61. Réenregistrer le même
+     * titre ne le fait pas glisser vers `-2`.
      */
-    public function testRenamingRefreshesDraftSlugOnlyOnce(): void
+    public function testTheSlugFollowsTheTitle(): void
     {
         $user = $this->createUser('owner@example.com');
         $this->client->loginUser($user);
@@ -108,10 +109,13 @@ final class WorkoutControllerTest extends WebTestCase
         $this->em->clear();
         self::assertSame('seance-jambes', $this->mustFind(Workout::class, $id)->getSlug());
 
-        // Second renommage : le slug ne bouge plus.
         $this->renameWorkout($id, 'Séance jambes lourdes');
         $this->em->clear();
-        self::assertSame('seance-jambes', $this->mustFind(Workout::class, $id)->getSlug());
+        self::assertSame('seance-jambes-lourdes', $this->mustFind(Workout::class, $id)->getSlug());
+
+        $this->renameWorkout($id, 'Séance jambes lourdes');
+        $this->em->clear();
+        self::assertSame('seance-jambes-lourdes', $this->mustFind(Workout::class, $id)->getSlug());
     }
 
     private function renameWorkout(int $id, string $title): void
@@ -376,11 +380,13 @@ final class WorkoutControllerTest extends WebTestCase
     }
 
     /**
-     * Le bouton « Partager » (#58) envoie le lien PUBLIC, pas l'adresse de la
-     * fiche : celle-ci est derrière la connexion et le voter, inutile au
-     * destinataire.
+     * #61 : une séance est privée tant que son propriétaire n'a pas ouvert le
+     * partage. La fiche le dit et ne propose aucun lien public ; une fois le
+     * partage ouvert, elle porte l'adresse publique (jamais celle de la fiche,
+     * derrière la connexion) et le seul geste d'envoi, « Copier le lien à
+     * envoyer ».
      */
-    public function testShowOffersToShareThePublicLink(): void
+    public function testShowKeepsTheWorkoutPrivateUntilTheOwnerSharesIt(): void
     {
         $user = $this->createUser('owner@example.com');
         $workout = $this->createWorkout($user, 'Jambes');
@@ -389,10 +395,23 @@ final class WorkoutControllerTest extends WebTestCase
         $crawler = $this->client->request('GET', '/workout/'.$workout->getId());
 
         self::assertResponseIsSuccessful();
-        self::assertSelectorExists('.kd-wk__baractions button[data-action="clipboard#share"]');
-        $bar = $crawler->filter('.kd-wk__bar');
-        self::assertStringEndsWith('/s/'.$workout->getSlug(), (string) $bar->attr('data-clipboard-url-value'));
-        self::assertSame('Jambes', $bar->attr('data-clipboard-title-value'));
+        self::assertSelectorTextContains('.kd-sharelink__state', 'Séance privée');
+        self::assertSelectorNotExists('[data-action="clipboard#copy"]');
+        self::assertSelectorNotExists('a[href*="/s/"]');
+
+        $this->client->submit($crawler->filter('.kd-sharelink form')->form());
+        self::assertResponseRedirects('/workout/'.$workout->getId());
+        $this->em->clear();
+        $token = $this->mustFind(Workout::class, (int) $workout->getId())->getShareToken();
+        self::assertNotNull($token);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{32}$/', $token);
+
+        $crawler = $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-sharelink__state', 'Séance partagée par lien');
+        $panel = $crawler->filter('.kd-sharelink');
+        self::assertStringEndsWith('/s/'.$token, (string) $panel->attr('data-clipboard-url-value'));
+        self::assertStringEndsWith('/s/'.$token, (string) $crawler->filter('.kd-sharelink__url input')->attr('value'));
+        self::assertSelectorTextContains('.kd-sharelink button[data-action="clipboard#copy"]', 'Copier le lien à envoyer');
     }
 
     public function testShowRendersOneRowPerDetailedSet(): void

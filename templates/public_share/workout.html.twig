@@ -1,61 +1,81 @@
 {% extends 'base.html.twig' %}
 
 {% set workout = flat.workout %}
+{% set plan = plan|default(null) %}
 
 {% block title %}{{ workout.title }}{% endblock %}
 
 {% block body %}
     {# Page publique en lecture seule : réutilise le composant de rendu, sans
-       aucune action d'édition ni navigation propriétaire.
+       aucune action d'édition ni navigation propriétaire. Deux portes y mènent :
+       le lien de la séance (`/s/{token}`), et celui d'un plan partagé pour une de
+       ses cases (`plan` posé), qui n'a jamais de lien à elle.
 
-       Le bloc `actions` ne porte que des gestes de VISITEUR (#58) : repartager
-       le lien, et copier la séance chez soi. Jamais une commande sur la séance
+       Le bloc `actions` ne porte que des gestes de VISITEUR (#58) : renvoyer le
+       lien, et copier la séance chez soi. Jamais une commande sur la séance
        elle-même — éditer, supprimer, exporter restent sur /workout/{id}, derrière
-       WorkoutVoter. La copie, elle, n'est qu'une lecture de plus : le slug vaut
-       déjà droit de lecture. #}
+       WorkoutVoter. La copie, elle, n'est qu'une lecture de plus : le jeton vaut
+       déjà droit de lecture. Une case de plan ne propose que le retour au plan :
+       c'est le plan qui se copie. #}
+    {% set owner = plan ? plan.owner : workout.owner %}
+    {# Comparaison par `id` : `owner` peut être un proxy Doctrine. #}
+    {% set isOwner = app.user and owner and app.user.id == owner.id %}
+
+    {{ include('components/_public_banner.html.twig', {isOwner: isOwner}, with_context = false) }}
+
     {% embed 'components/_workout_read.html.twig' with {
-        flat: flat, summary: summary, blockStats: blockStats
+        flat: flat, summary: summary, blockStats: blockStats, plan: plan, isOwner: isOwner
     } only %}
         {% block actions %}
             {% set shared = flat.workout %}
-            {# Comparaison par `id` : `owner` peut être un proxy Doctrine. #}
-            {% set isOwner = app.user and shared.owner and app.user.id == shared.owner.id %}
 
-            <div class="kd-wk__bar"
-                 data-controller="clipboard"
-                 data-clipboard-url-value="{{ url('app_public_share', {slug: shared.slug}) }}"
-                 data-clipboard-title-value="{{ shared.title }}">
-                <div class="kd-wk__baractions">
-                    {% if isOwner %}
-                        <a href="{{ path('app_workout_show', {id: shared.id}) }}" class="kd-btn kd-btn--sm kd-btn--onink">
-                            {{ ux_icon('lucide:library') }} Ouvrir dans mes séances
-                        </a>
-                    {% elseif app.user %}
-                        {# Le formulaire vit hors de la barre (attribut `form`) :
-                           le bouton reste un enfant direct, qui s'étale comme
-                           les autres en pleine largeur sur téléphone. #}
-                        <form id="wk-copy-shared" method="post" hidden
-                              action="{{ path('app_workout_copy_shared', {slug: shared.slug}) }}">
-                            <input type="hidden" name="_token" value="{{ csrf_token('copy_shared' ~ shared.slug) }}">
-                        </form>
-                        <button type="submit" form="wk-copy-shared" class="kd-btn kd-btn--sm kd-btn--onink">
-                            {{ ux_icon('lucide:copy') }} Copier dans mes séances
-                        </button>
-                    {% else %}
-                        {# Anonyme : une route protégée en GET, qui le ramène ici
-                           une fois connecté (cf. copySharedEntry). #}
-                        <a href="{{ path('app_workout_copy_shared_entry', {slug: shared.slug}) }}" class="kd-btn kd-btn--sm kd-btn--onink">
-                            {{ ux_icon('lucide:log-in') }} Se connecter pour la copier
-                        </a>
-                    {% endif %}
-
-                    <button type="button" class="kd-btn kd-btn--sm kd-btn--onink" data-action="clipboard#share">
-                        {{ ux_icon('lucide:share-2') }} Partager
-                    </button>
-
-                    <span class="kd-wk__feedback" data-clipboard-target="feedback" role="status" aria-live="polite"></span>
+            {% if plan %}
+                {# Même habillage que `_backlink` (kicker structurel, titre en
+                   casse normale), sans son jeton `?from=` : la page publique n'a
+                   pas de contexte applicatif à porter. #}
+                <div class="kd-wk__bar">
+                    <a href="{{ path('app_public_share_plan', {token: plan.shareToken}) }}" class="kd-wk__back">
+                        {{ ux_icon('lucide:arrow-left') }}
+                        <span>Plan</span>
+                        <span class="kd-backlink__name">{{ plan.title }}</span>
+                    </a>
                 </div>
-            </div>
+            {% else %}
+                <div class="kd-wk__bar"
+                     data-controller="clipboard"
+                     data-clipboard-url-value="{{ url('app_public_share', {token: shared.shareToken}) }}">
+                    <div class="kd-wk__baractions">
+                        {% if isOwner %}
+                            <a href="{{ path('app_workout_show', {id: shared.id}) }}" class="kd-btn kd-btn--sm kd-btn--onink">
+                                {{ ux_icon('lucide:library') }} Ouvrir dans mes séances
+                            </a>
+                        {% elseif app.user %}
+                            {# Le formulaire vit hors de la barre (attribut `form`) :
+                               le bouton reste un enfant direct, qui s'étale comme
+                               les autres en pleine largeur sur téléphone. #}
+                            <form id="wk-copy-shared" method="post" hidden
+                                  action="{{ path('app_workout_copy_shared', {token: shared.shareToken}) }}">
+                                <input type="hidden" name="_token" value="{{ csrf_token('copy_shared' ~ shared.shareToken) }}">
+                            </form>
+                            <button type="submit" form="wk-copy-shared" class="kd-btn kd-btn--sm kd-btn--onink">
+                                {{ ux_icon('lucide:copy') }} Copier dans mes séances
+                            </button>
+                        {% else %}
+                            {# Anonyme : une route protégée en GET, qui le ramène ici
+                               une fois connecté (cf. copySharedEntry). #}
+                            <a href="{{ path('app_workout_copy_shared_entry', {token: shared.shareToken}) }}" class="kd-btn kd-btn--sm kd-btn--onink">
+                                {{ ux_icon('lucide:log-in') }} Se connecter pour la copier
+                            </a>
+                        {% endif %}
+
+                        <button type="button" class="kd-btn kd-btn--sm kd-btn--onink" data-action="clipboard#copy">
+                            {{ ux_icon('lucide:link-2') }} Copier le lien à envoyer
+                        </button>
+
+                        <span class="kd-wk__feedback" data-clipboard-target="feedback" role="status" aria-live="polite"></span>
+                    </div>
+                </div>
+            {% endif %}
         {% endblock %}
     {% endembed %}
 {% endblock %}

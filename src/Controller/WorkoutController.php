@@ -26,6 +26,7 @@ use App\Service\OffProgramRecap;
 use App\Service\PlanFlattener;
 use App\Service\SetSynchronizer;
 use App\Service\SharedWorkoutCopier;
+use App\Service\ShareLink;
 use App\Service\SlugGenerator;
 use App\Service\SupersetGrouper;
 use App\Service\VolumePanel;
@@ -55,10 +56,7 @@ final class WorkoutController extends AbstractController
         'elevationGainMeters',
     ];
 
-    /**
-     * Titre d'un brouillon créé en un clic. Sert aussi de repère pour savoir si le
-     * slug mérite d'être régénéré au premier vrai renommage (cf. updateMeta).
-     */
+    /** Titre d'un brouillon créé en un clic, que l'éditeur ouvre aussitôt en édition. */
     public const DRAFT_WORKOUT_TITLE = 'Nouvelle séance';
 
     public function __construct(
@@ -236,7 +234,7 @@ final class WorkoutController extends AbstractController
                     return new Response('Le titre ne peut pas être vide.', Response::HTTP_UNPROCESSABLE_ENTITY);
                 }
                 $workout->setTitle($value);
-                $this->refreshDraftSlug($workout, $value, $slugGenerator);
+                $this->slugFollowsTitle($workout, $value, $slugGenerator);
                 break;
             case 'description':
                 $workout->setDescription('' === $value ? null : $value);
@@ -259,16 +257,52 @@ final class WorkoutController extends AbstractController
     }
 
     /**
-     * Une séance créée en un clic naît avec un slug dérivé du titre par défaut
-     * (`nouvelle-seance-7`). On le régénère au premier renommage, mais UNIQUEMENT
-     * dans ce cas : une séance déjà nommée garde son slug, sinon chaque renommage
-     * casserait son lien de partage public.
+     * Le slug suit le titre : il ne nomme plus que le fichier d'export, aucune
+     * adresse publique n'en dépend depuis #61 (le lien de partage est un jeton).
+     * Un titre dont le slug dérive déjà ne le régénère pas : sans cette garde,
+     * réenregistrer le même titre le ferait glisser de `upper-a` à `upper-a-2`.
      */
-    private function refreshDraftSlug(Workout $workout, string $title, SlugGenerator $slugGenerator): void
+    private function slugFollowsTitle(Workout $workout, string $title, SlugGenerator $slugGenerator): void
     {
-        if ($slugGenerator->derivesFrom($workout->getSlug(), self::DRAFT_WORKOUT_TITLE)) {
+        if (!$slugGenerator->derivesFrom($workout->getSlug(), $title)) {
             $workout->setSlug($slugGenerator->generate($title, Workout::class));
         }
+    }
+
+    /**
+     * Ouvre ou arrête le partage par lien (#61). Geste de PROPRIÉTAIRE : l'attribut
+     * EDIT ne suffit pas, un coach accepté le porte aussi, et il ne publie pas le
+     * contenu de son athlète. Une case de plan se partage avec son plan.
+     */
+    #[Route('/{id}/share', name: 'app_workout_share', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function share(Request $request, Workout $workout, ShareLink $shareLink): Response
+    {
+        $this->denyAccessUnlessGranted(WorkoutVoter::EDIT, $workout);
+
+        /** @var User $user */
+        $user = $this->getUser();
+        if ($workout->getOwner()?->getId() !== $user->getId()) {
+            throw $this->createAccessDeniedException('Seul le propriétaire partage sa séance.');
+        }
+        if ($workout->isPlanLocal()) {
+            throw $this->createAccessDeniedException('Une séance de plan se partage avec son plan.');
+        }
+
+        if (!$this->isCsrfTokenValid('workout_share'.$workout->getId(), $request->getPayload()->getString('_token'))) {
+            throw $this->createAccessDeniedException('Jeton CSRF invalide.');
+        }
+
+        if ('close' === $request->getPayload()->getString('action')) {
+            $shareLink->close($workout);
+            $this->addFlash('success', 'Partage arrêté : le lien ne répond plus.');
+        } else {
+            $shareLink->open($workout);
+            $this->addFlash('success', 'Partage par lien activé. Copie le lien pour l\'envoyer.');
+        }
+
+        $this->entityManager->flush();
+
+        return $this->redirectToRoute('app_workout_show', ['id' => $workout->getId()]);
     }
 
     #[Route('/{id}/delete', name: 'app_workout_delete', methods: ['POST'], requirements: ['id' => '\d+'])]
@@ -314,26 +348,28 @@ final class WorkoutController extends AbstractController
     /**
      * Copie dans SA bibliothèque une séance reçue par son lien public (#58).
      *
-     * Le slug vaut droit de lecture (cf. `PublicShareController`), donc droit de
-     * copie : on ne passe pas par `WorkoutVoter`, qui refuserait la séance d'un
-     * inconnu. La copie appartient à l'utilisateur courant, sans lignée, et les
+     * Le jeton de partage vaut droit de lecture (cf. `PublicShareController`),
+     * donc droit de copie : on ne passe pas par `WorkoutVoter`, qui refuserait la
+     * séance d'un inconnu. Un partage arrêté ne se copie plus (le jeton n'existe
+     * plus, 404). La copie appartient à l'utilisateur courant, sans lignée, et les
      * exercices perso de l'auteur y sont recopiés chez lui (`SharedWorkoutCopier`).
      * Sur sa propre séance, rien à copier : on l'y renvoie.
      */
-    #[Route('/shared/{slug}/copy', name: 'app_workout_copy_shared', methods: ['POST'])]
+    #[Route('/shared/{token}/copy', name: 'app_workout_copy_shared', methods: ['POST'], requirements: ['token' => ShareLink::TOKEN])]
     public function copyShared(
         Request $request,
-        #[MapEntity(mapping: ['slug' => 'slug'])] Workout $workout,
+        #[MapEntity(mapping: ['token' => 'shareToken'])] Workout $workout,
         SharedWorkoutCopier $copier,
     ): Response {
-        if (!$this->isCsrfTokenValid('copy_shared'.$workout->getSlug(), $request->getPayload()->getString('_token'))) {
-            return $this->redirectToRoute('app_public_share', ['slug' => $workout->getSlug()]);
+        $token = (string) $workout->getShareToken();
+        if (!$this->isCsrfTokenValid('copy_shared'.$token, $request->getPayload()->getString('_token'))) {
+            return $this->redirectToRoute('app_public_share', ['token' => $token]);
         }
 
         /** @var User $user */
         $user = $this->getUser();
 
-        if ($workout->getOwner() === $user) {
+        if ($workout->getOwner()?->getId() === $user->getId()) {
             return $this->redirectToRoute('app_workout_show', ['id' => $workout->getId()]);
         }
 
@@ -358,10 +394,10 @@ final class WorkoutController extends AbstractController
      * Une copie ne se déclenche jamais en GET, et la cible ne transite jamais en
      * query : aucune redirection ouverte possible.
      */
-    #[Route('/shared/{slug}/copy', name: 'app_workout_copy_shared_entry', methods: ['GET'])]
-    public function copySharedEntry(#[MapEntity(mapping: ['slug' => 'slug'])] Workout $workout): Response
+    #[Route('/shared/{token}/copy', name: 'app_workout_copy_shared_entry', methods: ['GET'], requirements: ['token' => ShareLink::TOKEN])]
+    public function copySharedEntry(#[MapEntity(mapping: ['token' => 'shareToken'])] Workout $workout): Response
     {
-        return $this->redirectToRoute('app_public_share', ['slug' => $workout->getSlug()]);
+        return $this->redirectToRoute('app_public_share', ['token' => $workout->getShareToken()]);
     }
 
     // ---- Édition des blocs -------------------------------------------------

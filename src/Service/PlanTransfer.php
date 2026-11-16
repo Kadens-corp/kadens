@@ -19,8 +19,9 @@ use App\Entity\Workout;
  * fermé).
  *
  * Ce qui ne passe pas : le bloc-notes privé du plan et de ses cases (l'athlète le
- * lirait, c'est le brouillon du coach) et les liens vers des objectifs, qui sont
- * ceux du coach. Le slug reste : un lien public déjà envoyé ne casse pas.
+ * lirait, c'est le brouillon du coach), les liens vers des objectifs, qui sont
+ * ceux du coach, et le partage par lien (#61) : publier est un choix du
+ * propriétaire, et l'athlète n'a pas fait celui du coach. Le plan arrive privé.
  *
  * Les gardes (propriétaire, athlète accepté, plan jamais posé au calendrier)
  * sont au contrôleur. Ne flushe pas.
@@ -30,12 +31,14 @@ final class PlanTransfer
     public function __construct(
         private readonly WorkoutCloner $cloner,
         private readonly SharedWorkoutCopier $workoutCopier,
+        private readonly ShareLink $shareLink,
     ) {
     }
 
     public function transfer(PlanTemplate $plan, User $athlete): void
     {
         $plan->setOwner($athlete)->setNotes(null);
+        $this->shareLink->close($plan);
 
         foreach ($plan->getGoals()->toArray() as $goal) {
             $plan->removeGoal($goal);

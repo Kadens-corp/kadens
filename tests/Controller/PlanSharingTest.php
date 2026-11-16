@@ -17,6 +17,7 @@ use App\Enum\BlockRole;
 use App\Enum\CoachingStatus;
 use App\Enum\PrescriptionType;
 use App\Enum\ScheduledStatus;
+use App\Service\ShareLink;
 use App\Tests\FindsEntities;
 use App\Tests\PurgesDatabase;
 use Doctrine\ORM\EntityManagerInterface;
@@ -228,19 +229,21 @@ final class PlanSharingTest extends WebTestCase
 
     // ---- Copie de plan : lien public ------------------------------------------
 
-    public function testAnonymousVisitorCanShareAPlanAndIsInvitedToLogInToCopy(): void
+    public function testAnonymousVisitorCanSendAPlanLinkAndIsInvitedToLogInToCopy(): void
     {
         $owner = $this->user('owner@example.com');
-        $plan = $this->plan($owner, 'Prepa semi');
+        $token = $this->share($this->plan($owner, 'Prepa semi'));
 
-        $this->client->request('GET', '/s/plan/'.$plan->getSlug());
+        $this->client->request('GET', '/s/plan/'.$token);
 
         self::assertResponseIsSuccessful();
-        self::assertSelectorExists('button[data-action="clipboard#share"]');
-        self::assertSelectorExists('a[href="/plan-template/shared/'.$plan->getSlug().'/copy"]');
+        self::assertSelectorTextContains('.kd-publicbanner', 'Page publique');
+        self::assertSelectorTextContains('button[data-action="clipboard#copy"]', 'Copier le lien à envoyer');
+        self::assertSelectorNotExists('[data-action="clipboard#share"]');
+        self::assertSelectorExists('a[href="/plan-template/shared/'.$token.'/copy"]');
         self::assertSelectorNotExists('#plan-copy-shared');
 
-        $this->client->request('GET', '/plan-template/shared/'.$plan->getSlug().'/copy');
+        $this->client->request('GET', '/plan-template/shared/'.$token.'/copy');
         self::assertResponseRedirects('/login');
     }
 
@@ -256,7 +259,7 @@ final class PlanSharingTest extends WebTestCase
         $this->placeDirectly($plan, $upper, 2, 1);
 
         $this->client->loginUser($reader);
-        $crawler = $this->client->request('GET', '/s/plan/'.$plan->getSlug());
+        $crawler = $this->client->request('GET', '/s/plan/'.$this->share($plan));
         $this->client->submit($crawler->filter('#plan-copy-shared')->form());
 
         $this->em->clear();
@@ -264,6 +267,7 @@ final class PlanSharingTest extends WebTestCase
         self::assertNotNull($copy);
         self::assertResponseRedirects('/plan-template/'.$copy->getId());
         self::assertCount(2, $copy->getPlanItems());
+        self::assertNull($copy->getShareToken(), 'La copie arrive privée.');
 
         // Une seule racine chez le lecteur, et un seul exercice recopié.
         $roots = $this->em->getRepository(Workout::class)->findBy(['owner' => $reader, 'planLocal' => false]);
@@ -280,10 +284,130 @@ final class PlanSharingTest extends WebTestCase
         $plan = $this->plan($owner, 'Prepa semi');
 
         $this->client->loginUser($owner);
-        $this->client->request('GET', '/s/plan/'.$plan->getSlug());
+        $this->client->request('GET', '/s/plan/'.$this->share($plan));
 
         self::assertSelectorExists('a[href="/plan-template/'.$plan->getId().'"]');
         self::assertSelectorNotExists('#plan-copy-shared');
+    }
+
+    // ---- Partage par lien d'un plan (#61) --------------------------------------
+
+    /**
+     * Privé par défaut : ni la page du plan, ni une plage de semaines, ni une de
+     * ses cases n'existent avant que le propriétaire ouvre le partage, depuis la
+     * fiche du plan.
+     */
+    public function testAPlanIsPrivateUntilItsOwnerSharesIt(): void
+    {
+        $owner = $this->user('owner@example.com');
+        $plan = $this->plan($owner, 'Prepa semi');
+        $item = $this->placeDirectly($plan, $this->workout($owner, 'Upper A'), 1, 1);
+
+        $this->client->request('GET', '/s/plan/'.$plan->getSlug());
+        self::assertResponseStatusCodeSame(404);
+
+        $this->client->loginUser($owner);
+        $crawler = $this->client->request('GET', '/plan-template/'.$plan->getId());
+        self::assertSelectorTextContains('.kd-sharelink__state', 'Plan privé');
+        self::assertSelectorNotExists('.kd-sharerange');
+        self::assertSelectorNotExists('a[href*="/s/plan/"]');
+
+        $this->client->submit($crawler->filter('.kd-sharelink form')->form());
+        self::assertResponseRedirects('/plan-template/'.$plan->getId());
+        $this->em->clear();
+        $token = (string) $this->mustFind(PlanTemplate::class, $plan->getId())->getShareToken();
+        self::assertMatchesRegularExpression('/^[0-9a-f]{32}$/', $token);
+
+        $crawler = $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-sharelink__state', 'Plan partagé par lien');
+        self::assertStringEndsWith('/s/plan/'.$token, (string) $crawler->filter('.kd-sharerange')->attr('data-share-range-base-value'));
+
+        foreach (['/s/plan/'.$token, '/s/plan/'.$token.'/semaines/1-2', '/s/plan/'.$token.'/seance/'.$item->getId()] as $url) {
+            $this->client->request('GET', $url);
+            self::assertResponseIsSuccessful($url);
+        }
+    }
+
+    /**
+     * Une case (copie `planLocal`) n'a jamais de lien à elle : la page publique
+     * du plan l'ouvre sous SON jeton, et seulement pour ses propres cases.
+     * Arrêter le partage du plan ferme aussi ses cases.
+     */
+    public function testAPlanCellOpensOnlyUnderItsPlanLink(): void
+    {
+        $owner = $this->user('owner@example.com');
+        $plan = $this->plan($owner, 'Prepa semi');
+        $item = $this->placeDirectly($plan, $this->workout($owner, 'Upper A'), 1, 1);
+        $other = $this->placeDirectly($this->plan($owner, 'Autre plan'), $this->workout($owner, 'Lower B'), 1, 1);
+        $token = $this->share($plan);
+
+        $crawler = $this->client->request('GET', '/s/plan/'.$token);
+        $cellUrl = '/s/plan/'.$token.'/seance/'.$item->getId();
+        self::assertSelectorExists('a[href="'.$cellUrl.'"]');
+
+        $this->client->request('GET', $cellUrl);
+        self::assertResponseIsSuccessful();
+        self::assertSelectorTextContains('.kd-wk__title', 'Upper A');
+        self::assertSelectorTextContains('.kd-publicbanner', 'Page publique');
+        self::assertSelectorExists('a[href="/s/plan/'.$token.'"]');
+        // Le plan se copie, pas la case.
+        self::assertSelectorNotExists('#wk-copy-shared');
+
+        // La case n'a pas de jeton à elle.
+        self::assertNull($item->getWorkout()?->getShareToken());
+
+        // Une case d'un autre plan ne s'ouvre pas sous ce jeton.
+        $this->client->request('GET', '/s/plan/'.$token.'/seance/'.$other->getId());
+        self::assertResponseStatusCodeSame(404);
+
+        (new ShareLink())->close($this->mustFind(PlanTemplate::class, $plan->getId()));
+        $this->em->flush();
+        $this->client->request('GET', $cellUrl);
+        self::assertResponseStatusCodeSame(404);
+        $this->client->request('GET', '/s/plan/'.$token.'/semaines/1');
+        self::assertResponseStatusCodeSame(404);
+    }
+
+    /** Le coach co-édite le plan de son athlète, il ne le publie pas (C-15). */
+    public function testTheCoachCannotShareHisAthletePlan(): void
+    {
+        [$coach, $athlete] = $this->coachAndAthlete();
+        $plan = $this->plan($athlete, 'Prepa semi');
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/plan-template/'.$plan->getId());
+        self::assertResponseIsSuccessful();
+        self::assertSelectorNotExists('.kd-sharelink');
+        self::assertSelectorNotExists('.kd-sharerange');
+
+        $this->client->request('POST', '/plan-template/'.$plan->getId().'/share', ['_token' => 'x', 'action' => 'open']);
+        self::assertResponseStatusCodeSame(403);
+        $this->em->clear();
+        self::assertNull($this->mustFind(PlanTemplate::class, $plan->getId())->getShareToken());
+    }
+
+    /**
+     * Publier est un choix du propriétaire : un plan donné à un athlète arrive
+     * chez lui privé, quel que soit le choix du coach.
+     */
+    public function testAGivenPlanArrivesPrivate(): void
+    {
+        [$coach, $athlete] = $this->coachAndAthlete();
+        $plan = $this->plan($coach, 'Bloc force');
+        $token = $this->share($plan);
+
+        $this->client->loginUser($coach);
+        $this->client->request('POST', '/plan-template/'.$plan->getId().'/assign', [
+            '_token' => $this->assignToken($plan),
+            'athlete' => (string) $athlete->getId(),
+        ]);
+
+        $this->em->clear();
+        $plan = $this->mustFind(PlanTemplate::class, $plan->getId());
+        self::assertSame($athlete->getId(), $plan->getOwner()?->getId());
+        self::assertNull($plan->getShareToken());
+        $this->client->request('GET', '/s/plan/'.$token);
+        self::assertResponseStatusCodeSame(404);
     }
 
     // ---- Copie de plan : fiche coach ------------------------------------------
@@ -328,6 +452,15 @@ final class PlanSharingTest extends WebTestCase
     }
 
     // ---- Helpers --------------------------------------------------------------
+
+    /** Ouvre le partage comme le fait le service, et rend le jeton. */
+    private function share(PlanTemplate $plan): string
+    {
+        (new ShareLink())->open($plan);
+        $this->em->flush();
+
+        return (string) $plan->getShareToken();
+    }
 
     /** @return array{User, User} */
     private function coachAndAthlete(): array

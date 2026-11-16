@@ -336,6 +336,12 @@ final class ScheduledWorkoutLogTest extends WebTestCase
         $workout = $prescribed->getBlock()?->getWorkout();
         self::assertNotNull($workout);
 
+        // La page publique n'existe qu'une fois le partage ouvert (#61). Posé
+        // avant toute requête : celles-ci réinitialisent le gestionnaire.
+        $shareToken = bin2hex(random_bytes(16));
+        $workout->setShareToken($shareToken);
+        $this->em->flush();
+
         $this->client->loginUser($user);
 
         // 1. La page de la séance datée : le réalisé y est, c'est le seul endroit.
@@ -348,8 +354,8 @@ final class ScheduledWorkoutLogTest extends WebTestCase
         self::assertStringNotContainsString('123,5', (string) $this->client->getResponse()->getContent());
         self::assertSelectorNotExists('.kd-settable--compared');
 
-        // 3. La page de partage public.
-        $this->client->request('GET', '/s/'.$workout->getSlug());
+        // 3. La page de partage public (partage ouvert plus haut, #61).
+        $this->client->request('GET', '/s/'.$shareToken);
         self::assertResponseIsSuccessful();
         self::assertStringNotContainsString('123,5', (string) $this->client->getResponse()->getContent());
         self::assertSelectorNotExists('.kd-settable--compared');

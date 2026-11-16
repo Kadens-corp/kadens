@@ -12,8 +12,9 @@ décide.
   que la séance (une suite ordonnée de blocs), et les photos ou activités se
   placent dans le fil du texte, pas dans une galerie à part.
 - **Privé + publication opt-in.** Le récit se lit par le propriétaire et son
-  coach (GoalVoter). Publier ouvre `/s/goal/{slug}`, comme le partage d'une
-  séance ou d'un plan, mais sur demande explicite.
+  coach (GoalVoter). Publier ouvre `/s/goal/{slug}`, sur demande explicite.
+  Séances et plans suivent la même règle depuis #61 (partage par lien, sous un
+  jeton aléatoire plutôt qu'un slug).
 - **Deux sortes de références** : les activités importées (Intervals.icu) et les
   séances cochées faites (muscu comprise, avec son réalisé).
 

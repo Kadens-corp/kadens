@@ -43,7 +43,8 @@ final class SmokeTest extends WebTestCase
             ->setActivity(ActivityType::GYM)->setTargetAreas([TargetArea::GLUTES, TargetArea::HAMSTRINGS]);
         $em->persist($exercise);
 
-        $workout = (new Workout())->setOwner($user)->setTitle('Séance test')->setSlug('seance-test');
+        $workout = (new Workout())->setOwner($user)->setTitle('Séance test')->setSlug('seance-test')
+            ->setShareToken(str_repeat('a', 32));
         $em->persist($workout);
 
         $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
@@ -59,7 +60,7 @@ final class SmokeTest extends WebTestCase
         $em->persist($block);
 
         $template = (new PlanTemplate())->setOwner($user)->setTitle('Plan test')
-            ->setSlug('plan-test')->setDurationWeeks(2);
+            ->setSlug('plan-test')->setShareToken(str_repeat('b', 32))->setDurationWeeks(2);
         $em->persist($template);
 
         $scheduled = (new ScheduledWorkout())->setOwner($user)->setWorkout($workout)
@@ -90,9 +91,9 @@ final class SmokeTest extends WebTestCase
         }
 
         // Pages sans authentification.
-        $client->request('GET', '/s/seance-test');
+        $client->request('GET', '/s/'.str_repeat('a', 32));
         self::assertResponseIsSuccessful('La page publique de séance doit répondre 200.');
-        $client->request('GET', '/s/plan/plan-test');
+        $client->request('GET', '/s/plan/'.str_repeat('b', 32));
         self::assertResponseIsSuccessful('La page publique de plan doit répondre 200.');
     }
 }

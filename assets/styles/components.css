@@ -1888,6 +1888,114 @@ a.kd-scope--link:hover {
 }
 
 /* ----------------------------------------------------------------------------
+   Partage par lien (#61) — bandeau du propriétaire, sous le hero d'une séance ou
+   la barre d'un plan. Privé par défaut : l'état se lit en premier, le geste
+   d'envoi (« Copier le lien à envoyer ») n'existe qu'une fois le lien ouvert.
+   ---------------------------------------------------------------------------- */
+.kd-sharelink {
+    margin: 0 0 var(--kd-space-9);
+    padding: var(--kd-space-6) var(--kd-space-7);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-subtle);
+}
+
+/* Une case de plan : une ligne d'explication, pas de geste. */
+.kd-sharelink--note {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-sharelink svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+
+.kd-sharelink__state {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin: 0;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
+.kd-sharelink__hint {
+    margin: var(--kd-space-3) 0 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-sharelink__url {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin-top: var(--kd-space-5);
+}
+
+.kd-sharelink__url .kd-input {
+    flex: 1 1 16rem;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.kd-sharelink__feedback {
+    margin: var(--kd-space-3) 0 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-primary);
+}
+
+.kd-sharelink__feedback:empty {
+    display: none;
+}
+
+.kd-sharelink__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin-top: var(--kd-space-5);
+}
+
+/* La plage de semaines vit dans le bandeau : elle en perd le cadre. */
+.kd-sharelink .kd-sharerange {
+    margin: var(--kd-space-5) 0 0;
+    padding: 0;
+    border: 0;
+    background: none;
+}
+
+/* Bandeau des pages publiques (#61, A-44) : la page publique reprend le rendu de
+   la page privée, c'est lui qui dit où l'on est. */
+.kd-publicbanner {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin: 0 0 var(--kd-space-7);
+    padding: var(--kd-space-4) var(--kd-space-6);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface-subtle);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-publicbanner strong {
+    color: var(--color-text-strong);
+}
+
+.kd-publicbanner svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+
+/* ----------------------------------------------------------------------------
    Séance — en-tête de lecture (titre + méta + description)
    ---------------------------------------------------------------------------- */
 .kd-workouthead {
@@ -1933,6 +2041,14 @@ a.kd-scope--link:hover {
      un liseré de fond apparaît sur les côtés. */
     margin: calc(-1 * var(--kd-space-13)) calc(-1 * min(var(--kd-space-8), 4vw)) var(--kd-space-10);
     padding: var(--kd-space-8) min(var(--kd-space-8), 4vw) var(--kd-space-12);
+}
+
+/* La morsure du haut suppose que le hero ouvre la page. Précédé d'un message
+   (flash) ou du bandeau « Page publique » (#61), il les recouvrait : il reprend
+   alors sa place dans le flux, sous eux. Les côtés mordent toujours. */
+.kd-flash + .kd-wk > .kd-wk__hero,
+.kd-publicbanner + .kd-wk > .kd-wk__hero {
+    margin-top: 0;
 }
 
 .kd-wk__heroinner {
@@ -3443,6 +3559,7 @@ a.kd-scope--link:hover {
 
     .kd-wk__baractions {
         width: 100%;
+        flex-wrap: wrap;
         gap: var(--kd-space-3);
     }
 
@@ -3450,7 +3567,13 @@ a.kd-scope--link:hover {
         flex: 1;
     }
 
+    /* Le retour de copie passe sous les boutons, pleine largeur. Masqué, il
+       laissait le téléphone sans aucun signe que le lien était parti (A-43). */
     .kd-wk__feedback {
+        flex-basis: 100%;
+    }
+
+    .kd-wk__feedback:empty {
         display: none;
     }
 

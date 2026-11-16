@@ -7,7 +7,8 @@
 {% block body %}
     {% import 'components/_rating.html.twig' as ratings %}
 
-    {# Arrivée d'une copie depuis un lien partagé (#58). #}
+    {# Arrivée d'une copie depuis un lien partagé (#58), partage ouvert ou
+       arrêté (#61). #}
     {% for message in app.flashes('success') %}
         <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
     {% endfor %}
@@ -21,10 +22,7 @@
         volume: volume, load: load, plates: plates, endurance: endurance
     } only %}
         {% block actions %}
-            <div class="kd-wk__bar"
-                 data-controller="clipboard"
-                 data-clipboard-url-value="{{ url('app_public_share', {slug: flat.workout.slug}) }}"
-                 data-clipboard-title-value="{{ flat.workout.title }}">
+            <div class="kd-wk__bar">
                 {{ include('components/_backlink.html.twig', {
                     fallback: 'app_workout_index', kicker: 'Mes séances', class: 'kd-wk__back'
                 }) }}
@@ -38,12 +36,6 @@
                             {{ ux_icon('lucide:square-pen') }} Éditer
                         </a>
                     {% endif %}
-
-                    {# Envoyer le lien public : feuille de partage du système, ou
-                       copie là où elle n'existe pas (cf. clipboard_controller). #}
-                    <button type="button" class="kd-btn kd-btn--sm kd-btn--onink" data-action="clipboard#share">
-                        {{ ux_icon('lucide:share-2') }} Partager
-                    </button>
 
                     {# Les actions secondaires vivent dans un <details> natif :
                        clavier et sans-JS d'office, comme le menu de compte. Le
@@ -62,19 +54,22 @@
                                     {{ ux_icon('lucide:copy') }} Dupliquer la séance
                                 </button>
                             </form>
-                            <button type="button" class="kd-kebab__item" data-action="clipboard#copy">
-                                {{ ux_icon('lucide:link-2') }} Copier le lien
-                            </button>
-                            <a href="{{ path('app_public_share', {slug: flat.workout.slug}) }}"
-                               target="_blank" rel="noopener" class="kd-kebab__item">
-                                {{ ux_icon('lucide:external-link') }} Ouvrir la page publique
-                            </a>
                         </div>
                     </details>
-
-                    <span class="kd-wk__feedback" data-clipboard-target="feedback" role="status" aria-live="polite"></span>
                 </div>
             </div>
+        {% endblock %}
+
+        {# Partage par lien (#61) : privé par défaut, ouvert par le propriétaire
+           seul. Le composant ne se rend pas pour le coach. #}
+        {% block afterhero %}
+            {{ include('components/_share_link.html.twig', {
+                subject: flat.workout,
+                kind: 'workout',
+                url: flat.workout.shared ? url('app_public_share', {token: flat.workout.shareToken}) : null,
+                action: path('app_workout_share', {id: flat.workout.id}),
+                csrf: 'workout_share' ~ flat.workout.id,
+            }, with_context = false) }}
         {% endblock %}
     {% endembed %}
 

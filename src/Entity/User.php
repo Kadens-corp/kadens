@@ -71,8 +71,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     // Jeton secret d'abonnement calendrier (ICS). Nullable tant que l'utilisateur
     // n'a pas activé l'abonnement ; régénérer = révoquer l'ancien lien. Sert
-    // d'autorisation à lui seul (route /feed hors access_control, comme le partage
-    // public par slug), d'où l'entropie (32 octets → 64 hex) et l'unicité.
+    // d'autorisation à lui seul (route /feed hors access_control, comme le jeton
+    // de partage par lien), d'où l'entropie (32 octets → 64 hex) et l'unicité.
     #[ORM\Column(length: 64, unique: true, nullable: true)]
     private ?string $calendarFeedToken = null;
 

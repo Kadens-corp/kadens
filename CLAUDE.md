@@ -261,7 +261,7 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   propriétaire sur les cartes des autres.
 - **Copier une séance chez un autre (#58) ne référence jamais un exercice qu'il
   ne peut pas lire.** Coach → athlète (`/coach/athlete/{id}/workout/copy`) et
-  copie depuis le lien public (`/workout/shared/{slug}/copy`) passent par
+  copie depuis le lien public (`/workout/shared/{token}/copy`) passent par
   `SharedWorkoutCopier` : un exercice perso de l'auteur que `ExerciseVoter::VIEW`
   refuse au destinataire est recopié dans sa bibliothèque (homonyme de même
   activité réutilisé, jamais de `refKey`). Ce n'est pas du confort : la FK
@@ -299,6 +299,15 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   lien ne se perde plus). Se pose et se défait des deux côtés : bandeau `#plan-goals`
   dans l'éditeur de plan, section « Plans de préparation » sur la fiche objectif.
   Jamais affiché sur la page publique d'un plan (les objectifs sont privés).
+- **Séances et plans : privés par défaut, partage par lien opt-in (#61).** Aucune
+  page publique tant que le **propriétaire** (jamais son coach, 403) n'a pas ouvert
+  le partage : `shareToken` nullable, jeton aléatoire de 128 bits posé par
+  `ShareLink`, seul porteur des adresses `/s/{token}` et `/s/plan/{token}` (le slug
+  ne nomme plus que le fichier d'export). Arrêter = effacer le jeton : l'ancien
+  lien rend la même 404 qu'un jeton inventé, repartager en tire un nouveau. Une
+  case de plan (`planLocal`) n'a jamais de jeton, elle se lit sous celui de son
+  plan (`/s/plan/{token}/seance/{item}`). Donner un plan (`PlanTransfer`) le rend
+  privé. Copie depuis le lien et plage de semaines suivent le même jeton.
 - **Récit d'objectif : privé par défaut, publication opt-in (#42).** Un objectif
   porte un récit en blocs (`GoalBlock` : texte, photo, activité importée, séance
   faite). Les blocs de référence ne recopient aucun chiffre (`GoalStory`). Seul le
@@ -310,9 +319,9 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
 - **Création sans écran intermédiaire.** « Nouvelle séance » / « Nouveau plan » sont
   des **POST** qui créent un brouillon titré par défaut (plan : 4 semaines) et
   redirigent vers l'éditeur avec `rename=1`, qui ouvre le titre en édition en ligne.
-  Il n'y a plus de `WorkoutType` ni de `PlanTemplateType`. Le slug d'un brouillon est
-  régénéré au **premier** vrai renommage seulement (`SlugGenerator::derivesFrom`) :
-  une entité déjà nommée garde le sien, sinon son lien de partage public casserait.
+  Il n'y a plus de `WorkoutType` ni de `PlanTemplateType`. Le slug **suit le titre**
+  à chaque renommage (aucun lien public n'en dépend depuis #61) ;
+  `SlugGenerator::derivesFrom` évite seulement de le régénérer à titre inchangé.
 - **Métadonnées : édition en ligne uniquement.** Titre, description et nombre de
   semaines n'ont plus de formulaire de repli — c'est un choix assumé : sans JS, ces
   trois champs ne sont pas modifiables (le reste des éditeurs garde son repli par

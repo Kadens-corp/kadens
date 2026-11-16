@@ -7,8 +7,12 @@ use Symfony\Component\String\Slugger\SluggerInterface;
 
 /**
  * Génère des slugs uniques pour n'importe quelle entité disposant d'un champ
- * slug (Workout aujourd'hui, PlanTemplate en Phase 5). En cas de collision, on
- * suffixe par un compteur (`titre`, `titre-2`, `titre-3`, ...).
+ * slug (Workout, PlanTemplate, Goal). En cas de collision, on suffixe par un
+ * compteur (`titre`, `titre-2`, `titre-3`, ...).
+ *
+ * Séances et plans n'exposent plus leur slug dans aucune adresse publique (#61,
+ * c'est le jeton de `ShareLink`) : il ne nomme plus que leur fichier d'export.
+ * Le récit d'objectif publié, lui, vit encore sous `/s/goal/{slug}`.
  */
 final class SlugGenerator
 {
@@ -20,8 +24,8 @@ final class SlugGenerator
 
     /**
      * Racine du slug, sans suffixe d'unicité. Exposée pour reconnaître un slug
-     * encore issu d'un titre donné (ex. « nouvelle-seance », « nouvelle-seance-4 »
-     * pour un brouillon jamais renommé), cf. `derivesFrom()`.
+     * encore issu d'un titre donné (ex. « upper-a », « upper-a-4 »), cf.
+     * `derivesFrom()`.
      */
     public function base(string $text): string
     {
@@ -32,9 +36,9 @@ final class SlugGenerator
 
     /**
      * Le slug dérive-t-il encore de ce texte, c'est-à-dire sa racine suivie au plus
-     * d'un suffixe numérique d'unicité ? Sert à ne régénérer le slug d'un brouillon
-     * qu'au premier vrai renommage, sans jamais toucher celui d'une entité déjà
-     * nommée (ses URLs de partage public doivent rester stables).
+     * d'un suffixe numérique d'unicité ? Sert au renommage d'une séance ou d'un
+     * plan, dont le slug suit le titre : un titre réenregistré tel quel ne le
+     * régénère pas (`generate()` se trouverait lui-même et glisserait vers `-2`).
      */
     public function derivesFrom(?string $slug, string $text): bool
     {

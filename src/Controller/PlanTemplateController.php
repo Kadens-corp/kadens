@@ -28,6 +28,7 @@ use App\Service\SessionRating;
 use App\Service\ProgressionAggregator;
 use App\Service\SharedPlanCopier;
 use App\Service\SharedWorkoutCopier;
+use App\Service\ShareLink;
 use App\Service\SlugGenerator;
 use App\Service\WorkoutCloner;
 use App\Service\WorkoutMetrics;
@@ -46,10 +47,7 @@ final class PlanTemplateController extends AbstractController
     /** Exécutions notées d'une lignée résumées sur une carte de palette. */
     private const int PALETTE_RATINGS = 5;
 
-    /**
-     * Titre d'un brouillon créé en un clic. Sert aussi de repère pour savoir si le
-     * slug mérite d'être régénéré au premier vrai renommage (cf. updateMeta).
-     */
+    /** Titre d'un brouillon créé en un clic, que l'éditeur ouvre aussitôt en édition. */
     public const DRAFT_PLAN_TITLE = 'Nouveau plan';
 
     /** Bloc de départ d'un nouveau plan : on ajoute ensuite semaine par semaine. */
@@ -302,19 +300,55 @@ final class PlanTemplateController extends AbstractController
     }
 
     /**
-     * Copie dans SA bibliothèque un plan reçu par son lien public (#58). Même
-     * principe que `WorkoutController::copyShared` : le slug vaut droit de lecture,
-     * donc de copie. Les séances du plan arrivent avec lui dans sa bibliothèque
-     * (`SharedPlanCopier`). Sur son propre plan, rien à copier.
+     * Ouvre ou arrête le partage par lien du plan (#61). Geste de PROPRIÉTAIRE :
+     * l'attribut EDIT ne suffit pas, un coach accepté le porte aussi, et il ne
+     * publie pas le plan de son athlète (C-15). Le lien du plan ouvre aussi ses
+     * cases, qui n'en ont pas à elles.
      */
-    #[Route('/shared/{slug}/copy', name: 'app_plan_template_copy_shared', methods: ['POST'])]
+    #[Route('/{id}/share', name: 'app_plan_template_share', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function share(Request $request, PlanTemplate $template, ShareLink $shareLink): Response
+    {
+        $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
+
+        /** @var User $user */
+        $user = $this->getUser();
+        if ($template->getOwner()?->getId() !== $user->getId()) {
+            throw $this->createAccessDeniedException('Seul le propriétaire partage son plan.');
+        }
+
+        if (!$this->isCsrfTokenValid('plan_share'.$template->getId(), $request->getPayload()->getString('_token'))) {
+            throw $this->createAccessDeniedException('Jeton CSRF invalide.');
+        }
+
+        if ('close' === $request->getPayload()->getString('action')) {
+            $shareLink->close($template);
+            $this->addFlash('success', 'Partage arrêté : le lien ne répond plus.');
+        } else {
+            $shareLink->open($template);
+            $this->addFlash('success', 'Partage par lien activé. Copie le lien pour l\'envoyer.');
+        }
+
+        $this->entityManager->flush();
+
+        return $this->redirectToRoute('app_plan_template_show', ['id' => $template->getId()]);
+    }
+
+    /**
+     * Copie dans SA bibliothèque un plan reçu par son lien public (#58). Même
+     * principe que `WorkoutController::copyShared` : le jeton de partage vaut droit
+     * de lecture, donc de copie, et un partage arrêté ne se copie plus. Les séances
+     * du plan arrivent avec lui dans sa bibliothèque (`SharedPlanCopier`). Sur son
+     * propre plan, rien à copier.
+     */
+    #[Route('/shared/{token}/copy', name: 'app_plan_template_copy_shared', methods: ['POST'], requirements: ['token' => ShareLink::TOKEN])]
     public function copyShared(
         Request $request,
-        #[MapEntity(mapping: ['slug' => 'slug'])] PlanTemplate $template,
+        #[MapEntity(mapping: ['token' => 'shareToken'])] PlanTemplate $template,
         SharedPlanCopier $copier,
     ): Response {
-        if (!$this->isCsrfTokenValid('copy_shared_plan'.$template->getSlug(), $request->getPayload()->getString('_token'))) {
-            return $this->redirectToRoute('app_public_share_plan', ['slug' => $template->getSlug()]);
+        $token = (string) $template->getShareToken();
+        if (!$this->isCsrfTokenValid('copy_shared_plan'.$token, $request->getPayload()->getString('_token'))) {
+            return $this->redirectToRoute('app_public_share_plan', ['token' => $token]);
         }
 
         /** @var User $user */
@@ -337,10 +371,10 @@ final class PlanTemplateController extends AbstractController
      * le pare-feu le fait passer par le login, puis on le repose sur la page
      * publique du plan, où la copie est désormais possible.
      */
-    #[Route('/shared/{slug}/copy', name: 'app_plan_template_copy_shared_entry', methods: ['GET'])]
-    public function copySharedEntry(#[MapEntity(mapping: ['slug' => 'slug'])] PlanTemplate $template): Response
+    #[Route('/shared/{token}/copy', name: 'app_plan_template_copy_shared_entry', methods: ['GET'], requirements: ['token' => ShareLink::TOKEN])]
+    public function copySharedEntry(#[MapEntity(mapping: ['token' => 'shareToken'])] PlanTemplate $template): Response
     {
-        return $this->redirectToRoute('app_public_share_plan', ['slug' => $template->getSlug()]);
+        return $this->redirectToRoute('app_public_share_plan', ['token' => $template->getShareToken()]);
     }
 
     /**
@@ -369,10 +403,10 @@ final class PlanTemplateController extends AbstractController
                     return new Response('Le titre ne peut pas être vide.', Response::HTTP_UNPROCESSABLE_ENTITY);
                 }
                 $template->setTitle($value);
-                // Un plan créé en un clic naît avec un slug dérivé du titre par
-                // défaut : on le régénère au premier renommage, mais uniquement dans
-                // ce cas (un plan déjà nommé garde son lien de partage public).
-                if ($slugGenerator->derivesFrom($template->getSlug(), self::DRAFT_PLAN_TITLE)) {
+                // Le slug suit le titre : il ne nomme plus que le fichier d'export,
+                // le lien public est un jeton depuis #61. Un slug qui dérive déjà
+                // du titre reste, sans quoi il glisserait vers `-2` à chaque envoi.
+                if (!$slugGenerator->derivesFrom($template->getSlug(), $value)) {
                     $template->setSlug($slugGenerator->generate($value, PlanTemplate::class));
                 }
                 break;
@@ -934,7 +968,7 @@ final class PlanTemplateController extends AbstractController
     }
 
     /**
-     * Garantit un slug (partage public). Les plans créés/dupliqués en ont déjà un ;
+     * Garantit un slug (nom du fichier d'export). Les plans créés/dupliqués en ont déjà un ;
      * ce repli couvre d'éventuelles données anciennes au slug null.
      */
     private function ensureSlug(PlanTemplate $template, SlugGenerator $slugGenerator): void

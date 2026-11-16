@@ -41,8 +41,23 @@ class Workout
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $notes = null;
 
+    /**
+     * Identifiant lisible, dérivé du titre : nom du fichier d'export. N'apparaît
+     * plus dans aucune adresse publique (#61), c'est `shareToken` qui les porte.
+     */
     #[ORM\Column(length: 255, unique: true)]
     private ?string $slug = null;
+
+    /**
+     * Partage par lien (#61). Null = privée, c'est le défaut. Posé par
+     * `ShareLink::open()` à la demande du propriétaire : il sert alors à lui seul
+     * d'autorisation de lecture sous `/s/{shareToken}`, d'où l'aléa (128 bits) et
+     * aucune dérivation du titre. Arrêter le partage le remet à null : l'adresse
+     * meurt pour de bon, un nouveau partage en tire une autre. Jamais posé sur une
+     * copie `planLocal`, qui ne se lit que par le lien de son plan.
+     */
+    #[ORM\Column(length: 32, unique: true, nullable: true)]
+    private ?string $shareToken = null;
 
     #[ORM\Column(nullable: true)]
     private ?int $estimatedDurationMinutes = null;
@@ -191,6 +206,23 @@ class Workout
         $this->slug = $slug;
 
         return $this;
+    }
+
+    public function getShareToken(): ?string
+    {
+        return $this->shareToken;
+    }
+
+    public function setShareToken(?string $shareToken): static
+    {
+        $this->shareToken = $shareToken;
+
+        return $this;
+    }
+
+    public function isShared(): bool
+    {
+        return null !== $this->shareToken;
     }
 
     public function getEstimatedDurationMinutes(): ?int
