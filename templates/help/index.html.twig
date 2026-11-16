@@ -22,6 +22,7 @@
         <a href="#composer">Le compositeur de séance</a>
         <a href="#plan">L'éditeur de plan</a>
         <a href="#calendar">Le calendrier</a>
+        <a href="#app">L'app Android</a>
         {% if isCoach %}
             <a href="#coach">Guide du coach</a>
             <a href="#athlete">La fiche d'un athlète</a>
@@ -41,6 +42,11 @@
     <section class="kd-section kd-helppage" id="calendar">
         <h2 class="kd-title kd-title--sm">Le calendrier</h2>
         <div class="kd-help__body">{{ help.calendar() }}</div>
+    </section>
+
+    <section class="kd-section kd-helppage" id="app">
+        <h2 class="kd-title kd-title--sm">L'app Android</h2>
+        <div class="kd-help__body">{{ help.mobile_app() }}</div>
     </section>
 
     {% if isCoach %}

@@ -100,7 +100,7 @@
         <div class="kd-empty">
             {{ ux_icon('lucide:calendar-off') }}
             <div>Aucune séance faite pour l'instant.</div>
-            <p class="kd-empty__hint">Une séance apparaît ici dès qu'elle est marquée faite, sur le web ou dans l'app. Tant qu'elle est seulement prévue, elle reste au calendrier.</p>
+            <p class="kd-empty__hint">Une séance apparaît ici dès qu'elle est marquée faite, sur le web ou dans <a href="{{ path('app_install') }}">l'app Kadens</a>. Tant qu'elle est seulement prévue, elle reste au calendrier.</p>
         </div>
     {% else %}
         {# Répartition par nature. Chaque séance compte pour UNE, sous son

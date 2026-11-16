@@ -11112,6 +11112,65 @@ a.kd-coachitem__name:hover {
     max-width: 66ch;
 }
 
+/* « Pas de version iPhone », dit en tête et pas au fond des détails (#74) :
+   c'est la première chose qu'un possesseur d'iPhone a besoin de savoir. Cadre
+   neutre, comme `.kd-applog` : une limite de plateforme n'est pas une erreur. */
+.kd-install__platform {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-3);
+    margin: var(--kd-space-6) 0 0;
+    padding: var(--kd-space-4) var(--kd-space-5);
+    max-width: 66ch;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-subtle);
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--color-text);
+}
+
+.kd-install__platform svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    color: var(--color-text-faint);
+}
+
+/* Le chemin de secours (APK direct), sous le chemin recommandé dans la même
+   carte : un intertitre, pas une section à part entière. */
+.kd-install__subtitle {
+    margin: var(--kd-space-9) 0 0;
+    padding-top: var(--kd-space-7);
+    border-top: 1px solid var(--color-border);
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-bold);
+    font-size: 15px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-install__text {
+    margin: var(--kd-space-3) 0 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--color-text-secondary);
+    max-width: 66ch;
+}
+
+/* Dans les détails techniques, l'empreinte suit la liste : un peu d'air
+   avant son étiquette. */
+.kd-install__feats + .kd-install__label {
+    margin-top: var(--kd-space-8);
+}
+
+/* Hors du flex de la marche à suivre, l'empreinte n'a pas de `gap` pour la
+   séparer de son étiquette. */
+.kd-install__feats ~ .kd-install__fingerprint {
+    margin-top: var(--kd-space-3);
+}
+
 /* Le numéro de build est une précision, pas la version : même ligne, encre
    secondaire, et c'est le numéro lisible qui garde le poids. */
 .kd-install__version span {
@@ -11231,8 +11290,11 @@ a.kd-coachitem__name:hover {
         gap: var(--kd-space-7);
     }
 
+    /* Sur un téléphone, le QR affiché par le téléphone lui-même ne se scanne
+       pas : la marche à suivre et l'adresse à coller passent devant. */
     .kd-install__qr {
         align-self: center;
+        order: 2;
     }
 
     /* Un APK se télécharge depuis le téléphone : les deux liens prennent la

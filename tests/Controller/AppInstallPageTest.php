@@ -72,6 +72,35 @@ final class AppInstallPageTest extends WebTestCase
     }
 
     /**
+     * #74 : « Android uniquement » se lit en tête de page, et l'iPhone est cité
+     * tout de suite, pas au fond de la fiche de compatibilité.
+     */
+    public function testItSaysAndroidOnlyBeforeAnythingElse(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/app');
+
+        self::assertSelectorTextContains('.kd-pagehead .kd-eyebrow', 'Android uniquement pour l\'instant');
+        self::assertSelectorTextContains('.kd-pagehead .kd-install__platform', 'iPhone');
+    }
+
+    /**
+     * #74 : d'abord à quoi sert l'app, puis comment l'installer, et les détails
+     * techniques (empreinte, signature) en dernier.
+     */
+    public function testTheTechnicalDetailsComeLast(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/app');
+
+        $titles = $crawler->filter('.kd-formsection__title')->each(static fn ($node) => $node->text());
+        self::assertSame(['À quoi elle sert', 'L\'installer', 'La connecter à ton compte', 'Détails techniques'], $titles);
+
+        $last = $crawler->filter('.kd-formsection')->last();
+        self::assertCount(1, $last->filter('.kd-install__fingerprint'));
+    }
+
+    /**
      * Une page publique n'ouvre pas de session. Ce n'est pas cosmétique : `/app`
      * est la seule page anonyme qu'on ouvrira depuis un QR ou un lien partagé, et
      * un cookie posé là ferait porter au mutualisé une session par visiteur.

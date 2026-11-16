@@ -1,17 +1,26 @@
 {% extends 'base.html.twig' %}
 
-{# La page d'installation de l'app Android (KL-43).
+{# La page d'installation de l'app Android (KL-43, réécrite par #74).
 
    Anonyme : on y arrive depuis un téléphone qui n'a pas encore l'app, donc sans
    session. D'où la marque en tête, rendue seulement hors connexion — connecté,
    c'est le header applicatif qui la porte déjà (base.html.twig).
+
+   Écrite pour quelqu'un qui n'a jamais installé d'app hors du Play Store, dans
+   cet ordre : la plateforme (Android seulement, dit avant tout le reste), à quoi
+   sert l'app, comment l'installer, comment la connecter, et les détails
+   techniques en dernier (empreinte, version, signature). L'adresse du dépôt
+   reste dans la marche à suivre : c'est une valeur à coller, pas un détail.
+
+   On y mène depuis tous les endroits qui citent le téléphone
+   (`components/_log_in_app`, paramètres, historique, statistiques, aide).
 
    Elle ne fait aucune requête après chargement, QR compris (rendu côté serveur).
    `release` est le service MobileRelease : la version publiée est déclarée dans
    `config/services.yaml`, pas lue chez GitHub à chaque affichage. #}
 
 {% block title %}L'app Android — Kadens{% endblock %}
-{% block meta_description %}Kadens sur Android : dérouler la séance du jour et consigner chaque série, hors réseau. Installation par le dépôt store.antoninpamart.fr ou par APK direct.{% endblock %}
+{% block meta_description %}L'app Kadens pour Android : noter ses charges pendant la séance, série par série, même sans réseau. Comment l'installer et la connecter à son compte.{% endblock %}
 
 {% block body %}
     {% if not app.user %}
@@ -22,9 +31,13 @@
 
     <div class="kd-pagehead">
         <div>
-            <p class="kd-eyebrow kd-eyebrow--accent">Android</p>
+            <p class="kd-eyebrow kd-eyebrow--accent">Android uniquement pour l'instant</p>
             <h1 class="kd-title">L'app Kadens</h1>
-            <p class="kd-lead">Elle déroule la séance du jour et consigne ce qui a vraiment été fait, série par série, sans réseau. Tout le reste (bibliothèque, séances, plans, calendrier) se compose ici, sur le site.</p>
+            <p class="kd-lead">Elle sert à noter tes charges pendant la séance, série par série, même sans réseau. Tout le reste (exercices, séances, plans, calendrier) se prépare ici, sur le site.</p>
+            <p class="kd-install__platform">
+                {{ ux_icon('lucide:smartphone') }}
+                <span>Pas encore de version iPhone. Sur iPhone, le site reste utilisable pour préparer et cocher tes séances, mais le détail des charges ne s'y saisit pas.</span>
+            </p>
         </div>
     </div>
 
@@ -33,34 +46,34 @@
             <header class="kd-formsection__head">
                 <span class="kd-formsection__icon">{{ ux_icon('lucide:smartphone') }}</span>
                 <div>
-                    <h2 class="kd-formsection__title">Ce qu'elle fait</h2>
-                    <p class="kd-formsection__hint">Une app de salle, pas une seconde version du site. Elle sait quatre choses, et elle les fait avec le téléphone en mode avion.</p>
+                    <h2 class="kd-formsection__title">À quoi elle sert</h2>
+                    <p class="kd-formsection__hint">C'est le carnet de la salle. Tu l'ouvres au début de la séance, tu la fermes à la fin.</p>
                 </div>
             </header>
 
             <dl class="kd-deflist kd-install__feats">
-                <dt>La séance du jour</dt>
-                <dd>Ce qui est programmé au calendrier arrive sur le téléphone, bloc par bloc, avec les charges et les repos prévus.</dd>
+                <dt>Ta séance du jour</dt>
+                <dd>La séance prévue au calendrier s'affiche exercice par exercice, avec les charges et les temps de repos prévus.</dd>
 
-                <dt>Le réalisé</dt>
-                <dd>Chaque série se coche avec ses vraies valeurs. Une charge changée, une série de plus, un exercice sauté ou remplacé : la déviation se note, elle ne se cache pas.</dd>
+                <dt>Tes vraies charges</dt>
+                <dd>À chaque série, tu notes ce que tu as vraiment fait. Une charge changée, une série en plus, un exercice sauté : tout se note, et tu le retrouves ensuite sur le site.</dd>
 
-                <dt>Hors réseau</dt>
-                <dd>Tout s'écrit sur le téléphone. Ce qui a été fait repart au serveur au retour du réseau, sans rien perdre si l'app a été tuée en route.</dd>
+                <dt>Sans réseau</dt>
+                <dd>Pas besoin de réseau à la salle. Ce que tu notes reste sur le téléphone et part sur le site dès qu'il retrouve une connexion.</dd>
 
-                <dt>Une séance vierge</dt>
-                <dd>Rien de programmé ? La séance se remplit au fur et à mesure, et se range au calendrier comme les autres.</dd>
+                <dt>Une séance improvisée</dt>
+                <dd>Rien de prévu ? Tu remplis la séance au fur et à mesure, et elle se range au calendrier comme les autres.</dd>
             </dl>
 
-            <p class="kd-install__note">Elle ne suit ni la course, ni le vélo, ni la natation. Une sortie se coche « faite » et rien de plus. Le cardio est déjà couvert ailleurs, et le refaire à moitié n'intéresse personne.</p>
+            <p class="kd-install__note">Elle sert à la muscu. Une sortie course, vélo ou natation ne s'y suit pas : elle se coche faite, et son détail arrive de ta montre si tu as relié Intervals.icu.</p>
         </section>
 
         <section class="kd-card kd-formsection">
             <header class="kd-formsection__head">
                 <span class="kd-formsection__icon">{{ ux_icon('lucide:qr-code') }}</span>
                 <div>
-                    <h2 class="kd-formsection__title">Installer par le dépôt</h2>
-                    <p class="kd-formsection__hint">C'est le chemin recommandé : c'est le seul qui prévienne des mises à jour. Kadens n'est pas sur le Play Store.</p>
+                    <h2 class="kd-formsection__title">L'installer</h2>
+                    <p class="kd-formsection__hint">Kadens n'est pas sur le Play Store. On l'installe par TNT Store, une petite app qui sait où trouver Kadens et qui te prévient des mises à jour.</p>
                 </div>
             </header>
 
@@ -71,52 +84,29 @@
 
                 <div class="kd-install__aside">
                     <ol class="kd-install__steps">
-                        <li>Installe <strong>TNT Store</strong> sur le téléphone. Ce magasin ne stocke aucune application : il référence des versions publiées ailleurs, ici les releases GitHub de Kadens.</li>
-                        <li>Ajoute ce dépôt, en scannant le QR ou en collant l'adresse.</li>
-                        <li>Kadens y apparaît. Installe depuis là, et les mises à jour suivantes s'y annonceront.</li>
+                        <li>Installe <strong>TNT Store</strong> sur ton téléphone.</li>
+                        <li>Dans TNT Store, ajoute Kadens : scanne ce QR, ou colle l'adresse ci-dessous.</li>
+                        <li>Kadens apparaît dans la liste. Installe-la depuis là : les mises à jour s'y afficheront aussi.</li>
                     </ol>
 
-                    <p class="kd-install__label">Adresse du dépôt</p>
+                    <p class="kd-install__label">Adresse à coller dans TNT Store</p>
                     <p class="kd-install__url">{{ release.storeUrl }}</p>
-
-                    <p class="kd-install__label">Empreinte de la clé du dépôt</p>
-                    {# À recouper à la main : c'est ce qui distingue ce dépôt d'un
-                       homonyme servi par quelqu'un d'autre. Coupée en deux à
-                       l'affichage par `overflow-wrap`, jamais dans la valeur. #}
-                    <p class="kd-install__fingerprint">{{ release.storeFingerprint }}</p>
                 </div>
             </div>
-        </section>
 
-        <section class="kd-card kd-formsection">
-            <header class="kd-formsection__head">
-                <span class="kd-formsection__icon">{{ ux_icon('lucide:file-down') }}</span>
-                <div>
-                    <h2 class="kd-formsection__title">Version publiée</h2>
-                    <p class="kd-formsection__hint">Le téléchargement direct est un secours : il installe, il ne prévient de rien ensuite.</p>
-                </div>
-            </header>
-
+            <h3 class="kd-install__subtitle">Sans TNT Store</h3>
             {% if release.isPublished %}
-                <dl class="kd-deflist kd-install__feats">
-                    <dt>Version</dt>
-                    <dd class="kd-install__version">{{ release.versionName }} <span>(build {{ release.versionCode }})</span></dd>
-                    <dt>Compatibilité</dt>
-                    <dd>Android arm64 uniquement, ce qui couvre tout téléphone vendu depuis 2016. Pas de version iOS.</dd>
-                </dl>
+                <p class="kd-install__text">Tu peux aussi télécharger l'app directement. Elle s'installe pareil, mais rien ne te préviendra d'une nouvelle version : il faudra revenir sur cette page.</p>
 
                 <div class="kd-install__acts">
                     <a class="kd-btn kd-btn--primary" href="{{ release.apkUrl }}" rel="noopener">
-                        {{ ux_icon('lucide:file-down') }} Télécharger l'APK
-                    </a>
-                    <a class="kd-btn kd-btn--ghost" href="{{ release.releaseUrl }}" rel="noopener">
-                        {{ ux_icon('lucide:external-link') }} Notes de version
+                        {{ ux_icon('lucide:file-down') }} Télécharger l'app
                     </a>
                 </div>
 
-                <p class="kd-install__note">Android demandera d'autoriser l'installation depuis cette source : l'app est signée par une clé personnelle, pas par le Play Store. Une mise à jour installée par-dessus garde toutes les données de l'appareil.</p>
+                <p class="kd-install__note">Android te demandera d'autoriser l'installation, parce que l'app ne vient pas du Play Store. Une nouvelle version installée par-dessus garde tout ce que le téléphone contient.</p>
             {% else %}
-                <p class="kd-install__note">Aucune version n'est publiée pour l'instant. Le dépôt et cette page sont en place, l'app arrive.</p>
+                <p class="kd-install__note">Aucune version n'est encore publiée. Cette page sera à jour dès qu'elle le sera.</p>
             {% endif %}
         </section>
 
@@ -124,18 +114,51 @@
             <header class="kd-formsection__head">
                 <span class="kd-formsection__icon">{{ ux_icon('lucide:link') }}</span>
                 <div>
-                    <h2 class="kd-formsection__title">Connecter le téléphone</h2>
-                    <p class="kd-formsection__hint">Une fois l'app installée, elle se connecte en scannant un QR affiché ici, pas en tapant un mot de passe.</p>
+                    <h2 class="kd-formsection__title">La connecter à ton compte</h2>
+                    <p class="kd-formsection__hint">Pas de mot de passe à taper sur le téléphone : l'app se connecte en scannant un QR affiché sur le site.</p>
                 </div>
             </header>
 
             <ol class="kd-install__steps">
-                <li>Ouvre <a href="{{ path('app_profile_settings') }}">tes paramètres de compte</a> sur un ordinateur, section « Connecter un téléphone ».</li>
-                <li>Affiche le QR : il porte l'adresse du serveur et un code à usage unique, valable deux minutes.</li>
-                <li>Dans l'app, choisis « Scanner un QR » et vise l'écran. Le code de secours se tape à la main si la caméra refuse.</li>
+                <li>Sur un ordinateur, ouvre <a href="{{ path('app_profile_settings') }}">tes paramètres</a>, section « Connecter un téléphone ».</li>
+                <li>Affiche le QR. Il ne sert qu'une fois et vaut deux minutes.</li>
+                <li>Dans l'app, choisis « Scanner un QR » et vise l'écran. Si la caméra refuse, un code de secours se tape à la main.</li>
             </ol>
 
-            <p class="kd-install__note">Le QR ne contient aucun accès permanent. Un appareil connecté se révoque depuis ces mêmes paramètres, et il perd tout de suite le droit de synchroniser.</p>
+            <p class="kd-install__note">Un téléphone perdu ou prêté se déconnecte depuis ces mêmes paramètres, section « Appareils connectés ».</p>
+        </section>
+
+        <section class="kd-card kd-formsection">
+            <header class="kd-formsection__head">
+                <span class="kd-formsection__icon">{{ ux_icon('lucide:settings-2') }}</span>
+                <div>
+                    <h2 class="kd-formsection__title">Détails techniques</h2>
+                    <p class="kd-formsection__hint">Rien d'indispensable pour installer l'app. Utile pour vérifier ce que tu installes.</p>
+                </div>
+            </header>
+
+            <dl class="kd-deflist kd-install__feats">
+                {% if release.isPublished %}
+                    <dt>Version</dt>
+                    <dd class="kd-install__version">{{ release.versionName }} <span>(build {{ release.versionCode }})</span> · <a href="{{ release.releaseUrl }}" rel="noopener">Notes de version</a></dd>
+                {% endif %}
+
+                <dt>Compatibilité</dt>
+                <dd>Android arm64, ce qui couvre tout téléphone Android vendu depuis 2016. Pas de version iOS.</dd>
+
+                <dt>Dépôt</dt>
+                <dd>TNT Store n'héberge pas l'app : l'adresse ajoutée pointe vers un dépôt qui référence les versions publiées sur GitHub.</dd>
+
+                <dt>Signature</dt>
+                <dd>L'app est signée par une clé personnelle, pas par Google. C'est pour ça qu'Android demande une autorisation à l'installation.</dd>
+            </dl>
+
+            <p class="kd-install__label">Empreinte de la clé du dépôt</p>
+            {# À recouper à la main : c'est ce qui distingue ce dépôt d'un
+               homonyme servi par quelqu'un d'autre. Coupée en deux à
+               l'affichage par `overflow-wrap`, jamais dans la valeur. #}
+            <p class="kd-install__fingerprint">{{ release.storeFingerprint }}</p>
+            <p class="kd-install__note">Si TNT Store affiche une empreinte à l'ajout du dépôt, elle doit être identique à celle-ci. Sinon, l'adresse ne mène pas au dépôt de Kadens : ne l'ajoute pas.</p>
         </section>
     </div>
 {% endblock %}
