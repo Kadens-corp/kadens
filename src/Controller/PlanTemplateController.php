@@ -276,7 +276,7 @@ final class PlanTemplateController extends AbstractController
         /** @var User $user */
         $user = $this->getUser();
         if ($template->getOwner()?->getId() !== $user->getId()) {
-            throw $this->createAccessDeniedException('Seul le propriétaire du plan peut le donner.');
+            throw $this->createAccessDeniedException('Seul le propriétaire du plan peut le transférer.');
         }
 
         $redirect = $this->redirectToRoute('app_plan_template_edit', ['id' => $template->getId()]);

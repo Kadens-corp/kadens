@@ -62,8 +62,8 @@
                le dit déjà (#64). #}
             {% if composingFor %}
                 <p class="kd-editsection__hint">
-                    Ses séances et les tiennes sont dans la palette. Une des tiennes, posée ici,
-                    est d'abord copiée dans sa bibliothèque.
+                    Ses séances et les tiennes sont dans la liste des séances. Si tu ajoutes
+                    une des tiennes, elle est d'abord copiée dans sa bibliothèque.
                 </p>
             {% endif %}
         </div>
@@ -80,14 +80,14 @@
     {% if assignableAthletes is not empty %}
         {% if onCalendar %}
             <p class="kd-editsection__hint">
-                Ce plan est déjà sur ton calendrier : il ne peut plus être donné à un athlète.
+                Ce plan est déjà sur ton calendrier : il ne peut plus être transféré à un athlète.
                 Pour qu'il en ait un, donne-lui une copie depuis sa fiche.
             </p>
         {% else %}
             <form method="post" action="{{ path('app_plan_template_assign', {id: template.id}) }}" class="kd-sharerange"
-                  onsubmit="return confirm('Donner ce plan à ' + this.athlete.selectedOptions[0].text + ' ? Il deviendra le sien, tu resteras co-éditeur. Tes notes privées sur le plan seront effacées.');">
+                  onsubmit="return confirm('Transférer ce plan à ' + this.athlete.selectedOptions[0].text + ' ? Il deviendra le sien, tu resteras co-éditeur. Tes notes privées sur le plan seront effacées.');">
                 <input type="hidden" name="_token" value="{{ csrf_token('plan_assign' ~ template.id) }}">
-                <label class="kd-sharerange__label" for="plan_assign_athlete">Donner ce plan à&nbsp;:</label>
+                <label class="kd-sharerange__label" for="plan_assign_athlete">Transférer ce plan à&nbsp;:</label>
                 <select class="kd-planweek__select" id="plan_assign_athlete" name="athlete" required>
                     <option value="" selected disabled>Choisir un athlète…</option>
                     {% for athlete in assignableAthletes %}
@@ -95,7 +95,7 @@
                     {% endfor %}
                 </select>
                 <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">
-                    {{ ux_icon('lucide:user-plus') }} Donner
+                    {{ ux_icon('lucide:user-plus') }} Transférer
                 </button>
             </form>
         {% endif %}
@@ -125,14 +125,14 @@
        #plan-grid (action="update"), la modale et le contrôleur survivent. #}
     <section class="kd-editsection" data-controller="plangrid"
              data-plangrid-grid-url-value="{{ path('app_plan_template_grid', {id: template.id}) }}">
-        <p class="kd-editsection__title">Trame</p>
-        <p class="kd-editsection__hint">
-            Le « + » d'un jour ouvre la palette sur cette case : taper une séance la
-            pose. À la souris, on peut aussi armer une séance puis tamponner les cases,
-            ou la glisser directement. Une séance posée s'ouvre en édition rapide (sa
-            progression est propre à cette case, les autres ne bougent pas), et son
-            menu porte le reste : déplacer, retirer.
-        </p>
+        <p class="kd-editsection__title">Grille du plan</p>
+        {# Aide en trois gestes (#67) : le vocabulaire de l'interface (armer,
+           tamponner, palette) n'a pas sa place à l'écran. #}
+        <ol class="kd-editsection__hint kd-planhelp">
+            <li>Choisis une séance dans la liste des séances.</li>
+            <li>Clique sur les jours où tu veux la faire. Le « + » d'un jour y ajoute une séance directement.</li>
+            <li>Clique sur une case pour l'ajuster. Ça ne change que cette case. Son menu permet de la déplacer, la copier ou la retirer.</li>
+        </ol>
         {# Coach sur le plan de son athlète : la note d'une case est une consigne
            qu'il lira, pas un pense-bête (#65). #}
         {{ include('components/_visible_to.html.twig', {owner: template.owner, what: 'Les consignes de case'}, with_context = false) }}
@@ -162,10 +162,10 @@
                 data-action="click->plangrid#backdrop">
             <div class="kd-modal__card kd-modal__card--quick">
                 <header class="kd-modal__head">
-                    <span class="kd-modal__title">{{ ux_icon('lucide:sliders-horizontal') }} Édition rapide</span>
+                    <span class="kd-modal__title">{{ ux_icon('lucide:sliders-horizontal') }} Modifier cette case seulement</span>
                     <div class="kd-modal__headactions">
                         <a data-plangrid-target="fullLink" href="#" class="kd-btn kd-btn--secondary kd-btn--sm">
-                            {{ ux_icon('lucide:square-pen') }} Édition complète
+                            {{ ux_icon('lucide:square-pen') }} Ouvrir dans l'éditeur de séance
                         </a>
                         <button type="button" class="kd-modal__close" data-action="plangrid#close" aria-label="Fermer">
                             {{ ux_icon('lucide:x') }}

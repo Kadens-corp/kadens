@@ -276,7 +276,7 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   **Les plans suivent la même règle** (`SharedPlanCopier` : copie publique,
   « Un de mes plans » sur la fiche coach) et une de plus : chaque case se
   **re-racine** dans la bibliothèque du destinataire (une copie par racine). Un
-  plan peut aussi être **donné** depuis son éditeur (« Donner ce plan à »,
+  plan peut aussi être **donné** depuis son éditeur (« Transférer ce plan à »,
   `PlanTransfer`) : il change de propriétaire, le coach reste co-éditeur. Gardes :
   propriétaire seul, athlète accepté, plan **jamais posé au calendrier** (ses
   séances datées pointeraient des cases parties chez l'athlète). Ni le bloc-notes

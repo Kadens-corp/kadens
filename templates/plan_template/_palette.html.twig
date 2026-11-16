@@ -26,11 +26,13 @@
      data-place-token="{{ csrf_token('plan_place' ~ template.id) }}">
     <div class="kd-libpanel__head">
         <div class="kd-libpanel__title">
-            <span>Séances</span>
+            {# Chez le coach, la liste croise deux bibliothèques : « Mes séances »
+               y serait faux, la facette « à qui » fait le tri. #}
+            <span>{{ paletteOwners ? 'Séances' : 'Mes séances' }}</span>
             <span class="kd-libpanel__count">{{ paletteCount }}</span>
             {# Visible uniquement en feuille (sous 900px) : sur écran large, le
                panneau n'est pas un calque, il n'y a rien à fermer. #}
-            <button type="button" class="kd-libpanel__close" data-action="plangrid#closeLib" aria-label="Fermer la palette">
+            <button type="button" class="kd-libpanel__close" data-action="plangrid#closeLib" aria-label="Fermer la liste des séances">
                 {{ ux_icon('lucide:x') }}
             </button>
         </div>
@@ -85,7 +87,7 @@
                 <span class="kd-libx__body">
                     <span class="kd-libx__name">{{ w.title }}</span>
                     {% if card.mine %}
-                        <span class="kd-scope" title="Posée, elle sera copiée dans sa bibliothèque">
+                        <span class="kd-scope" title="Ajoutée au plan, elle sera copiée dans sa bibliothèque">
                             {{ ux_icon('lucide:user') }} À moi
                         </span>
                     {% endif %}
@@ -142,8 +144,7 @@
     </div>
 
     <p class="kd-libpanel__hint">
-        Clique une séance pour l'<strong>armer</strong>, puis clique les cases pour la poser.
-        Ou glisse-la dans une case. Le <strong>+</strong> d'un jour, lui, vise directement
-        sa case.
+        Clique sur une séance, puis sur les jours où tu veux la faire.
+        Tu peux aussi la glisser sur un jour.
     </p>
 </div>

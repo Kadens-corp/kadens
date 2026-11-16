@@ -139,7 +139,7 @@
                                                        exclue de la bibliothèque : sans contexte, son retour
                                                        menait à un index où elle n'apparaît pas. #}
                                                     <a class="kd-kebab__item" href="{{ path('app_workout_edit', {id: entry.item.workout.id}|merge(back_to('plan-edit', template.id))) }}">
-                                                        {{ ux_icon('lucide:square-pen') }} Édition complète
+                                                        {{ ux_icon('lucide:square-pen') }} Ouvrir dans l'éditeur de séance
                                                     </a>
 
                                                     {# Repli du glisser-déposer : indispensable au clavier, et plus
@@ -196,7 +196,7 @@
                                                         token: csrf_token('item_delete' ~ entry.item.id),
                                                         icon: 'lucide:x',
                                                         variant: 'danger',
-                                                        label: 'Retirer de la trame'
+                                                        label: 'Retirer du plan'
                                                     }) }}
                                                 </div>
                                             </details>
@@ -233,7 +233,7 @@
                         <button type="button" class="kd-planday__add"
                                 data-action="plangrid#openLib"
                                 data-week="{{ week.weekNumber }}" data-day="{{ day.dayOfWeek }}"
-                                data-cell-label="S{{ week.weekNumber }} · {{ dayFull[day.dayOfWeek] }}"
+                                data-cell-label="semaine {{ week.weekNumber }}, {{ dayFull[day.dayOfWeek] }}"
                                 aria-label="Ajouter une séance — semaine {{ week.weekNumber }}, {{ dayFull[day.dayOfWeek] }}">
                             {{ ux_icon('lucide:plus') }}
                         </button>

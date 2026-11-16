@@ -384,7 +384,7 @@ final class CoachController extends AbstractController
         $this->entityManager->persist($template);
         $this->entityManager->flush();
 
-        $this->addFlash('success', sprintf('Plan créé pour %s. Compose sa trame maintenant.', $athlete->getDisplayName()));
+        $this->addFlash('success', sprintf('Plan créé pour %s. Ajoute maintenant ses séances dans la grille.', $athlete->getDisplayName()));
 
         return $this->redirectToRoute('app_plan_template_edit', ['id' => $template->getId()]);
     }

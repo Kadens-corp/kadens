@@ -7594,6 +7594,15 @@ button.kd-libx:active {
     max-width: 60ch;
 }
 
+/* Aide de l'éditeur de plan en trois étapes numérotées (#67) */
+.kd-planhelp {
+    padding-left: var(--kd-space-5);
+}
+
+.kd-planhelp li + li {
+    margin-top: var(--kd-space-1);
+}
+
 /* Actions de semaine (copier vers, retirer) en menu poussé à droite de l'en-tête.
    Une rangée — un select de destination et deux boutons — ne tenait pas sur une
    ligne de téléphone : elle passait à la ligne et doublait la hauteur de chaque

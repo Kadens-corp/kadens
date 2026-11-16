@@ -331,7 +331,7 @@ export default class extends Controller {
     /** Rappelle la case visée en tête de palette (la feuille masque la trame). */
     showTargetLabel(label) {
         if (!this.hasTargetLabelTarget) return;
-        this.targetLabelTarget.textContent = label ? `Poser dans ${label}` : '';
+        this.targetLabelTarget.textContent = label ? `Ajouter en ${label}` : '';
         this.targetLabelTarget.hidden = label === '';
     }
 

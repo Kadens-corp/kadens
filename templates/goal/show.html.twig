@@ -202,7 +202,7 @@
             {% if plans is empty %}
                 <div class="kd-empty">
                     {{ ux_icon('lucide:layers') }}
-                    <div>{{ mine ? 'Tu n\'as pas encore de plan.' : 'Aucun plan pour cet athlète.' }} Crée une trame ci-dessus pour l'ancrer sur cette date.</div>
+                    <div>{{ mine ? 'Tu n\'as pas encore de plan.' : 'Aucun plan pour cet athlète.' }} Crée un plan ci-dessus pour l'ancrer sur cette date.</div>
                 </div>
             {% else %}
                 <form method="post" action="{{ path('app_goal_prepare', {id: goal.id}) }}" class="kd-goalprepare">

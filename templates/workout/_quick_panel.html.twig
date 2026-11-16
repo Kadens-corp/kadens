@@ -17,7 +17,7 @@
 {% if workout.blocks is empty %}
     <p class="kd-quickedit__empty">
         {{ ux_icon('lucide:layers') }}
-        Cette séance n'a pas encore de bloc. Utilise l'édition complète pour la composer.
+        Cette séance n'a pas encore de bloc. Ouvre-la dans l'éditeur de séance pour la composer.
     </p>
 {% else %}
     {% for block in workout.blocks|sort((a, b) => a.position <=> b.position) %}

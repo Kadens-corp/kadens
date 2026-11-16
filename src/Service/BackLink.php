@@ -132,7 +132,7 @@ final class BackLink
 
         return match ($target->kind) {
             BackTarget::PLAN => $this->plan($target->value, PlanTemplateVoter::VIEW, 'app_plan_template_show', 'Plan'),
-            BackTarget::PLAN_EDIT => $this->plan($target->value, PlanTemplateVoter::EDIT, 'app_plan_template_edit', 'Trame'),
+            BackTarget::PLAN_EDIT => $this->plan($target->value, PlanTemplateVoter::EDIT, 'app_plan_template_edit', 'Éditeur de plan'),
             BackTarget::LOG => [
                 'url' => $this->urlGenerator->generate('app_profile_log'),
                 'kicker' => 'Journal',
