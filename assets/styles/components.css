@@ -2590,6 +2590,57 @@ a.kd-scope--link:hover {
     height: 14px;
 }
 
+/* ----------------------------------------------------------------------------
+   Consigne du plan (#95) — la note de case, sur la séance datée qui en est
+   issue (page /schedule/{id} et modale du calendrier). Une note en marge :
+   encre, filet gauche plein, sans rouge (ni action, ni échec). Le libellé en
+   mono comme les titres de section de modale, le texte en police de lecture.
+   ---------------------------------------------------------------------------- */
+.kd-instruction {
+    margin: 0 0 var(--kd-space-7);
+    padding: var(--kd-space-5) var(--kd-space-7);
+    background: var(--color-surface-subtle);
+    border-left: 3px solid var(--color-text);
+}
+
+.kd-instruction__label {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: 0 0 var(--kd-space-2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-instruction__label svg {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+}
+
+/* Contenu saisi : casse normale, retours à la ligne gardés par nl2br. */
+.kd-instruction__text {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--color-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.kd-instruction--compact {
+    margin: var(--kd-space-4) 0 var(--kd-space-6);
+    padding: var(--kd-space-4) var(--kd-space-5);
+}
+
+.kd-instruction--compact .kd-instruction__text {
+    font-size: 14px;
+}
+
 /* ---- Menu kebab (actions secondaires) — <details> natif ---- */
 .kd-kebab {
     position: relative;

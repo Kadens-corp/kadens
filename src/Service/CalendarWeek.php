@@ -54,7 +54,8 @@ final class CalendarWeek
         $byDate = [];
         $flattened = [];
         $ids = [];
-        foreach ($this->scheduledWorkouts->findByOwnerBetween($owner, $monday, $sunday) as $scheduled) {
+        $week = $this->scheduledWorkouts->findByOwnerBetween($owner, $monday, $sunday);
+        foreach ($week as $scheduled) {
             $byDate[$scheduled->getScheduledDate()->format('Y-m-d')][] = $scheduled;
             $ids[] = (int) $scheduled->getId();
             $workout = $scheduled->getWorkout();
@@ -96,6 +97,8 @@ final class CalendarWeek
             'isoWeek' => (int) $monday->format('W'),
             'days' => $days,
             'flattened' => $flattened,
+            // Consigne de case dans la modale (#95), même source que la page.
+            'instructions' => $this->planFlattener->planInstructions($week),
             // Le ressenti des séances faites, sur la carte haute : une requête
             // pour la semaine. La vue mois ne l'affiche pas, faute de place.
             'ratings' => $this->scheduledWorkouts->ratingsFor($ids),

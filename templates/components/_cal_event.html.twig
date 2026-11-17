@@ -39,6 +39,9 @@
                    séance de bibliothèque supprimée) : il n'y a alors ni aperçu ni
                    méta, le titre retombe sur le snapshot `displayTitle` et la
                    pastille porte la marque « Libre »
+     - instruction : string|null (optionnel) — consigne de la case du plan
+                   d'où vient la séance (`PlanFlattener::planInstruction`, #95),
+                   montrée dans la modale
      - statuses  : ScheduledStatus::cases()
      - detailed  : bool (optionnel) — carte haute de la vue semaine (méta + note)
      - rating    : SessionRating|null (optionnel) — ressenti effectif, affiché
@@ -55,6 +58,7 @@
 {% import 'components/_activity.html.twig' as activity %}
 {% import 'components/_rating.html.twig' as ratings %}
 {% set fw = fw|default(null) %}
+{% set instruction = instruction|default(null) %}
 {% set rating = rating|default(null) %}
 {% set backFrom = backFrom|default(null) %}
 {% set back = backFrom ? {from: backFrom} : {} %}
@@ -206,6 +210,10 @@
                     {{ include('components/_freeform_mark.html.twig') }}
                 {% endif %}
             </div>
+
+            {# La consigne de la case du plan (#95), avant le formulaire : on la
+               lit avant de dire ce qui a été fait. #}
+            {{ include('components/_plan_instruction.html.twig', {instruction: instruction, compact: true}, with_context = false) }}
 
             {# Prévu vs réalisé : statut, commentaire et ressenti, enregistrés
                ensemble par un bouton « Enregistrer » explicite (#90).

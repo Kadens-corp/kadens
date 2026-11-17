@@ -216,6 +216,9 @@ final class ScheduledWorkoutController extends AbstractController
             'defaultTab' => $this->defaultTab($scheduled, $comparison),
             'summaryContext' => $summaryContext,
             'statuses' => ScheduledStatus::cases(),
+            // La consigne de la case du plan (#95), qui n'était lisible que dans
+            // l'éditeur de plan : l'athlète ne l'aurait jamais vue.
+            'planInstruction' => $planFlattener->planInstruction($scheduled),
         ] + $activities + [
             // Le volume PRÉVU, dans le HTML initial comme le reste de la page :
             // une vue de consultation ne charge rien après coup (cache offline).
@@ -475,6 +478,7 @@ final class ScheduledWorkoutController extends AbstractController
             'scheduled' => $scheduled,
             // null pour une séance sans source : la pastille retombe sur son titre.
             'fw' => null === $workout ? null : $planFlattener->flattenWorkout($workout),
+            'instruction' => $planFlattener->planInstruction($scheduled),
             'statuses' => ScheduledStatus::cases(),
             'detailed' => (bool) $request->getPayload()->getInt('detailed'),
             'rating' => $this->ratingOf($scheduled),

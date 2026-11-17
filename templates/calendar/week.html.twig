@@ -153,6 +153,7 @@
                             {{ include('components/_cal_event.html.twig', {
                                 scheduled: scheduled,
                                 fw: scheduled.workout ? flattened[scheduled.workout.id] : null,
+                                instruction: instructions[scheduled.id] ?? null,
                                 statuses: statuses,
                                 detailed: true,
                                 rating: ratings[scheduled.id] ?? null,

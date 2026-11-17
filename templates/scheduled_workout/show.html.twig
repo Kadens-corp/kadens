@@ -44,7 +44,8 @@
             comparison: comparison, logSummary: logSummary, defaultTab: defaultTab,
             volume: volume|default(null), load: load|default(null),
             plates: plates|default([]), endurance: endurance|default([]),
-            eyebrow: 'Séance au calendrier', summaryContext: summaryContext
+            eyebrow: 'Séance au calendrier', summaryContext: summaryContext,
+            planInstruction: planInstruction
         } only %}
             {% block actions %}
                 {{ include('scheduled_workout/_hero_actions.html.twig', {
@@ -53,7 +54,10 @@
             {% endblock %}
             {# Le bilan, avant le programme : c'est ce qui distingue cette page
                de la séance type (#91). #}
+            {# La consigne de la case du plan (#95), avant le bilan : c'est ce
+               qu'on lit avant de faire la séance. #}
             {% block afterhero %}
+                {{ include('components/_plan_instruction.html.twig', {instruction: planInstruction}, with_context = false) }}
                 {{ include('components/_scheduled_summary.html.twig', summaryContext, with_context = false) }}
             {% endblock %}
         {% endembed %}
@@ -74,6 +78,7 @@
                 </div>
             </header>
 
+            {{ include('components/_plan_instruction.html.twig', {instruction: planInstruction}, with_context = false) }}
             {{ include('components/_scheduled_summary.html.twig', summaryContext, with_context = false) }}
 
             {# Sans source, il n'y a rien à comparer : pas de colonne « Prévu »,

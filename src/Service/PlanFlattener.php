@@ -7,6 +7,7 @@ use App\Entity\PlanItem;
 use App\Entity\PlanTemplate;
 use App\Entity\PrescribedExercise;
 use App\Entity\PrescribedSet;
+use App\Entity\ScheduledWorkout;
 use App\Entity\Workout;
 use App\Enum\IntensityZone;
 use App\Enum\PaceUnit;
@@ -92,6 +93,49 @@ final class PlanFlattener
             'template' => $template,
             'weeks' => $weeks,
         ];
+    }
+
+    /**
+     * La consigne de case d'une séance datée issue d'un plan (#95) : la note que
+     * le coach (ou l'athlète) a posée sur la case S3 · mardi, et que l'athlète
+     * doit lire le jour J. Elle vit sur le `PlanItem`, pas sur la séance : deux
+     * cases peuvent partager le même contenu et des consignes différentes.
+     *
+     * Elle passe ici, comme le reste du rendu, parce que c'est ici qu'on décide de
+     * ce qui sort d'un plan vers une vue de lecture. Ce n'est **pas** une donnée
+     * privée (le bloc-notes privé est `Workout.notes` / `PlanTemplate.notes`, qui
+     * n'entrent jamais ici) : la page publique du plan l'affiche déjà, et
+     * l'éditeur la nomme « Consigne visible par <athlète> ».
+     *
+     * Null pour une séance posée hors plan, une case retirée depuis (SET NULL)
+     * ou une note vide.
+     */
+    public function planInstruction(ScheduledWorkout $scheduled): ?string
+    {
+        $notes = trim((string) $scheduled->getSourcePlanItem()?->getNotes());
+
+        return '' === $notes ? null : $notes;
+    }
+
+    /**
+     * `planInstruction()` pour une liste de séances datées (calendrier), indexée
+     * par id de séance datée. Seules les séances qui en ont une sont présentes.
+     *
+     * @param iterable<ScheduledWorkout> $scheduled
+     *
+     * @return array<int, string>
+     */
+    public function planInstructions(iterable $scheduled): array
+    {
+        $byId = [];
+        foreach ($scheduled as $one) {
+            $instruction = $this->planInstruction($one);
+            if (null !== $instruction) {
+                $byId[(int) $one->getId()] = $instruction;
+            }
+        }
+
+        return $byId;
     }
 
     /**

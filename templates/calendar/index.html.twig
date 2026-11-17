@@ -104,6 +104,7 @@
                                         {{ include('components/_cal_event.html.twig', {
                                             scheduled: scheduled,
                                             fw: scheduled.workout ? flattened[scheduled.workout.id] : null,
+                                            instruction: instructions[scheduled.id] ?? null,
                                             statuses: statuses,
                                             overdue: cell.overdue and scheduled.status.value == 'planned',
                                             backFrom: back_token('cal-month', '%04d-%02d'|format(year, month)),

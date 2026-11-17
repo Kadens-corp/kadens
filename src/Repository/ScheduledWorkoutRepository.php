@@ -52,9 +52,12 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
      */
     public function findByOwnerBetween(User $owner, \DateTimeImmutable $start, \DateTimeImmutable $end): array
     {
+        // La case d'origine vient avec : sa consigne s'affiche dans la modale du
+        // calendrier (#95), sans une requête par pastille.
         return $this->createQueryBuilder('s')
-            ->addSelect('w')
+            ->addSelect('w', 'pi')
             ->leftJoin('s.workout', 'w')
+            ->leftJoin('s.sourcePlanItem', 'pi')
             ->andWhere('s.owner = :owner')
             ->andWhere('s.scheduledDate BETWEEN :start AND :end')
             ->setParameter('owner', $owner)

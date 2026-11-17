@@ -89,8 +89,11 @@ final class CalendarController extends AbstractController
         // Une séance datée sans source (séance libre) n'a rien à aplatir : la
         // pastille retombe sur son titre.
         $flattened = [];
+        $instructions = [];
         foreach ($weeks as $week) {
             foreach ($week as $cell) {
+                // Consigne de case dans la modale (#95), même source que la page.
+                $instructions += $planFlattener->planInstructions($cell['scheduled']);
                 foreach ($cell['scheduled'] as $scheduled) {
                     $workout = $scheduled->getWorkout();
                     if (null !== $workout) {
@@ -115,6 +118,7 @@ final class CalendarController extends AbstractController
             'monthLabel' => CalendarWeek::MONTH_NAMES[$month].' '.$year,
             'weeks' => $weeks,
             'flattened' => $flattened,
+            'instructions' => $instructions,
             'goalsByDate' => $goalsByDate,
             'nextGoal' => $nextGoal,
             'weekPivot' => $weekPivot->format('Y-m-d'),
