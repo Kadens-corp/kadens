@@ -6,7 +6,7 @@
     {# Arrivée d'une copie depuis un lien partagé (#58), partage ouvert ou
        arrêté (#61). #}
     {% for message in app.flashes('success') %}
-        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
+        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
     {% endfor %}
 
     {# Vue de consultation auto-suffisante : aucun chargement AJAX post-rendu,

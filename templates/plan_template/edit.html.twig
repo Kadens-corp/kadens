@@ -4,10 +4,10 @@
 
 {% block body %}
     {% for message in app.flashes('success') %}
-        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
+        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
     {% endfor %}
     {% for message in app.flashes('error') %}
-        <p class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ message }}</p>
+        <p data-turbo-temporary class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ message }}</p>
     {% endfor %}
 
     <div class="kd-actionbar">

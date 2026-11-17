@@ -10028,6 +10028,20 @@ textarea.kd-inlineedit__input {
     max-width: 220px;
 }
 
+/* Confirmation d'un rattachement, posée dans le bandeau même (B-05 coach). */
+.kd-plangoals__notice {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    font-size: 12px;
+    color: var(--color-success);
+}
+
+.kd-plangoals__notice svg {
+    width: 13px;
+    height: 13px;
+}
+
 .kd-goalplans {
     list-style: none;
     margin: 0;

@@ -5,10 +5,10 @@
 
 {% block body %}
     {% for message in app.flashes('success') %}
-        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
+        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
     {% endfor %}
     {% for message in app.flashes('error') %}
-        <p class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ message }}</p>
+        <p data-turbo-temporary class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ message }}</p>
     {% endfor %}
 
     {# `mine` : la fiche est ouverte par son propriétaire, ou par son coach
@@ -127,17 +127,23 @@
 
     {# ------------------------ PLANS DE PRÉPARATION ------------------------- #}
     {# Le pendant du bandeau d'objectifs de l'éditeur de plan : le lien se pose et
-       se défait des deux côtés. Rattacher documente l'intention (« ces plans
-       préparent cette échéance ») ; ancrer sur le calendrier, c'est le bloc
-       suivant. Plusieurs plans par objectif : une prépa se découpe souvent en
-       blocs (base puis spécifique). #}
+       se défait des deux côtés. Associer documente l'intention (« ces plans
+       préparent cette échéance ») sans toucher à l'agenda ; poser les séances au
+       calendrier, c'est le bloc suivant. Les deux gestes se ressemblent : l'un
+       est un simple lien, l'autre crée des séances datées, et l'audit (A-34) a
+       failli les confondre. Les libellés le disent donc en toutes lettres.
+       Plusieurs plans par objectif : une prépa se découpe souvent en blocs
+       (base puis spécifique). #}
     <section class="kd-card kd-section__block">
         <h2 class="kd-card__title kd-profile__grouphead">{{ ux_icon('lucide:layers') }} Plans de préparation</h2>
+        <p class="kd-lead" style="margin-top:0;">
+            Associer un plan note qu'il prépare cette échéance. L'agenda ne bouge pas.
+        </p>
 
         {% if goal.planTemplates is empty %}
             <div class="kd-empty">
                 {{ ux_icon('lucide:layers') }}
-                <div>Aucun plan rattaché à cette échéance.</div>
+                <div>Aucun plan associé à cette échéance.</div>
             </div>
         {% else %}
             <ul class="kd-goalplans">
@@ -156,8 +162,8 @@
                                 <input type="hidden" name="action" value="detach">
                                 <input type="hidden" name="planTemplate" value="{{ plan.id }}">
                                 <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm"
-                                        title="Détacher ce plan" aria-label="Détacher « {{ plan.title }} »">
-                                    {{ ux_icon('lucide:x') }}
+                                        aria-label="Détacher « {{ plan.title }} » de cet objectif">
+                                    {{ ux_icon('lucide:unlink') }} Détacher
                                 </button>
                             </form>
                         </div>
@@ -171,14 +177,14 @@
                 <form method="post" action="{{ path('app_goal_plans', {id: goal.id}) }}" class="kd-goalplans__attach">
                     <input type="hidden" name="_token" value="{{ csrf_token('goal_plans' ~ goal.id) }}">
                     <input type="hidden" name="action" value="attach">
-                    <select name="planTemplate" class="kd-input kd-select" aria-label="Rattacher un plan existant" required>
-                        <option value="">Rattacher un plan existant…</option>
+                    <select name="planTemplate" class="kd-input kd-select" aria-label="Plan à associer" required>
+                        <option value="">Choisir un plan à associer…</option>
                         {% for plan in attachablePlans %}
                             <option value="{{ plan.id }}">{{ plan.title }}{% if plan.durationWeeks %} ({{ plan.durationWeeks }} sem.){% endif %}</option>
                         {% endfor %}
                     </select>
                     <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">
-                        {{ ux_icon('lucide:link-2') }} Rattacher
+                        {{ ux_icon('lucide:link-2') }} Associer ce plan (sans toucher à l'agenda)
                     </button>
                 </form>
             {% endif %}
@@ -190,19 +196,22 @@
         </div>
     </section>
 
-    {# ---------------------- PRÉPARER AVEC UN PLAN -------------------------- #}
+    {# ------------------- PLANIFIER POUR FINIR LE JOUR J ---------------------- #}
+    {# Le geste lourd : il crée des séances datées. Bouton secondaire, et une
+       phrase qui dit ce qu'il fait, pour qu'on ne le prenne pas pour un simple
+       lien (A-34). Il associe le plan au passage : inutile d'associer avant. #}
     {% if not goal.isPast %}
         <section class="kd-card kd-section__block">
-            <h2 class="kd-card__title kd-profile__grouphead">{{ ux_icon('lucide:calendar-range') }} Préparer avec un plan</h2>
+            <h2 class="kd-card__title kd-profile__grouphead">{{ ux_icon('lucide:calendar-range') }} Planifier dans l'agenda</h2>
             <p class="kd-lead" style="margin-top:0;">
-                On raisonne à l'envers : Kadens cale la dernière semaine du plan sur
-                {{ mine ? 'ton échéance' : 'cette échéance' }} et calcule la date de départ.
-                {% if not mine %}Le plan se pose sur le calendrier de {{ goal.owner.displayName }}.{% endif %}
+                Pose toutes les séances du plan dans {{ mine ? 'ton agenda' : 'l\'agenda de ' ~ goal.owner.displayName }},
+                en calant sa dernière semaine sur le jour J : Kadens calcule la date de départ.
+                Le plan est associé à l'objectif au passage. À faire une seule fois par plan.
             </p>
             {% if plans is empty %}
                 <div class="kd-empty">
                     {{ ux_icon('lucide:layers') }}
-                    <div>{{ mine ? 'Tu n\'as pas encore de plan.' : 'Aucun plan pour cet athlète.' }} Crée un plan ci-dessus pour l'ancrer sur cette date.</div>
+                    <div>{{ mine ? 'Tu n\'as pas encore de plan.' : 'Aucun plan pour cet athlète.' }} Crée un plan ci-dessus pour le planifier sur cette date.</div>
                 </div>
             {% else %}
                 <form method="post" action="{{ path('app_goal_prepare', {id: goal.id}) }}" class="kd-goalprepare">
@@ -216,8 +225,8 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <button type="submit" class="kd-btn kd-btn--primary">
-                        {{ ux_icon('lucide:calendar-plus') }} Ancrer sur l'échéance
+                    <button type="submit" class="kd-btn kd-btn--secondary">
+                        {{ ux_icon('lucide:calendar-plus') }} Planifier pour finir le jour J
                     </button>
                 </form>
             {% endif %}
@@ -236,7 +245,7 @@
             <div class="kd-card">
                 <div class="kd-empty">
                     {{ ux_icon('lucide:calendar-off') }}
-                    <div>Aucune séance planifiée avant cette date. Pose un plan ci-dessus ou ajoute des séances au calendrier.</div>
+                    <div>Aucune séance planifiée avant cette date. Planifie un plan ci-dessus ou ajoute des séances au calendrier.</div>
                 </div>
             </div>
         {% else %}

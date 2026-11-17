@@ -17,10 +17,10 @@
     {% endif %}
 
     {% for message in app.flashes('success') %}
-        <div class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }}{{ message }}</div>
+        <div data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }}{{ message }}</div>
     {% endfor %}
     {% for message in app.flashes('error') %}
-        <div class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:calendar-x') }}{{ message }}</div>
+        <div data-turbo-temporary class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:calendar-x') }}{{ message }}</div>
     {% endfor %}
 
     <div class="kd-pagehead">

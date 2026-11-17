@@ -451,6 +451,7 @@ final class PlanTemplateController extends AbstractController
     {
         $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
         $payload = $request->getPayload();
+        $notice = null;
 
         if ($this->isCsrfTokenValid('plan_goals'.$template->getId(), $payload->getString('_token'))) {
             $goal = $this->goalRepository->find($payload->getInt('goalId'));
@@ -458,26 +459,40 @@ final class PlanTemplateController extends AbstractController
             if (null !== $goal && $goal->getOwner() === $template->getOwner()) {
                 if ('detach' === $payload->getString('action')) {
                     $template->removeGoal($goal);
+                    $notice = sprintf('Objectif « %s » détaché.', $goal->getTitle());
                 } else {
                     $template->addGoal($goal);
+                    $notice = sprintf('Plan associé à « %s ».', $goal->getTitle());
                 }
                 $this->entityManager->flush();
             }
         }
 
-        return $this->goalsResponse($request, $template);
+        return $this->goalsResponse($request, $template, $notice);
     }
 
     /**
      * Réponse d'une mutation de rattachement : stream ciblé sur #plan-goals (repli
-     * sans JS : redirection vers l'éditeur), calqué sur `gridResponse()`.
+     * sans JS : redirection vers l'éditeur, le message en flash), calqué sur
+     * `gridResponse()`.
+     *
+     * La confirmation s'affiche DANS le bandeau, là où l'on vient de cliquer, et
+     * le stream retire les flashes de la page : celui de l'arrivée (« Plan créé
+     * pour… ») restait sinon en haut de l'éditeur, et passait pour la réponse au
+     * rattachement (B-05 coach).
      */
-    private function goalsResponse(Request $request, PlanTemplate $template): Response
+    private function goalsResponse(Request $request, PlanTemplate $template, ?string $notice): Response
     {
         if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
             $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
 
-            return $this->render('plan_template/stream/goals.stream.html.twig', $this->goalsContext($template));
+            return $this->render('plan_template/stream/goals.stream.html.twig', [
+                'goalsNotice' => $notice,
+            ] + $this->goalsContext($template));
+        }
+
+        if (null !== $notice) {
+            $this->addFlash('success', $notice);
         }
 
         return $this->redirectToRoute('app_plan_template_edit', ['id' => $template->getId()]);

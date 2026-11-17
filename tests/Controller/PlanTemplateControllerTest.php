@@ -152,6 +152,67 @@ final class PlanTemplateControllerTest extends WebTestCase
         self::assertCount(0, $this->mustFind(PlanTemplate::class, $templateId)->getGoals());
     }
 
+    /**
+     * B-05 coach : après « Associer » dans l'éditeur, le flash d'arrivée
+     * (« Plan créé pour… ») restait en haut de page et passait pour la réponse.
+     * Le stream le retire et confirme dans le bandeau même.
+     */
+    public function testAttachGoalStreamClearsStaleFlashAndConfirmsInPlace(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $template = $this->createPlanTemplate($user, 'Prépa trail', 4);
+
+        $goal = (new Goal())
+            ->setOwner($user)
+            ->setTitle('Trail 42k')
+            ->setTargetDate(new \DateTimeImmutable('+10 weeks'));
+        $this->em->persist($goal);
+        $this->em->flush();
+
+        $templateId = $template->getId();
+        $url = '/plan-template/'.$templateId.'/goals';
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/plan-template/'.$templateId.'/edit');
+        $token = $crawler->filter('form[action="'.$url.'"] input[name="_token"]')->first()->attr('value');
+
+        $this->client->request('POST', $url, ['_token' => $token, 'action' => 'attach', 'goalId' => $goal->getId()], [], [
+            'HTTP_ACCEPT' => 'text/vnd.turbo-stream.html, text/html, application/xhtml+xml',
+        ]);
+
+        self::assertResponseIsSuccessful();
+        $body = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('<turbo-stream action="remove" targets=".kd-flash">', $body);
+        self::assertStringContainsString('Plan associé à « Trail 42k ».', $body);
+        self::assertStringContainsString('role="status"', $body);
+    }
+
+    /** Sans JS, la même confirmation arrive en flash sur l'éditeur. */
+    public function testAttachGoalWithoutJsConfirmsWithAFlash(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $template = $this->createPlanTemplate($user, 'Prépa trail', 4);
+
+        $goal = (new Goal())
+            ->setOwner($user)
+            ->setTitle('Trail 42k')
+            ->setTargetDate(new \DateTimeImmutable('+10 weeks'));
+        $this->em->persist($goal);
+        $this->em->flush();
+
+        $templateId = $template->getId();
+        $url = '/plan-template/'.$templateId.'/goals';
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/plan-template/'.$templateId.'/edit');
+        $token = $crawler->filter('form[action="'.$url.'"] input[name="_token"]')->first()->attr('value');
+
+        $this->client->request('POST', $url, ['_token' => $token, 'action' => 'attach', 'goalId' => $goal->getId()]);
+        self::assertResponseRedirects('/plan-template/'.$templateId.'/edit');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-flash', 'Plan associé à « Trail 42k ».');
+    }
+
     public function testPlaceItemForksWorkoutInCell(): void
     {
         $user = $this->createUser('owner@example.com');
