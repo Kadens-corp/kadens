@@ -19,6 +19,7 @@ use App\Repository\WorkoutRepository;
 use App\Security\Voter\PlanTemplateVoter;
 use App\Service\CoachedLibrary;
 use App\Service\CoachingResolver;
+use App\Service\LineageDivergence;
 use App\Service\LineageSeed;
 use App\Service\OffProgramRecap;
 use App\Service\PlanFlattener;
@@ -68,6 +69,7 @@ final class PlanTemplateController extends AbstractController
         private readonly CoachingResolver $coachingResolver,
         private readonly CoachedLibrary $coachedLibrary,
         private readonly OffProgramRecap $offProgramRecap,
+        private readonly LineageDivergence $lineageDivergence,
     ) {
     }
 
@@ -1067,6 +1069,8 @@ final class PlanTemplateController extends AbstractController
             // Le ressenti par racine de lignée, pour l'aperçu d'une case posée :
             // la copie locale y renvoie par `origin`.
             'lineageFeelings' => $feelings,
+            // Cases qui répètent à l'identique la fois d'avant de leur lignée (#93).
+            'repeats' => $this->lineageDivergence->repeatsInPlan($template),
         ];
     }
 

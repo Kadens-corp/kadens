@@ -2,7 +2,7 @@ import { Controller } from '@hotwired/stimulus';
 import { renderStreamMessage } from '@hotwired/turbo';
 import Sortable from 'sortablejs';
 import HoverPreview from 'hover-preview';
-import { ensureSaved, resetSaveStatus, trackSave } from 'save-status';
+import { SAVE_EVENT, ensureSaved, resetSaveStatus, trackSave } from 'save-status';
 
 /*
  * Éditeur de trame de plan. Deux responsabilités, toutes deux en amélioration
@@ -204,6 +204,15 @@ export default class extends Controller {
             if (!this.dirty) return;
             await Promise.all([...this.saving]);
             this.refreshGrid();
+        });
+        // Tout enregistrement réussi dans la modale salit la trame, y compris ceux
+        // qui ne passent pas par `onPanelSubmit` : le titre de la case, renommé en
+        // ligne (#93). Un renommage validé par la fermeture même (Échap quitte le
+        // champ, cf. `cancel`) aboutit modale déjà fermée : on re-rend alors ici.
+        el.addEventListener(SAVE_EVENT, (event) => {
+            if (event.detail?.state !== 'saved') return;
+            this.dirty = true;
+            if (!el.open && this.saving.size === 0) this.refreshGrid();
         });
     }
 

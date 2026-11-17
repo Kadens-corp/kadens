@@ -4,7 +4,8 @@
    d'un exercice fait hors programme, action="update").
    Contexte (quickPanelContext) : workout, prescribedForms, summaries,
    supersetLabels (rang « A1 » par id, seulement pour les exercices enchaînés),
-   offProgram (ce que l'athlète a fait hors programme la dernière fois).
+   offProgram (ce que l'athlète a fait hors programme la dernière fois),
+   staleTitle (le titre chiffré ne suit peut-être plus le contenu, #93).
 
    Chaque champ s'enregistre seul au changement (#86) : le serveur ne renvoie
    alors que la ligne de résumé de l'exercice (`_quick_exo_summary`).
@@ -12,6 +13,8 @@
    Portée volontairement limitée aux valeurs (reps/séries/repos…) : la structure
    (blocs, ordre, glisser-déposer) reste au compositeur, atteignable par le lien
    « Édition complète ». #}
+{{ include('workout/_quick_title.html.twig') }}
+
 {{ include('components/_off_program.html.twig', {
     recap: offProgram|default(null), workout: workout, context: 'quick'
 }, with_context = false) }}

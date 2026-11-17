@@ -8267,6 +8267,17 @@ button.kd-libx:active {
     height: 11px;
 }
 
+/* Case identique à la fois d'avant de sa séance (#93) : « = S11 ». Pastille à
+   l'encre, pas au rouge (réservé à l'action et à l'échec) : c'est un état, pas
+   une alerte. En chasse fixe comme le reste de la ligne. */
+.kd-planitem__meta .kd-planitem__same {
+    padding: 0 4px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--kd-radius-sm);
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
 /* Chemin d'ajout attaché au jour : ouvre la palette SUR cette case. Discret à la
    souris (il n'apparaît qu'au survol de la case, comme le « + » du calendrier),
    toujours visible au doigt où il n'y a pas de survol (cf. base.css). */
@@ -8678,6 +8689,58 @@ textarea.kd-inlineedit__input {
 .kd-quickedit__empty svg {
     width: 18px;
     height: 18px;
+}
+
+/* Titre de la case en tête de l'édition rapide (#93) : renommable en ligne,
+   avec le rappel de le faire quand le contenu a changé et pas lui. Le titre est
+   du contenu saisi : Barlow, casse normale. */
+.kd-quicktitle {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-1);
+}
+
+.kd-quicktitle__label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-lg);
+    text-transform: uppercase;
+    color: var(--color-text-faint);
+}
+
+.kd-quicktitle__value {
+    margin: 0;
+    padding: 2px var(--kd-space-1);
+    margin-left: calc(-1 * var(--kd-space-1));
+    font-family: var(--font-body);
+    font-size: 16px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
+.kd-quicktitle__hint {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-2);
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--color-text-faint);
+}
+
+.kd-quicktitle__hint--todo {
+    padding: var(--kd-space-2) var(--kd-space-3);
+    border-left: 3px solid var(--color-border-strong);
+    background: var(--color-surface-subtle);
+    color: var(--color-text-strong);
+}
+
+.kd-quicktitle__hint svg {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
 }
 
 /* Un bloc dans le panneau rapide */

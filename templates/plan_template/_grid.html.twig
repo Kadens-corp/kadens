@@ -115,6 +115,18 @@
                                                     data-full-url="{{ path('app_workout_edit', {id: entry.item.workout.id}|merge(back_to('plan-edit', template.id))) }}">
                                                 <span class="kd-planitem__title">{{ entry.workout.workout.title }}</span>
                                                 <span class="kd-planitem__meta">
+                                                    {# Case qui répète à l'identique la fois d'avant de sa
+                                                       séance dans le plan (#93, LineageDivergence) : pas
+                                                       encore ajustée, ou volontairement stable. Une case
+                                                       qui progresse n'a pas de repère. Même semaine : le
+                                                       jour suffit. #}
+                                                    {% set repeat = repeats[entry.item.workout.id] ?? null %}
+                                                    {% if repeat %}
+                                                        <span class="kd-planitem__same"
+                                                              title="Identique à la semaine {{ repeat.week }}, {{ dayFull[repeat.day] }}">
+                                                            = {{ repeat.week == week.weekNumber ? dayNames[repeat.day]|lower ~ '.' : 'S' ~ repeat.week }}
+                                                        </span>
+                                                    {% endif %}
                                                     {% if entry.item.workout.estimatedDurationMinutes %}
                                                         <span>{{ ux_icon('lucide:clock') }} {{ entry.item.workout.estimatedDurationMinutes }} min</span>
                                                     {% endif %}

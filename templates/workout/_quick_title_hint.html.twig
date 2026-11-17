@@ -1,0 +1,26 @@
+{# Ce que le titre de la case dit de sa séance d'origine (#93).
+   - titre d'origine chiffré, contenu qui n'est plus celui de l'origine
+     (`staleTitle`) : le rappel de renommer, qui nomme le lecteur (l'athlète quand
+     c'est son coach qui édite). Un titre sans chiffre (« Upper A ») reste vrai
+     quand la charge progresse : jamais de rappel ;
+   - titre déjà changé : la séance d'origine, pour ne pas perdre le fil.
+   Contexte : workout, staleTitle. #}
+{% set origin = workout.origin %}
+{% if origin %}
+    {% if staleTitle %}
+        {% set forOther = workout.owner and app.user and workout.owner.id != app.user.id %}
+        <p class="kd-quicktitle__hint kd-quicktitle__hint--todo">
+            {{ ux_icon('lucide:git-compare') }}
+            <span>
+                Le contenu a changé mais le titre, avec ses chiffres, est encore celui de la séance d'origine.
+                {% if forOther %}
+                    C'est lui que {{ workout.owner.displayName }} lira dans son agenda : renomme la case s'il ne dit plus ce qu'elle contient.
+                {% else %}
+                    C'est lui que tu liras dans ton agenda : renomme la case s'il ne dit plus ce qu'elle contient.
+                {% endif %}
+            </span>
+        </p>
+    {% elseif workout.title != origin.title %}
+        <p class="kd-quicktitle__hint">Séance d'origine : « {{ origin.title }} »</p>
+    {% endif %}
+{% endif %}

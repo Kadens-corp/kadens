@@ -25,6 +25,7 @@ use App\Repository\WorkoutRepository;
 use App\Security\Voter\WorkoutVoter;
 use App\Service\CoachedLibrary;
 use App\Service\PerformanceHistory;
+use App\Service\LineageDivergence;
 use App\Service\LineageSeed;
 use App\Service\OffProgramRecap;
 use App\Service\PlanFlattener;
@@ -75,6 +76,7 @@ final class WorkoutController extends AbstractController
         private readonly SupersetGrouper $supersets,
         private readonly VolumePanel $volumePanel,
         private readonly OffProgramRecap $offProgramRecap,
+        private readonly LineageDivergence $lineageDivergence,
     ) {
     }
 
@@ -919,6 +921,9 @@ final class WorkoutController extends AbstractController
                 'prescribed' => $prescribed,
                 'rank' => $this->supersetLabels($workout)[(int) $prescribed->getId()] ?? null,
                 'summary' => $this->prescribedSummaries($workout)[(int) $prescribed->getId()] ?? '',
+                // Le rappel du titre suit le contenu : il paraît dès qu'il s'écarte (#93).
+                'workout' => $workout,
+                'staleTitle' => $this->lineageDivergence->titleMayBeStale($workout),
             ]);
         }
 
@@ -1409,6 +1414,7 @@ final class WorkoutController extends AbstractController
             'summaries' => $this->prescribedSummaries($workout),
             'supersetLabels' => $this->supersetLabels($workout),
             'offProgram' => $this->offProgramRecap->forWorkout($workout),
+            'staleTitle' => $this->lineageDivergence->titleMayBeStale($workout),
         ];
     }
 
