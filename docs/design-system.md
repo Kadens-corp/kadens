@@ -158,7 +158,7 @@ avec la même fonction : une séance ne change pas de couleur d'un écran à l'a
 
 | Écran | Rendu |
 |---|---|
-| Calendrier (`_cal_event`) | carte entière en aplat, bande 4 px ; le statut passe par l'icône du bouton de cycle sur une rangée foncée (82 %), la manquée se hachure, la faite se barre ; le retard devient un contour pointillé rouge. Une séance sans activité garde la pastille neutre à filet de statut. Légende des six couleurs au-dessus de la grille. |
+| Calendrier (`_cal_event`) | carte entière en aplat, bande 4 px ; le statut passe par l'icône du bouton de statut sur une rangée foncée (82 %), la manquée se hachure, la faite prend une coche devant son titre (jamais un barré, qui se lit « annulé ») ; tout ce qui s'écrit sur l'aplat (coche, ressenti) passe au blanc ; le retard devient un contour pointillé rouge. Une séance sans activité garde la pastille neutre à filet de statut. Légende des six couleurs au-dessus de la grille. |
 | Hero de séance | l'aplat encre devient l'aplat d'activité, bande 6 px. Le hero redéfinit **localement** les tokens « sur encre » (`--color-on-ink*`, `--color-primary-on-ink`) plutôt que de doubler ses règles. |
 | Bibliothèques | filet gauche + pastille d'icône pleine (icône de la dominante). Les cartes de plan restent neutres : un plan mélange les activités. |
 | Trame de plan | consultation : séances en aplat, bande 3 px. Éditeur : filet gauche seulement (kebab, survol et glisser-déposer vivent sur la case). |

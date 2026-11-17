@@ -11,7 +11,7 @@
      - plan : `PlanScheduler::resync()` relancé à chaque pose et chaque retrait
        de case, add-only, les séances faites restent ; `LineageSeed` (dernier
        réalisé, muscu seulement) ;
-     - calendrier : cycle de statut, modale rapide (`_cal_event`), réalisé
+     - calendrier : menu du statut, modale rapide (`_cal_event`), réalisé
        logué en muscu, importé d'Intervals.icu en cardio ;
      - app : `templates/app/install.html.twig` (Android seulement, réalisé
        muscu, hors réseau) ;
@@ -37,7 +37,7 @@
 
 {% macro calendar() %}
     <p>Le « + » d'un jour y pose une séance de ta bibliothèque. « Placer un plan dans l'agenda » pose d'un coup toutes les séances d'un plan, à partir d'une date.</p>
-    <p>Le bouton rond d'une séance change son statut d'un clic : prévue, faite, manquée.</p>
+    <p>Le bouton de statut, sous une séance, ouvre un petit menu : choisis prévue, faite ou manquée. Une séance faite porte une coche devant son titre.</p>
     <p>Clique sur une séance pour la déplacer, la retirer ou noter ta forme. L'œil ouvre la séance entière.</p>
     <p>En muscu, tu saisis tes séries pendant la séance, dans <a href="{{ path('app_install') }}">l'app Kadens</a> sur ton téléphone. Une sortie course, vélo ou natation ne se saisit pas : elle arrive de ta montre, une fois Intervals.icu relié dans tes paramètres.</p>
 {% endmacro %}

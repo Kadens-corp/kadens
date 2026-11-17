@@ -1449,7 +1449,7 @@ final class CoachControllerTest extends WebTestCase
         self::assertSelectorExists('a[href="/schedule/'.$scheduled->getId().$from.'"]');
         self::assertSelectorExists('form[action="/schedule/'.$scheduled->getId().'/move"]');
         self::assertSelectorExists('form[action="/schedule/'.$scheduled->getId().'/delete"]');
-        self::assertSelectorExists('form[action="/schedule/'.$scheduled->getId().'/cycle-status"] input[name="from"][value="athlete-cal-'.$athlete->getId().'-2026-11-30"]');
+        self::assertSelectorExists('form[action="/schedule/'.$scheduled->getId().'/quick-status"] input[name="from"][value="athlete-cal-'.$athlete->getId().'-2026-11-30"]');
 
         // La navigation reste dans son agenda.
         self::assertSelectorExists('a[href="/coach/athlete/'.$athlete->getId().'/calendar/2026-11-23"]');

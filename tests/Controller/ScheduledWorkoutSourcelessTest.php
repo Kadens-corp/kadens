@@ -157,7 +157,7 @@ final class ScheduledWorkoutSourcelessTest extends WebTestCase
 
     /**
      * Le flux Turbo qui re-rend la pastille après un changement de statut passe
-     * par le même composant : la marque doit survivre au cycle, sinon elle
+     * par le même composant : la marque doit survivre au changement, sinon elle
      * disparaîtrait au premier clic sur « fait ».
      */
     public function testFreeformMarkSurvivesTheStatusStream(): void
@@ -170,8 +170,11 @@ final class ScheduledWorkoutSourcelessTest extends WebTestCase
 
         $this->client->request(
             'POST',
-            '/schedule/'.$scheduled->getId().'/cycle-status',
-            ['_token' => $crawler->filter('.kd-calevent__statusform input[name="_token"]')->attr('value')],
+            '/schedule/'.$scheduled->getId().'/quick-status',
+            [
+                '_token' => $crawler->filter('.kd-statusmenu input[name="_token"]')->attr('value'),
+                'status' => 'done',
+            ],
             [],
             ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']
         );

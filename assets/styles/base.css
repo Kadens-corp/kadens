@@ -97,7 +97,8 @@
   .kd-kebab__trigger,
   .kd-usermenu__trigger,
   .kd-calevent__toggle,
-  .kd-calevent__eye {
+  .kd-calevent__eye,
+  .kd-statusmenu__item {
     min-width: 44px;
     min-height: 44px;
   }

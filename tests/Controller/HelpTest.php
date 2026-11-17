@@ -72,7 +72,7 @@ final class HelpTest extends WebTestCase
 
         foreach (['/calendar/2026/11', '/calendar/week/2026-11-16'] as $url) {
             $help = $this->helpOn($url, 'calendar');
-            self::assertStringContainsString('prévue, faite, manquée', $help->text());
+            self::assertStringContainsString('prévue, faite ou manquée', $help->text());
         }
     }
 

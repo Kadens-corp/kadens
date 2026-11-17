@@ -1,7 +1,12 @@
 {# Pastille de statut d'une séance datée, dans le hero de /schedule/{id}.
    Fragment isolé parce qu'il est **cible d'un Turbo Stream** : basculer « fait »
    depuis le bas de page le re-rend en place (cf. scheduled_workout/stream/
-   status.stream.html.twig). L'id doit donc survivre au remplacement. #}
+   status.stream.html.twig). L'id doit donc survivre au remplacement.
+
+   Elle vit sur l'aplat du hero (encre, ou couleur de l'activité) : le statut s'y
+   dit par l'icône et le mot, en blanc, jamais par sa couleur — le vert de
+   « Faite » sur un carmin était illisible (#89). Mêmes icônes qu'au calendrier. #}
+{% set statusIcons = {planned: 'lucide:circle-dot', done: 'lucide:check', missed: 'lucide:x'} %}
 <span id="schedule-badge" class="kd-badge kd-badge--{{ scheduled.status.value }}">
-    <span class="kd-badge__dot"></span>{{ scheduled.status.label }}
+    {{ ux_icon(statusIcons[scheduled.status.value]) }}{{ scheduled.status.label }}
 </span>

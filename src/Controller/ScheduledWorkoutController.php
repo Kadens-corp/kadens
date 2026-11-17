@@ -412,19 +412,26 @@ final class ScheduledWorkoutController extends AbstractController
     }
 
     /**
-     * Cycle rapide du statut (clic sur la zone gauche d'une pastille au
-     * calendrier) : prévue → faite → manquée → prévue. Ne touche pas la note
-     * d'écart (contrairement au formulaire complet de la modale) : c'est un
-     * geste express, pas une saisie. Repli sans JS : c'est un vrai bouton de
-     * formulaire, il fonctionne sans Stimulus.
+     * Statut express, depuis le petit menu de la pastille au calendrier (#89) :
+     * le statut posté est **nommé** (Prévue, Faite, Manquée), plus déduit du
+     * précédent. L'ancien cycle prévue → faite → manquée changeait le statut à
+     * chaque clic sans dire lequel, et un clic de trop passait inaperçu.
+     *
+     * Ne touche ni la note d'écart ni le ressenti (contrairement au formulaire
+     * complet de la modale) : c'est un geste express, pas une saisie. Repli sans
+     * JS : le menu est un popover natif et ses choix de vrais boutons de
+     * formulaire, ils fonctionnent sans Stimulus.
      */
-    #[Route('/{id}/cycle-status', name: 'app_scheduled_workout_cycle_status', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function cycleStatus(Request $request, ScheduledWorkout $scheduled, PlanFlattener $planFlattener): Response
+    #[Route('/{id}/quick-status', name: 'app_scheduled_workout_quick_status', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function quickStatus(Request $request, ScheduledWorkout $scheduled, PlanFlattener $planFlattener): Response
     {
         $this->denyAccessUnlessGranted(ScheduledWorkoutVoter::EDIT, $scheduled);
 
-        if ($this->isCsrfTokenValid('cycle'.$scheduled->getId(), $request->getPayload()->getString('_token'))) {
-            $scheduled->setStatus($scheduled->getStatus()->next());
+        $payload = $request->getPayload();
+        $status = ScheduledStatus::tryFrom($payload->getString('status'));
+
+        if (null !== $status && $this->isCsrfTokenValid('quick-status'.$scheduled->getId(), $payload->getString('_token'))) {
+            $scheduled->setStatus($status);
             $this->entityManager->flush();
 
             // Geste express : on re-rend la pastille en place (pas de rechargement,
