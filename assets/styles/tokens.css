@@ -150,6 +150,9 @@
   --kd-status-done: #006d14; /* fait */
   --kd-status-planned: #8a8a82; /* prévu */
   --kd-status-missed:  #d8261e; /* manqué */
+  /* Fond teinté du « fait » (#87) : 9 % du vert sur blanc, comme le voile
+     d'échec du message flash. Le vert plein y écrit à 5.7:1. */
+  --kd-status-done-tint: #e8f2ea;
 
   /* Types de série (mode « séries détaillées ») — pastille lettre W/D/F/DS.
      Deux axes seulement, comme la maquette : l'encre pour ce qui structure la
@@ -336,6 +339,9 @@
 
   /* Le vert du « fait » : #006d14 tombe à 2.9:1 sur une surface nuit. */
   --kd-night-status-done: #45a35a;
+  /* Et son fond teinté : un lavis vert clair serait le plus clair de l'écran
+     nuit, comme le rose de l'accent. Le vert nuit y écrit à 4.9:1. */
+  --kd-night-status-done-tint: #13281a;
 
   /* ------------------------------------------------------------------------
      2. TOKENS SÉMANTIQUES — à consommer dans les vues
@@ -456,6 +462,12 @@
   --color-status-planned:  var(--kd-status-planned);
   --color-status-missed:   var(--kd-status-missed);
 
+  /* Succès (#87) : un geste a réussi (« Exercice créé. »). Dérivé du « fait »,
+     jamais du rouge : un message rose se lit comme une erreur. Le vert écrit
+     sur son propre fond teinté, plancher AA tenu sur les deux papiers. */
+  --color-success:         var(--kd-status-done);
+  --color-success-tint:    var(--kd-status-done-tint);
+
   /* Élévation — neutralisée : l'identité travaille au filet, pas à l'ombre */
   --shadow-card:           var(--kd-shadow-card);
   --shadow-accent:         var(--kd-shadow-accent);
@@ -472,7 +484,7 @@
    Un REMAPPAGE de la couche sémantique, jamais une valeur neuve : chaque ligne
    cite une primitive, exactement comme dans `:root`. Un nom, une définition.
 
-   Les 68 tokens de couleur y sont, y compris les huit qui ne changent pas —
+   Les 82 tokens de couleur y sont, y compris les huit qui ne changent pas —
    les redire est ce qui rend leur immobilité DÉCIDÉE plutôt qu'oubliée, et
    `app:tokens:export` échoue si l'un d'eux manque. Ni police, ni espacement,
    ni rayon : rien de tout ça ne dépend du papier.
@@ -593,4 +605,8 @@
   --color-status-done:     var(--kd-night-status-done);
   --color-status-planned:  var(--kd-status-planned);
   --color-status-missed:   var(--kd-status-missed);
+
+  /* Succès : suit le vert du « fait », fond teinté retourné. */
+  --color-success:         var(--kd-night-status-done);
+  --color-success-tint:    var(--kd-night-status-done-tint);
 }

@@ -1460,7 +1460,8 @@ a.kd-scope--link:hover {
 }
 
 /* ----------------------------------------------------------------------------
-   Message flash
+   Message flash. Par défaut, un succès : vert du « fait » (#87). Le rose de
+   l'accent le faisait lire comme une erreur. L'échec garde le rouge.
    ---------------------------------------------------------------------------- */
 .kd-flash {
     display: flex;
@@ -1470,9 +1471,9 @@ a.kd-scope--link:hover {
     border-radius: var(--kd-radius-md);
     font-size: 13px;
     margin-bottom: var(--kd-space-8);
-    background: var(--color-primary-tint);
-    color: var(--color-primary-on-tint);
-    border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+    background: var(--color-success-tint);
+    color: var(--color-success);
+    border: 1px solid color-mix(in srgb, var(--color-success) 22%, transparent);
 }
 
 .kd-flash svg {

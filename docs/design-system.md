@@ -300,6 +300,19 @@ l'accent rouge reste disponible pour l'exercice sauté du réalisé.
 | `--color-status-planned` | `#8a8a82` | `PLANNED` — prévu |
 | `--color-status-missed` | `#d8261e` | `MISSED` — manqué |
 
+### Succès
+Un geste qui a réussi (« Exercice créé. », « Séance déplacée. ») se dit en
+**vert**, dérivé du statut « fait ». Le rouge reste à l'échec : un message
+rose se lisait comme une erreur (#87). C'est un token dédié, au même titre que
+les statuts, et il ne sert qu'aux retours de réussite (`.kd-flash` par défaut).
+
+| Token | Valeur | Rôle | Contraste |
+|---|---|---|---|
+| `--color-success` | `#006d14` | texte, icône et filet (22 %) | 5,7:1 sur son fond |
+| `--color-success-tint` | `#e8f2ea` | fond teinté (9 % du vert sur blanc) | — |
+
+De nuit : `#45a35a` sur `#13281a`, 4,9:1 (§10).
+
 ---
 
 ## 3. Typographie
@@ -476,6 +489,9 @@ Classes `.kd-*` dans `assets/styles/components.css`.
   natif + contrôleur `dismiss` (clic extérieur, Échap) pour le seul confort.
   Panneau à contour encre.
 - **Modale** : `<dialog>` natif, contour encre.
+- **Message flash** (`.kd-flash`) : succès par défaut, sur `--color-success-tint`
+  (§2, Succès) ; `--error` en rouge du « manqué ». Les deux portent une icône,
+  pour ne pas reposer sur la seule couleur.
 - **Record : la couronne** (`lucide:crown`, classe `.kd-icon--solid`). Seule
   icône peinte **pleine** de l'app : le CSS remplit le tracé importé, le fichier
   reste celui de Lucide. Elle marque un record battu (historique d'exercice,
@@ -778,7 +794,8 @@ Le reste s'inverse, et trois familles demandent plus qu'une inversion mécanique
   qui prend sa place. `--color-primary-on-ink` fait le trajet inverse.
 
 Trois familles ont dû être choisies plutôt que dérivées : le vert du statut
-« fait » (`#006d14` tombe à 2,9:1 sur une surface nuit), les cinq teintes de
+« fait » (`#006d14` tombe à 2,9:1 sur une surface nuit, et son fond de succès
+se retourne comme le rose de l'accent, `#13281a`, où il écrit à 4,9:1), les cinq teintes de
 groupe musculaire, qui devaient remonter en luminosité **en gardant leur écart
 mutuel** — une pastille de 6 px ne porte que ça — et les six couleurs
 d'activité, remontées de la même façon (oklch L 0,72). Sur ces aplats devenus
