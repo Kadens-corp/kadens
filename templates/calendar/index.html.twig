@@ -90,7 +90,7 @@
                             <span class="kd-calday__num">{{ cell.date|date('j') }}</span>
 
                             {% for goal in cellGoals %}
-                                <a href="{{ path('app_goal_show', {id: goal.id}) }}" class="kd-calgoal" title="{{ goal.priority.label }} — {{ goal.title }}">
+                                <a href="{{ path('app_goal_show', {id: goal.id}) }}" class="kd-calgoal" title="Priorité : {{ goal.priority.label|lower }} — {{ goal.title }}">
                                     {{ ux_icon('lucide:target') }}<span>{{ goal.title }}</span>
                                 </a>
                             {% endfor %}

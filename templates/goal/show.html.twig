@@ -36,14 +36,14 @@
         </div>
         <div class="kd-goalhero__main">
             <div class="kd-goalhero__top">
-                <span class="kd-prio kd-prio--{{ goal.priority.value }}" title="{{ goal.priority.label }}">{{ goal.priority.shortLabel }}</span>
+                <span class="kd-prio kd-prio--{{ goal.priority.value }}" title="Priorité : {{ goal.priority.label|lower }}">{{ goal.priority.shortLabel }}</span>
                 <h1 class="kd-title">{{ goal.title }}</h1>
             </div>
             <ul class="kd-vitals">
                 <li class="kd-vitals__item">{{ ux_icon('lucide:calendar-days') }} {{ goal.targetDate|date('d/m/Y') }}</li>
                 {% if goal.activity %}<li class="kd-vitals__item">{{ goal.activity.label }}</li>{% endif %}
                 {% if goal.targetValue %}<li class="kd-vitals__item">{{ ux_icon('lucide:target') }} {{ goal.targetValue }}</li>{% endif %}
-                <li class="kd-vitals__item">{{ goal.priority.label }}</li>
+                <li class="kd-vitals__item">Priorité : {{ goal.priority.label|lower }}</li>
             </ul>
         </div>
         <div class="kd-goalhero__actions">

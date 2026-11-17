@@ -220,7 +220,7 @@
                         <h2 class="kd-home__goaltitle">{{ goal.title }}</h2>
                         <div class="kd-home__goalmeta">
                             {% if goal.activity %}{{ activity.badge(goal.activity) }}{% endif %}
-                            <span class="kd-home__goalprio" title="{{ goal.priority.label }}">Priorité {{ goal.priority.shortLabel }}</span>
+                            <span class="kd-home__goalprio" title="Priorité : {{ goal.priority.label|lower }}">Priorité {{ goal.priority.shortLabel }}</span>
                             {% if goal.targetValue %}
                                 <span class="kd-home__goaltarget">{{ ux_icon('lucide:target') }} {{ goal.targetValue }}</span>
                             {% endif %}

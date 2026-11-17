@@ -144,7 +144,7 @@
                         </span>
                     </header>
                     {% for goal in day.goals %}
-                        <a href="{{ path('app_goal_show', {id: goal.id}) }}" class="kd-calgoal kd-calgoal--week" title="{{ goal.priority.label }} — {{ goal.title }}">
+                        <a href="{{ path('app_goal_show', {id: goal.id}) }}" class="kd-calgoal kd-calgoal--week" title="Priorité : {{ goal.priority.label|lower }} — {{ goal.title }}">
                             {{ ux_icon('lucide:target') }}<span>{{ goal.title }}</span>
                         </a>
                     {% endfor %}

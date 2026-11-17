@@ -13296,6 +13296,20 @@ a.kd-coachitem__date:hover {
     margin-bottom: var(--kd-space-5);
 }
 
+/* Confirmation d'un ajout ou d'un enregistrement, dans l'élément touché (#105) :
+   le retour est ancré sur lui, un message en tête de page tomberait hors écran. */
+.kd-storyedit__done {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin: 0 0 var(--kd-space-5);
+    padding: var(--kd-space-3) var(--kd-space-5);
+    border: 1px solid color-mix(in srgb, var(--color-success) 22%, transparent);
+    background: var(--color-success-tint);
+    color: var(--color-success);
+    font-size: 13px;
+}
+
 .kd-storyedit__type {
     display: inline-flex;
     align-items: center;

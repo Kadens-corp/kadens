@@ -18,9 +18,9 @@ enum GoalPriority: string
     public function getLabel(): string
     {
         return match ($this) {
-            self::A => 'Objectif principal (A)',
-            self::B => 'Objectif secondaire (B)',
-            self::C => 'Objectif préparatoire (C)',
+            self::A => 'Principal',
+            self::B => 'Secondaire',
+            self::C => 'Étape',
         };
     }
 

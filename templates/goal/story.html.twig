@@ -24,7 +24,7 @@
         <div>
             <p class="kd-eyebrow kd-eyebrow--accent">Récit</p>
             <h1 class="kd-title">Raconter l'objectif</h1>
-            <p class="kd-lead">Une suite de blocs, dans l'ordre de lecture : du texte, des photos, tes sorties importées et tes séances faites. Les chiffres viennent des activités elles-mêmes, rien n'est recopié.</p>
+            <p class="kd-lead">Des paragraphes, des photos, tes sorties importées et tes séances faites, dans l'ordre de lecture. Les chiffres viennent des activités elles-mêmes, rien n'est recopié.</p>
         </div>
         <a href="{{ path('app_goal_show', {id: goal.id}) }}#recit" class="kd-btn kd-btn--primary">
             {{ ux_icon('lucide:eye') }} Voir le récit
@@ -32,11 +32,13 @@
     </div>
 
     {# ------------------------------ LES BLOCS ------------------------------ #}
+    {# L'élément qu'on vient d'ajouter ou d'enregistrer, et ce qu'on en dit. #}
+    {% set touched = app.flashes('story_block')|first %}
     {% if story is empty %}
         <div class="kd-card kd-section__block">
             <div class="kd-empty">
                 {{ ux_icon('lucide:pilcrow') }}
-                <div>Le récit est vide. Ajoute un premier bloc ci-dessous.</div>
+                <div>Le récit est vide. Ajoute un premier paragraphe ou une photo ci-dessous.</div>
             </div>
         </div>
     {% else %}
@@ -53,7 +55,7 @@
                                 <input type="hidden" name="_token" value="{{ token }}">
                                 <input type="hidden" name="direction" value="up">
                                 <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm" {% if loop.first %}disabled{% endif %}
-                                        aria-label="Monter ce bloc" title="Monter">
+                                        aria-label="Monter {{ block.type.demonstrative }}" title="Monter">
                                     {{ ux_icon('lucide:arrow-up') }}
                                 </button>
                             </form>
@@ -61,20 +63,23 @@
                                 <input type="hidden" name="_token" value="{{ token }}">
                                 <input type="hidden" name="direction" value="down">
                                 <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm" {% if loop.last %}disabled{% endif %}
-                                        aria-label="Descendre ce bloc" title="Descendre">
+                                        aria-label="Descendre {{ block.type.demonstrative }}" title="Descendre">
                                     {{ ux_icon('lucide:arrow-down') }}
                                 </button>
                             </form>
                             <form method="post" action="{{ path('app_goal_story_delete', {id: goal.id, blockId: block.id}) }}"
-                                  onsubmit="return confirm('Supprimer ce bloc ?');">
+                                  onsubmit="return confirm('Retirer {{ block.type.demonstrative }} du récit ?');">
                                 <input type="hidden" name="_token" value="{{ token }}">
                                 <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm kd-btn--danger"
-                                        aria-label="Supprimer ce bloc" title="Supprimer">
+                                        aria-label="Retirer {{ block.type.demonstrative }} du récit" title="Supprimer">
                                     {{ ux_icon('lucide:trash-2') }}
                                 </button>
                             </form>
                         </div>
                     </header>
+                    {% if touched and touched.id == block.id %}
+                        <p data-turbo-temporary class="kd-storyedit__done" role="status">{{ ux_icon('lucide:circle-check') }} {{ touched.message }}</p>
+                    {% endif %}
 
                     {% if item.orphan %}
                         <p class="kd-storyedit__orphan">
@@ -94,7 +99,7 @@
                     <form method="post" action="{{ path('app_goal_story_update', {id: goal.id, blockId: block.id}) }}" class="kd-storyedit__form">
                         <input type="hidden" name="_token" value="{{ token }}">
                         <label class="kd-label" for="block-body-{{ block.id }}">
-                            {{ {text: 'Texte', photo: 'Légende'}[block.type.value] ?? 'Commentaire' }}
+                            {{ {text: 'Paragraphe', photo: 'Légende'}[block.type.value] ?? 'Commentaire' }}
                         </label>
                         <textarea id="block-body-{{ block.id }}" name="body"
                                   rows="{{ block.type.value == 'text' ? 6 : 2 }}"
@@ -114,7 +119,7 @@
         <div class="kd-pagehead kd-pagehead--sub">
             <div>
                 <p class="kd-eyebrow kd-eyebrow--accent">Ajouter</p>
-                <h2 class="kd-title kd-title--sm">Nouveau bloc en fin de récit</h2>
+                <h2 class="kd-title kd-title--sm">À la suite du récit</h2>
             </div>
         </div>
 
@@ -123,11 +128,11 @@
             <form method="post" action="{{ path('app_goal_story_add', {id: goal.id}) }}" class="kd-card kd-storyadd__card">
                 <input type="hidden" name="_token" value="{{ token }}">
                 <input type="hidden" name="type" value="text">
-                <h3 class="kd-storyadd__title">{{ ux_icon('lucide:pilcrow') }} Texte</h3>
-                <label class="kd-label kd-sr-only" for="add-text">Texte</label>
+                <h3 class="kd-storyadd__title">{{ ux_icon('lucide:pilcrow') }} Paragraphe</h3>
+                <label class="kd-label kd-sr-only" for="add-text">Paragraphe</label>
                 <textarea id="add-text" name="body" rows="5" class="kd-input kd-input--area" required
                           placeholder="Une ligne vide sépare deux paragraphes."></textarea>
-                <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">{{ ux_icon('lucide:plus') }} Ajouter le texte</button>
+                <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">{{ ux_icon('lucide:plus') }} Ajouter le paragraphe</button>
             </form>
 
             {# Photo — réduite dans le navigateur avant l'envoi (taille, EXIF/GPS). #}
