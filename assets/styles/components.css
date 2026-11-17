@@ -2003,6 +2003,37 @@ a.kd-scope--link:hover {
     padding: 12px var(--kd-space-6);
 }
 
+/* « Mot de passe oublié ? » sous le champ (#99) : un <details> natif dont le
+   résumé a l'allure d'un lien discret, le texte se déplie dans le flux. */
+.kd-auth__forgot {
+    margin-top: var(--kd-space-3);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-auth__forgot > summary {
+    display: inline;
+    list-style: none;
+    cursor: pointer;
+    color: var(--color-text-soft);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.kd-auth__forgot > summary::-webkit-details-marker {
+    display: none;
+}
+
+.kd-auth__forgot > summary:hover,
+.kd-auth__forgot[open] > summary {
+    color: var(--color-text);
+}
+
+.kd-auth__forgot > p {
+    margin: var(--kd-space-3) 0 0;
+    line-height: 1.5;
+}
+
 /* Message d'erreur d'authentification */
 .kd-auth__error {
     display: flex;

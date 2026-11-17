@@ -33,7 +33,7 @@ final class CreateUserCommand extends Command
      * Longueur minimale du mot de passe. Doit rester alignée avec
      * `App\Form\ChangePasswordType` (changement de mot de passe depuis le profil).
      */
-    private const MIN_PASSWORD_LENGTH = 8;
+    public const MIN_PASSWORD_LENGTH = 8;
 
     public function __construct(
         private readonly EntityManagerInterface $em,

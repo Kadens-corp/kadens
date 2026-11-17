@@ -370,6 +370,8 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   back-office `/admin` (messages programmés,
   [`docs/feature-custom-messages.md`](./docs/feature-custom-messages.md)). L'app n'expose que ce que le titulaire du compte peut
   changer lui-même : son mot de passe et son pseudo, dans `/profile/settings`.
+  Pas de réinitialisation par email : « Mot de passe oublié ? » sur `/login`
+  renvoie vers l'administrateur, qui en redéfinit un par `app:user:reset-password`.
   L'email reste un identifiant fixe côté console.
 - **Le pseudo s'affiche, l'email identifie.** `User.username` est facultatif,
   unique (collation `utf8mb4_general_ci` : insensible à la casse et aux accents),
