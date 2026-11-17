@@ -40,6 +40,9 @@
                     {% set opts = auto ? { attr: { 'data-action': auto } } : {} %}
                     {# Le compteur pilote la liste de séries : on le dit, et on précise
                        que l'échauffement n'entre pas dans le décompte. #}
+                    {% if field == 'intensityZone' %}
+                        {% set opts = opts|merge({ term: 'zone' }) %}
+                    {% endif %}
                     {% if field == 'sets' and pe.hasDetailedSets %}
                         {% set opts = opts|merge({ help: 'Séries de travail — l\'échauffement n\'est pas compté.' }) %}
                     {% endif %}
@@ -59,7 +62,7 @@
            sa valeur survit et revient si l'on détache l'exercice. #}
         <div class="kd-fieldrow">
             <div class="kd-fieldrow__cell kd-fieldrow__cell--rest">{{ form_row(form.restSeconds, auto ? { attr: { 'data-action': auto } } : {}) }}</div>
-            <div class="kd-fieldrow__cell">{{ form_row(form.rpe, auto ? { attr: { 'data-action': auto } } : {}) }}</div>
+            <div class="kd-fieldrow__cell">{{ form_row(form.rpe, (auto ? { attr: { 'data-action': auto } } : {})|merge({ term: 'RPE' })) }}</div>
         </div>
         {# Chez le coach d'un athlète, la note d'exercice est une consigne que
            l'athlète lit : on le dit sous le champ (#65). Une remarque à garder

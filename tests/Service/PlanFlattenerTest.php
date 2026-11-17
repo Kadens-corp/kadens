@@ -69,7 +69,7 @@ final class PlanFlattenerTest extends TestCase
         $flat = $this->flattener->flattenWorkout($workout)['blocks'][0]['exercises'][0];
 
         self::assertSame(
-            'Échauf 10 reps @ 40 kg · 2× 8 reps @ 100 kg · Drop set 6 reps @ 80 kg',
+            'Échauf. 10 reps @ 40 kg · 2× 8 reps @ 100 kg · Drop set 6 reps @ 80 kg',
             $flat['summary'],
         );
         // Structure : 3 groupes (les 2 séries de travail identiques fusionnées).
@@ -144,7 +144,7 @@ final class PlanFlattenerTest extends TestCase
         self::assertCount(2, $flat['sets']);
         self::assertCount(3, $flat['setLines']);
         self::assertSame([SetType::WARMUP, SetType::NORMAL, SetType::NORMAL], array_column($flat['setLines'], 'type'));
-        self::assertSame('Échauf', $flat['setLines'][0]['typeLabel']);
+        self::assertSame('Échauf.', $flat['setLines'][0]['typeLabel']);
         self::assertNull($flat['setLines'][1]['typeLabel']);
     }
 
@@ -368,14 +368,14 @@ final class PlanFlattenerTest extends TestCase
             (new PrescribedExercise())
                 ->setPrescriptionType(PrescriptionType::AMRAP)
                 ->setDurationSeconds(720)->setTargetReps(100),
-            'AMRAP 12:00 · cible 100 reps',
+            'Max de reps en 12:00 · cible 100 reps',
         ];
 
         yield 'for_time avec cap' => [
             (new PrescribedExercise())
                 ->setPrescriptionType(PrescriptionType::FOR_TIME)
                 ->setTargetReps(30)->setCapSeconds(300),
-            '30 reps for time · cap 5:00',
+            '30 reps le plus vite possible · limite 5:00',
         ];
 
         yield 'distance_pace en km' => [

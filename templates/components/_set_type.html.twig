@@ -1,5 +1,5 @@
-{# Pastille de type de série (mode « séries détaillées ») : un sigle d'une ou deux
-   lettres (W / D / F / DS) dans une puce cerclée et teintée. Compact, alignable en
+{# Pastille de type de série (mode « séries détaillées ») : un sigle court
+   (Échauf. / D / F / DS) dans une puce cerclée et teintée. Compact, alignable en
    colonne devant chaque ligne de série, lisible sans lire un libellé. Le libellé
    complet reste accessible en `title` + `aria-label` (la pastille est un
    pictogramme, d'où `role="img"` : sans rôle, un `aria-label` sur un `span` n'est
@@ -19,6 +19,18 @@
     {%- if type.value != 'normal' -%}
         <span class="kd-setbadge kd-setbadge--{{ type.value }}" role="img" title="{{ type.label }}" aria-label="{{ type.label }}">{{ type.letter }}</span>
     {%- endif -%}
+{% endmacro %}
+
+{# Le compte des séries d'un exercice, échauffement à part (#102) : « 1 échauf.
+   + 3 séries ». Un « 4 séries » sur la carte quand le champ « séries » en dit 3
+   (l'échauffement n'y est pas compté) se lisait comme une erreur.
+   types : liste de SetType ; noun : « série » par défaut, « prévue » en
+   comparaison. #}
+{% macro count(types, noun = 'série') %}
+    {%- set warm = types|filter(t => t.value == 'warmup')|length -%}
+    {%- set work = types|length - warm -%}
+    {%- if warm %}{{ warm }} échauf.{% if work %} + {% endif %}{% endif -%}
+    {%- if work or not warm %}{{ work }} {{ noun }}{{ work > 1 ? 's' }}{% endif -%}
 {% endmacro %}
 
 {% macro slot(type) %}

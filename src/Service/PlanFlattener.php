@@ -495,7 +495,7 @@ final class PlanFlattener
 
     private function summarizeAmrap(PrescribedExercise $pe): string
     {
-        $summary = 'AMRAP '.$this->units->duration($pe->getDurationSeconds());
+        $summary = 'Max de reps en '.$this->units->duration($pe->getDurationSeconds());
 
         if (null !== $pe->getTargetReps()) {
             $summary .= sprintf(' · cible %d reps', $pe->getTargetReps());
@@ -506,10 +506,10 @@ final class PlanFlattener
 
     private function summarizeForTime(PrescribedExercise $pe): string
     {
-        $summary = sprintf('%s reps for time', $pe->getTargetReps() ?? '?');
+        $summary = sprintf('%s reps le plus vite possible', $pe->getTargetReps() ?? '?');
 
         if (null !== $pe->getCapSeconds()) {
-            $summary .= ' · cap '.$this->units->duration($pe->getCapSeconds());
+            $summary .= ' · limite '.$this->units->duration($pe->getCapSeconds());
         }
 
         return $summary;

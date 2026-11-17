@@ -12,7 +12,18 @@
         {%- set widget_attr = {attr: {'aria-describedby': id ~ '_help'}} -%}
     {%- endif -%}
     <div class="kd-field">
-        {{- form_label(form) -}}
+        {#- `term` (option de rendu, #102) : l'infobulle d'un sigle À CÔTÉ du libellé,
+            jamais dedans — toucher un <label> donne le focus au champ et
+            refermerait l'infobulle aussitôt. -#}
+        {%- if term|default(null) -%}
+            {%- import 'components/_term.html.twig' as terms -%}
+            <div class="kd-field__labelrow">
+                {{- form_label(form) -}}
+                {{- terms.hint(term) -}}
+            </div>
+        {%- else -%}
+            {{- form_label(form) -}}
+        {%- endif -%}
         {{- form_widget(form, widget_attr) -}}
         {{- form_help(form) -}}
         {{- form_errors(form) -}}

@@ -4056,6 +4056,88 @@ a.kd-scope--link:hover {
     min-width: 22px;
 }
 
+/* ----------------------------------------------------------------------------
+   Infobulle d'un sigle (#102, components/_term.html.twig). Le texte est dans la
+   page : il s'ouvre au survol (pointeur qui survole vraiment, sinon le toucher
+   laisse un survol collant que le second toucher ne refermerait pas), au focus
+   clavier, et au toucher par le contrôleur `term` (`.is-open`).
+   ---------------------------------------------------------------------------- */
+.kd-term {
+    position: relative;
+    display: inline;
+}
+
+.kd-term__word {
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+    cursor: help;
+}
+
+.kd-term__hint {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: var(--kd-space-1);
+    padding: 0;
+    border: 1px solid var(--color-text-secondary);
+    border-radius: var(--kd-radius-pill);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: var(--kd-weight-bold);
+    line-height: 1;
+    vertical-align: middle;
+    cursor: help;
+}
+
+/* Libellé de champ suivi de son « ? » : sur une ligne. */
+.kd-field__labelrow {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+}
+
+.kd-field__labelrow .kd-term__hint {
+    margin-left: 0;
+}
+
+.kd-term__tip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + var(--kd-space-2));
+    left: 50%;
+    z-index: 40;
+    width: max-content;
+    max-width: min(260px, 80vw);
+    padding: var(--kd-space-3) var(--kd-space-4);
+    transform: translateX(-50%);
+    background: var(--color-surface-ink);
+    color: var(--color-on-ink);
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: var(--kd-weight-regular);
+    letter-spacing: normal;
+    line-height: 1.4;
+    text-align: left;
+    text-transform: none;
+    white-space: normal;
+}
+
+.kd-term.is-open .kd-term__tip,
+.kd-term__word:focus-visible + .kd-term__tip,
+.kd-term__hint:focus-visible + .kd-term__tip {
+    display: block;
+}
+
+@media (hover: hover) {
+    .kd-term:hover .kd-term__tip {
+        display: block;
+    }
+}
+
 /* Séries détaillées en lecture : une ligne par groupe (pastille · compteur · détail). */
 .kd-setlist {
     list-style: none;

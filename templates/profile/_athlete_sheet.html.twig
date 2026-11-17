@@ -13,6 +13,7 @@
    - subject : l'athlète dont c'est la fiche, null = moi. Sert aux liens vers
      un exercice : un record mesuré renvoie à SA trajectoire, jamais à la
      mienne (règle « un lien ne change jamais de sujet en silence »). #}
+{% import 'components/_term.html.twig' as terms %}
 {% set own = own|default(false) %}
 {% set subject = subject|default(null) %}
 {% set card = stats.athlete %}
@@ -88,9 +89,9 @@
                     {% endfor %}
                 </ul>
                 {% if own %}
-                    <p class="kd-hrzones__hint">Dérivées de ta FC max/repos (Karvonen). <a href="{{ path('app_profile_edit') }}">Ajuster</a>.</p>
+                    <p class="kd-hrzones__hint">Dérivées de ta FC max et de ta FC de repos (méthode {{ terms.abbr('Karvonen') }}). <a href="{{ path('app_profile_edit') }}">Ajuster</a>.</p>
                 {% else %}
-                    <p class="kd-hrzones__hint">Dérivées de la FC max/repos de l'athlète (Karvonen).</p>
+                    <p class="kd-hrzones__hint">Dérivées de la FC max et de la FC de repos de l'athlète (méthode {{ terms.abbr('Karvonen') }}).</p>
                 {% endif %}
             </section>
         {% endif %}

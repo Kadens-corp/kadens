@@ -51,7 +51,7 @@
                     {% endif %}
                 {% endfor %}
                 <span class="kd-cexo__meta">
-                    <span class="kd-cexo__setcount">{{ prescribed.detailedSets|length }} série{{ prescribed.detailedSets|length > 1 ? 's' }}</span>
+                    <span class="kd-cexo__setcount">{{ settype.count(prescribed.detailedSets|map(s => s.setType)) }}</span>
                     {% for t in distinctTypes %}{{ settype.badge(t) }}{% endfor %}
                 </span>
             {% elseif summary is not empty %}
