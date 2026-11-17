@@ -64,6 +64,12 @@ class Coaching
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $responseSeenAt = null;
 
+    // Date de fin de la relation (#81), posée par « Terminer ». Elle borne la
+    // ligne « Anciens athlètes » du coach : un nom et deux dates, rien d'autre.
+    // Remise à null quand une nouvelle demande rouvre la ligne.
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $endedAt = null;
+
     // Notes privées du coach sur son athlète (#65) : santé, contexte, rappels.
     // Portées par la relation et non par le contenu, parce que tout ce qui vit
     // sur une séance ou un plan appartient à l'athlète et lui est visible. Lues
@@ -167,6 +173,18 @@ class Coaching
     public function setResponseSeenAt(?\DateTimeImmutable $responseSeenAt): static
     {
         $this->responseSeenAt = $responseSeenAt;
+
+        return $this;
+    }
+
+    public function getEndedAt(): ?\DateTimeImmutable
+    {
+        return $this->endedAt;
+    }
+
+    public function setEndedAt(?\DateTimeImmutable $endedAt): static
+    {
+        $this->endedAt = $endedAt;
 
         return $this;
     }

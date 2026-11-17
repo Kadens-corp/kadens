@@ -8,11 +8,13 @@ use App\Entity\PlanTemplate;
 use App\Entity\ScheduledWorkout;
 use App\Entity\User;
 use App\Entity\Workout;
+use App\Enum\CoachingStatus;
 use App\Enum\MuscleGroup;
 use App\Enum\ScheduledStatus;
 use App\Enum\StatsRange;
 use App\Enum\StatsTab;
 use App\Http\BackTarget;
+use App\Http\NoLongerCoachException;
 use App\Repository\CoachingRepository;
 use App\Repository\GoalRepository;
 use App\Repository\PlanTemplateRepository;
@@ -583,9 +585,17 @@ final class CoachController extends AbstractController
         /** @var User $user */
         $user = $this->getUser();
 
-        if (!$this->coachingResolver->isAcceptedCoachOf($user, $athlete)) {
-            throw $this->createAccessDeniedException('Tu n\'es pas le coach de cet athlète.');
+        if ($this->coachingResolver->isAcceptedCoachOf($user, $athlete)) {
+            return;
         }
+
+        // Ancien lien vers un athlète qu'il ne suit plus (#81) : la page d'erreur
+        // le lui dit, au lieu de « ce contenu ne t'appartient pas ».
+        if (CoachingStatus::ENDED === $this->coachingRepository->findRelation($user, $athlete)?->getStatus()) {
+            throw new NoLongerCoachException();
+        }
+
+        throw $this->createAccessDeniedException('Tu n\'es pas le coach de cet athlète.');
     }
 
     private function denyUnlessCsrf(Request $request, string $tokenId): void

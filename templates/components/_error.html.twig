@@ -10,6 +10,8 @@
       icon     (string) pictogramme lucide facultatif, devant la ligne de statut
       showUri  (bool)   rappelle l'adresse demandée (utile en 404, bruit ailleurs)
       retry    (bool)   ajoute « Réessayer » (rechargement de la même adresse)
+      link     (hash)   lien supplémentaire, réservé aux connectés : {href, label, icon}.
+                        Calculé par le template appelant, qui sait déjà où aller.
 
     Règles tenues ici, à ne pas casser :
     - **aucun accès base ni service métier**. Une page d'erreur doit se rendre
@@ -43,8 +45,15 @@
 
     <ul class="kd-error__acts">
         {% if app.user %}
+            {% if link is defined and link %}
+                <li>
+                    <a class="kd-btn kd-btn--primary" href="{{ link.href }}">
+                        {{ ux_icon(link.icon) }} {{ link.label }}
+                    </a>
+                </li>
+            {% endif %}
             <li>
-                <a class="kd-btn kd-btn--primary" href="{{ path('app_home') }}">
+                <a class="kd-btn kd-btn--{{ link is defined and link ? 'secondary' : 'primary' }}" href="{{ path('app_home') }}">
                     {{ ux_icon('lucide:home') }} Retour à l'accueil
                 </a>
             </li>

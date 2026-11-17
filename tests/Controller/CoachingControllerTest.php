@@ -319,6 +319,67 @@ final class CoachingControllerTest extends WebTestCase
         self::assertNull($this->reload($relation)->getCoachNotes());
     }
 
+    /**
+     * #81 : « Terminer » laisse une trace côté coach. L'athlète passe dans ses
+     * « Anciens athlètes », avec ses deux dates, et la carte n'ouvre plus sa fiche.
+     */
+    public function testEndedAthleteIsListedAsFormerAthlete(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED, $coach);
+        $relation->setRespondedAt(new \DateTimeImmutable('2026-09-01'));
+        $this->em->flush();
+
+        $this->client->loginUser($athlete);
+        $this->client->request('POST', '/coaching/'.$relation->getId().'/end', [
+            '_token' => $this->cardToken($relation, 'end'),
+        ]);
+        self::assertNotNull($this->reload($relation)->getEndedAt());
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coaching');
+
+        $former = $crawler->filter('#anciens-athletes');
+        self::assertCount(1, $former);
+        self::assertStringContainsString('athlete@example.com', $former->text());
+        self::assertStringContainsString('Tu entraînais cette personne', $former->text());
+        self::assertStringContainsString('du 01/09/2026 au '.(new \DateTimeImmutable())->format('d/m/Y'), $former->text());
+        self::assertCount(0, $former->filter('a[href*="/coach/athlete/"]'));
+        self::assertCount(0, $former->filter('form'));
+        // Plus d'athlète actif : la section le dit toujours.
+        self::assertStringContainsString('Aucun athlète pour l\'instant', $crawler->filter('#athletes')->text());
+    }
+
+    /** #81 : un refus n'est pas une relation passée, il ne laisse pas d'ancien athlète. */
+    public function testDeclinedRequestIsNotAFormerAthlete(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::DECLINED, $coach);
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coaching');
+
+        self::assertCount(0, $crawler->filter('#anciens-athletes'));
+    }
+
+    /** #81 : rouvrir la ligne efface la date de fin, la relation repart de zéro. */
+    public function testReopeningClearsEndDate(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::ENDED, $coach);
+        $relation->setEndedAt(new \DateTimeImmutable('2026-10-01'));
+        $this->em->flush();
+
+        $this->client->loginUser($coach);
+        $this->submitRequest('athlete@example.com');
+
+        self::assertSame(CoachingStatus::PENDING, $this->reload($relation)->getStatus());
+        self::assertNull($this->reload($relation)->getEndedAt());
+    }
+
     /** Une relation terminée se réouvre sur la même ligne (UniqueConstraint). */
     public function testEndedRelationIsReopenedInPlace(): void
     {

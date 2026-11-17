@@ -78,7 +78,7 @@
     </section>
 {% endmacro %}
 
-{% macro athletesSection(athletes, pending, me) %}
+{% macro athletesSection(athletes, pending, former, me) %}
     {# `linkAthlete` ouvre la fiche de travail sous /coach, protégée par
        ROLE_COACH : on ne propose le lien qu'à un coach, sinon un ex-coach
        (rôle retiré, relations résiduelles) cliquerait vers un 403. #}
@@ -107,6 +107,21 @@
                 {% for relation in athletes|merge(pending) %}
                     {{ include('components/_coaching_card.html.twig', {relation: relation, me: me, linkAthlete: me.isCoach}) }}
                 {% endfor %}
+            </div>
+        {% endif %}
+
+        {# Anciens athlètes (#81) : sans eux, « Terminer » ne laissait aucune
+           trace côté coach. Un nom et des dates, rien de plus : la carte n'ouvre
+           aucune fiche, le contenu reste à l'athlète et ne lui est plus ouvert. #}
+        {% if former is not empty %}
+            <div class="kd-section__block" id="anciens-athletes">
+                <h3 class="kd-card__title">{{ ux_icon('lucide:history') }} Anciens athlètes</h3>
+                <p class="kd-coachform__hint">Tu ne les suis plus. Leur contenu leur reste et tu n'y as plus accès. Une nouvelle invitation, s'ils l'acceptent, renoue la relation.</p>
+                <div class="kd-coachlist">
+                    {% for relation in former %}
+                        {{ include('components/_coaching_card.html.twig', {relation: relation, me: me}) }}
+                    {% endfor %}
+                </div>
             </div>
         {% endif %}
 
@@ -186,14 +201,14 @@
 
     {# ------------------- RELATIONS, ordonnées selon le rôle ------------------ #}
     {% if me.isCoach %}
-        {{ sections.athletesSection(athletes, sentAsCoach, me) }}
+        {{ sections.athletesSection(athletes, sentAsCoach, formerAthletes, me) }}
         {{ sections.coachesSection(coaches, sentAsAthlete, me) }}
     {% else %}
         {{ sections.coachesSection(coaches, sentAsAthlete, me) }}
         {# Un non-coach n'a normalement pas d'athlète : la section n'apparaît que
            s'il reste des relations d'un rôle retiré depuis. #}
-        {% if athletes is not empty or sentAsCoach is not empty %}
-            {{ sections.athletesSection(athletes, sentAsCoach, me) }}
+        {% if athletes is not empty or sentAsCoach is not empty or formerAthletes is not empty %}
+            {{ sections.athletesSection(athletes, sentAsCoach, formerAthletes, me) }}
         {% endif %}
     {% endif %}
 {% endblock %}

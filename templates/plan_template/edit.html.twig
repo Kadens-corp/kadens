@@ -74,7 +74,8 @@
 
     {# « Donner ce plan à » (#58) : le propriétaire le donne à un de ses athlètes,
        sans passer par la fiche coach. Il change de propriétaire, le coach reste
-       co-éditeur. Refusé pour un plan déjà posé au calendrier (cf. assign).
+       co-éditeur tant que la relation dure (#81) : la fin de relation lui retire
+       le plan comme le reste. Refusé pour un plan déjà posé au calendrier (cf. assign).
 
        Formulé comme une ACTION, jamais comme un état : aucun athlète n'est
        présélectionné (« Choisir un athlète… »), sinon le bandeau se lisait
@@ -88,7 +89,7 @@
             </p>
         {% else %}
             <form method="post" action="{{ path('app_plan_template_assign', {id: template.id}) }}" class="kd-sharerange"
-                  onsubmit="return confirm('Transférer ce plan à ' + this.athlete.selectedOptions[0].text + ' ? Il deviendra le sien, tu resteras co-éditeur. Tes notes privées sur le plan seront effacées.');">
+                  onsubmit="return confirm('Transférer ce plan à ' + this.athlete.selectedOptions[0].text + ' ? Il deviendra le sien, tu resteras co-éditeur tant que tu l\'entraînes. Tes notes privées sur le plan seront effacées.');">
                 <input type="hidden" name="_token" value="{{ csrf_token('plan_assign' ~ template.id) }}">
                 <label class="kd-sharerange__label" for="plan_assign_athlete">Transférer ce plan à&nbsp;:</label>
                 <select class="kd-planweek__select" id="plan_assign_athlete" name="athlete" required>

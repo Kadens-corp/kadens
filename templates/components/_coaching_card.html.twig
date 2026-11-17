@@ -16,6 +16,7 @@
 {% set other = relation.otherParty(me) %}
 {% set iAmCoach = relation.coach == me %}
 {% set pending = relation.status.value == 'pending' %}
+{% set ended = relation.status.value == 'ended' %}
 {% set canRespond = pending and relation.isRecipient(me) %}
 {% set canCancel = pending and relation.isRequester(me) %}
 {% set workspace = iAmCoach and relation.isActive and (linkAthlete ?? false) %}
@@ -51,11 +52,22 @@
                     {{ canCancel ? 'Tu as demandé à cette personne de t\'entraîner' : 'Cette personne propose de t\'entraîner' }}
                 {% endif %}
                 · le {{ (relation.updatedAt ?? relation.createdAt)|date('d/m/Y') }}
+            {% elseif ended %}
+                {# Relation close (#81) : à l'imparfait, bornée par ses deux dates.
+                   Une ligne d'avant la date de fin n'a que son début. #}
+                {{ iAmCoach ? 'Tu entraînais cette personne' : 'Cette personne t\'entraînait' }}
+                {% if relation.respondedAt and relation.endedAt %}
+                    · du {{ relation.respondedAt|date('d/m/Y') }} au {{ relation.endedAt|date('d/m/Y') }}
+                {% elseif relation.endedAt %}
+                    · jusqu'au {{ relation.endedAt|date('d/m/Y') }}
+                {% elseif relation.respondedAt %}
+                    · depuis le {{ relation.respondedAt|date('d/m/Y') }}
+                {% endif %}
             {% else %}
                 {{ iAmCoach ? 'Tu entraînes cette personne' : 'Cette personne t\'entraîne' }}
-            {% endif %}
-            {% if not pending and relation.respondedAt %}
-                · depuis le {{ relation.respondedAt|date('d/m/Y') }}
+                {% if relation.respondedAt %}
+                    · depuis le {{ relation.respondedAt|date('d/m/Y') }}
+                {% endif %}
             {% endif %}
         </p>
 

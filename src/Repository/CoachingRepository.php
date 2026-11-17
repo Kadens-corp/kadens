@@ -88,6 +88,26 @@ class CoachingRepository extends ServiceEntityRepository
     }
 
     /**
+     * Anciens athlètes de `$coach` (#81) : relations terminées, les plus
+     * récemment closes d'abord. Une relation refusée n'y entre pas, elle n'a
+     * jamais existé.
+     *
+     * @return list<Coaching>
+     */
+    public function findEndedAthletes(User $coach): array
+    {
+        return $this->createQueryBuilder('c')
+            ->andWhere('c.coach = :coach')
+            ->andWhere('c.status = :status')
+            ->setParameter('coach', $coach)
+            ->setParameter('status', CoachingStatus::ENDED)
+            ->orderBy('c.endedAt', 'DESC')
+            ->addOrderBy('c.id', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Coachs actifs de l'athlète.
      *
      * @return list<Coaching>

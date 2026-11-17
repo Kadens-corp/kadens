@@ -1,17 +1,39 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Accès refusé — Kadens{% endblock %}
+{#
+    Un anonyme ne voit pas cette page : le point d'entrée du pare-feu le renvoie
+    vers /login. Elle s'adresse donc à quelqu'un de connecté à qui un voter a
+    dit non — presque toujours parce que le contenu appartient à un autre
+    compte, ou parce qu'une relation de coaching n'est pas (ou plus) acceptée.
+
+    Un cas a son propre texte (#81) : l'ancien coach qui rouvre la fiche d'un
+    athlète qu'il ne suit plus. Le contrôleur l'a tranché et lève
+    `App\Http\NoLongerCoachException` ; on ne lit ici que la classe, aucune
+    requête (cf. `components/_error.html.twig`). Ses anciens liens vers une séance
+    ou un plan de l'athlète passent par les voters, qui ne savent que dire non :
+    ils gardent le texte générique, qui couvre la fin de relation.
+#}
+{% set noLongerCoach = exception is defined and exception.class == 'App\\Http\\NoLongerCoachException' %}
+
+{% block title %}{{ noLongerCoach ? 'Relation terminée' : 'Accès refusé' }} — Kadens{% endblock %}
 
 {% block body %}
-    {# Un anonyme ne voit pas cette page : le point d'entrée du pare-feu le renvoie
-       vers /login. Elle s'adresse donc à quelqu'un de connecté à qui un voter a
-       dit non — presque toujours parce que le contenu appartient à un autre
-       compte, ou parce qu'une relation de coaching n'est pas (ou plus) acceptée. #}
-    {{ include('components/_error.html.twig', {
-        code: 403,
-        icon: 'lucide:lock',
-        heading: 'Accès refusé',
-        lead: "Ce contenu ne t'appartient pas. Séances, plans, objectifs et notes restent privés à leur propriétaire.",
-        hint: "Un coach ne voit le contenu de son athlète qu'une fois la relation acceptée des deux côtés — et le bloc-notes privé reste au propriétaire, dans tous les cas.",
-    }) }}
+    {% if noLongerCoach %}
+        {{ include('components/_error.html.twig', {
+            code: 403,
+            icon: 'lucide:lock',
+            heading: 'Tu ne suis plus cet athlète',
+            lead: "La relation de coaching est terminée. Son contenu lui reste, et tu n'y as plus accès : ni sa fiche, ni ses séances, ni ses plans.",
+            hint: "Tu le retrouves dans « Anciens athlètes », sur la page Coaching. Une nouvelle invitation, s'il l'accepte, te rend l'accès.",
+            link: {href: path('app_coaching_index') ~ '#anciens-athletes', label: 'Mes anciens athlètes', icon: 'lucide:history'},
+        }) }}
+    {% else %}
+        {{ include('components/_error.html.twig', {
+            code: 403,
+            icon: 'lucide:lock',
+            heading: 'Accès refusé',
+            lead: "Ce contenu ne t'appartient pas. Séances, plans, objectifs et notes restent privés à leur propriétaire.",
+            hint: "Un coach ne voit le contenu de son athlète que pendant une relation acceptée des deux côtés. Si la relation est terminée, l'accès s'est arrêté avec elle : le contenu reste à l'athlète. Le bloc-notes privé, lui, reste au propriétaire dans tous les cas.",
+        }) }}
+    {% endif %}
 {% endblock %}

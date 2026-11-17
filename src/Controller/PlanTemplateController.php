@@ -300,7 +300,7 @@ final class PlanTemplateController extends AbstractController
         $transfer->transfer($template, $athlete);
         $this->entityManager->flush();
 
-        $this->addFlash('success', sprintf('« %s » est maintenant le plan de %s. Tu restes co-éditeur.', $template->getTitle(), $athlete->getDisplayName()));
+        $this->addFlash('success', sprintf('« %s » est maintenant le plan de %s. Tu restes co-éditeur tant que tu l\'entraînes.', $template->getTitle(), $athlete->getDisplayName()));
 
         return $redirect;
     }

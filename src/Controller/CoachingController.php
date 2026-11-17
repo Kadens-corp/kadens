@@ -55,6 +55,9 @@ final class CoachingController extends AbstractController
         return $this->render('coaching/index.html.twig', [
             'coaches' => $this->coachingRepository->findAcceptedCoaches($user),
             'athletes' => $this->coachingRepository->findAcceptedAthletes($user),
+            // Trace des relations terminées côté coach (#81) : un nom et des
+            // dates, sans lien vers un contenu qui ne lui est plus ouvert.
+            'formerAthletes' => $this->coachingRepository->findEndedAthletes($user),
             'received' => $this->coachingRepository->findPendingReceivedBy($user),
             'sentAsCoach' => $sentAsCoach,
             'sentAsAthlete' => $sentAsAthlete,
@@ -148,6 +151,7 @@ final class CoachingController extends AbstractController
             $existing->setRequestedBy($user);
             $existing->setRespondedAt(null);
             $existing->setResponseSeenAt(null);
+            $existing->setEndedAt(null);
             $this->entityManager->flush();
 
             $this->addFlash('success', sprintf('Demande renvoyée à %s.', $email));
@@ -217,6 +221,9 @@ final class CoachingController extends AbstractController
      * sont des données sur une personne qu'il ne suit plus, souvent de santé.
      * La ligne survit (ENDED) et une nouvelle demande la rouvre : sans cet
      * effacement, un coach retrouverait des années plus tard ce qu'il notait.
+     *
+     * La date de fin est gardée (#81) : le coach retrouve la personne dans ses
+     * « Anciens athlètes », et son ancienne fiche lui dit pourquoi elle est fermée.
      */
     #[Route('/{id}/end', name: 'app_coaching_end', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function end(Request $request, Coaching $coaching): Response
@@ -228,6 +235,7 @@ final class CoachingController extends AbstractController
         }
 
         $coaching->setStatus(CoachingStatus::ENDED);
+        $coaching->setEndedAt(new \DateTimeImmutable());
         $coaching->setCoachNotes(null);
         $this->entityManager->flush();
 

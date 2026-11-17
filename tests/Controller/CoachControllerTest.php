@@ -470,6 +470,40 @@ final class CoachControllerTest extends WebTestCase
         self::assertNotNull($this->em->getRepository(Workout::class)->find($workout->getId()));
     }
 
+    /**
+     * #81 : l'ancien lien vers la fiche d'un athlète qu'on ne suit plus lève
+     * l'exception dédiée, que la page 403 traduit par « Tu ne suis plus cet
+     * athlète » (rendu couvert par ErrorPageTest). Les sous-pages de la fiche
+     * passent par la même garde.
+     */
+    public function testEndedCoachIsToldTheRelationIsOver(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ENDED);
+
+        $this->client->loginUser($coach);
+
+        foreach (['', '/stats', '/history'] as $suffix) {
+            $this->client->request('GET', '/coach/athlete/'.$athlete->getId().$suffix);
+            self::assertResponseStatusCodeSame(403);
+            self::assertStringContainsString('NoLongerCoachException', (string) $this->client->getResponse()->getContent());
+        }
+    }
+
+    /** #81 : sans relation passée, le refus reste le refus générique. */
+    public function testStrangerCoachGetsTheGenericDenial(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseStatusCodeSame(403);
+        self::assertStringNotContainsString('NoLongerCoachException', (string) $this->client->getResponse()->getContent());
+    }
+
     public function testAcceptedCoachCanEditAthletePlan(): void
     {
         $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
