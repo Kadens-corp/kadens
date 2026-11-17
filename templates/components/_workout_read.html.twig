@@ -12,6 +12,7 @@
      comparison  sortie de LogComparator::compare         (optionnel)
      logSummary  sortie de LogMetrics::summary            (optionnel)
      defaultTab  nom du panneau ouvert à l'arrivée         (optionnel)
+     eyebrow     surtitre du hero, « Séance » par défaut   (optionnel)
 
    Les métriques sont optionnelles : sans elles, la page reste valide et rend
    le seul programme. C'est ce qui permet de réutiliser ce composant partout
@@ -38,6 +39,9 @@
 {% set comparison = comparison|default([]) %}
 {% set logSummary = logSummary|default(null) %}
 {% set defaultTab = defaultTab|default('') %}
+{# La séance datée se dit « au calendrier » : sans ça, son hero était celui de la
+   séance type, mot pour mot, et on ne savait plus laquelle on regardait (#91). #}
+{% set eyebrow = eyebrow|default('Séance') %}
 {% set volume = volume|default(null) %}
 {% set load = load|default(null) %}
 {% set plates = plates|default([]) %}
@@ -61,7 +65,7 @@
 
             <div class="kd-wk__herobody">
                 <div class="kd-wk__herotitle">
-                    <p class="kd-wk__eyebrow">Séance</p>
+                    <p class="kd-wk__eyebrow">{{ eyebrow }}</p>
                     <h1 class="kd-wk__title">{{ workout.title }}</h1>
                     {% if workout.description %}
                         <p class="kd-wk__desc">{{ workout.description|nl2br }}</p>

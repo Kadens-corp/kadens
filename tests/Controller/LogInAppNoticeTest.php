@@ -145,22 +145,24 @@ final class LogInAppNoticeTest extends WebTestCase
         $this->client->loginUser($me);
 
         $crawler = $this->client->request('GET', '/schedule/'.$done->getId());
-        self::assertStringContainsString('Pas de détail : les charges se saisissent', $crawler->filter('#schedule-done .kd-applog')->text());
+        self::assertStringContainsString('Pas de détail : les charges se saisissent', $crawler->filter('#schedule-summary .kd-applog')->text());
 
-        // Consignée : la phrase reste, sans « Pas de détail ».
-        $crawler = $this->client->request('GET', '/schedule/'.$logged->getId());
-        self::assertStringStartsWith('Les charges se saisissent', $crawler->filter('#schedule-done .kd-applog')->text());
+        // Consignée : le bilan dit ce qui l'est, la phrase sur l'app n'a plus
+        // rien à expliquer (#91 : « le réalisé, ou la phrase sur l'app »).
+        $this->client->request('GET', '/schedule/'.$logged->getId());
+        self::assertSelectorNotExists('#schedule-summary .kd-applog');
+        self::assertSelectorTextContains('#schedule-summary', 'de travail');
 
         // À venir : on dit où saisir, pas qu'il manque quelque chose.
         $crawler = $this->client->request('GET', '/schedule/'.$planned->getId());
-        self::assertStringStartsWith('Les charges se saisissent', $crawler->filter('#schedule-done .kd-applog')->text());
+        self::assertStringStartsWith('Les charges se saisissent', $crawler->filter('#schedule-summary .kd-applog')->text());
 
         // Une sortie ne se logue pas : aucune phrase.
         $this->client->request('GET', '/schedule/'.$run->getId());
         self::assertSelectorNotExists('.kd-applog');
     }
 
-    /** Marquer faite depuis la page re-rend « Boucler » avec la phrase à jour. */
+    /** Marquer faite depuis la page re-rend le bilan avec la phrase à jour. */
     public function testTheStatusStreamCarriesTheNotice(): void
     {
         $me = $this->createUser('moi@example.com');
@@ -215,7 +217,7 @@ final class LogInAppNoticeTest extends WebTestCase
         self::assertStringContainsString('ses charges', $crawler->filter('.kd-applog')->text());
 
         $crawler = $this->client->request('GET', '/schedule/'.$done->getId());
-        self::assertStringContainsString('Pas de détail : ses charges', $crawler->filter('#schedule-done .kd-applog')->text());
+        self::assertStringContainsString('Pas de détail : ses charges', $crawler->filter('#schedule-summary .kd-applog')->text());
     }
 
     // ---------------------------------------------------------------- helpers

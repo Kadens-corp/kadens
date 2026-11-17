@@ -280,7 +280,15 @@ final class CalendarControllerTest extends WebTestCase
         self::assertStringContainsString('Sortie longue', $crawler->html());
         // La date est ce qui distingue cette page de app_workout_show.
         self::assertSelectorTextContains('.kd-wk__date', 'Dimanche 15 mars 2026');
-        self::assertSelectorTextContains('.kd-done', 'Marquer fait');
+        // Le hero se dit « au calendrier » : ce n'est pas la séance type (#91).
+        self::assertSelectorTextContains('.kd-wk__eyebrow', 'Séance au calendrier');
+        // Le bilan en tête, avec le lien vers la séance type.
+        self::assertSelectorTextContains('#schedule-summary', 'Prévue');
+        self::assertSelectorExists('#schedule-summary a[href^="/workout/'.$workout->getId().'"]');
+        // Les trois statuts au choix, plus seulement la bascule prévue / faite.
+        self::assertSelectorCount(3, '#schedule-done input[type="radio"][name="status"]');
+        self::assertSelectorExists('#schedule-done input[name="status"][value="missed"]');
+        self::assertSelectorTextContains('.kd-done', 'Enregistrer');
     }
 
     public function testScheduledShowDeniedToNonOwner(): void
@@ -296,7 +304,7 @@ final class CalendarControllerTest extends WebTestCase
         self::assertResponseStatusCodeSame(403);
     }
 
-    public function testDoneButtonTogglesStatusAndStaysOnThePage(): void
+    public function testTheFormSavesAnyStatusWithItsCommentAndStaysOnThePage(): void
     {
         $user = $this->createUser('owner@example.com');
         $workout = $this->createWorkout($user, 'Sortie longue');
@@ -306,21 +314,30 @@ final class CalendarControllerTest extends WebTestCase
         $this->client->loginUser($user);
         $crawler = $this->client->request('GET', '/schedule/'.$id);
 
-        $this->client->submit($crawler->filter('.kd-done__form')->form());
+        $this->client->submit($crawler->filter('.kd-done__form')->form([
+            'status' => 'done',
+            'completionNotes' => 'Dos raide, allure tenue.',
+        ]));
 
         // `return=schedule` : on reste sur la séance au lieu d'être renvoyé au
-        // calendrier, sinon marquer « fait » ferait perdre la page qu'on lisait.
+        // calendrier, sinon enregistrer ferait perdre la page qu'on lisait.
         self::assertResponseRedirects('/schedule/'.$id);
 
         $this->em->clear();
         self::assertSame(ScheduledStatus::DONE, $this->mustFind(ScheduledWorkout::class, $id)->getStatus());
 
-        // Et la bascule fonctionne dans l'autre sens.
+        // Le commentaire se lit dans le bilan, plus seulement dans la zone de saisie.
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('#schedule-summary', 'Dos raide, allure tenue.');
+        self::assertSelectorTextContains('#schedule-summary', 'Faite');
+
+        // « Manquée » se choisit ici aussi, plus seulement au calendrier.
         $crawler = $this->client->request('GET', '/schedule/'.$id);
-        $this->client->submit($crawler->filter('.kd-done__form')->form());
+        $this->client->submit($crawler->filter('.kd-done__form')->form(['status' => 'missed']));
 
         $this->em->clear();
-        self::assertSame(ScheduledStatus::PLANNED, $this->mustFind(ScheduledWorkout::class, $id)->getStatus());
+        self::assertSame(ScheduledStatus::MISSED, $this->mustFind(ScheduledWorkout::class, $id)->getStatus());
+        self::assertSame('Dos raide, allure tenue.', $this->mustFind(ScheduledWorkout::class, $id)->getCompletionNotes());
     }
 
     /**
@@ -351,9 +368,11 @@ final class CalendarControllerTest extends WebTestCase
 
         self::assertStringContainsString('target="schedule-badge"', $html);
         self::assertStringContainsString('target="schedule-done"', $html);
+        self::assertStringContainsString('target="schedule-summary"', $html);
         self::assertStringNotContainsString('cal-event-'.$id, $html);
         // Le fragment renvoyé porte bien le nouvel état, pas l'ancien.
-        self::assertStringContainsString('Annuler', $html);
+        self::assertStringContainsString('value="done" checked', $html);
+        self::assertStringContainsString('kd-sumcard__status--done', $html);
     }
 
     public function testCalendarEventLinksToTheDatedPage(): void
@@ -373,7 +392,11 @@ final class CalendarControllerTest extends WebTestCase
 
         // Le mois **affiché**, pas celui de la séance : la grille déborde sur ses
         // voisins, et une pastille datée du mois précédent renverrait ailleurs.
-        self::assertCount(2, $crawler->filter('a[href="'.$target.'?from=cal-month-2026-03"]'));
+        // Trois liens : le titre, l'œil et « Voir la séance » dans la modale,
+        // qui ouvre la séance datée et plus la séance type (#91).
+        self::assertCount(3, $crawler->filter('a[href="'.$target.'?from=cal-month-2026-03"]'));
+        self::assertCount(1, $crawler->filter('dialog a[href="'.$target.'?from=cal-month-2026-03"]'));
+        self::assertCount(0, $crawler->filter('dialog a[href^="/workout/"]'));
     }
 
     /**

@@ -2487,6 +2487,109 @@ a.kd-scope--link:hover {
     width: auto;
 }
 
+/* ----------------------------------------------------------------------------
+   Bilan d'une séance datée (#91) — sous le hero de /schedule/{id}
+   Ce qui a été enregistré, en lecture : statut, commentaire, ressenti, réalisé,
+   lien vers la séance type. Une liste de définitions, libellé en condensé à
+   gauche, valeur à droite ; empilée sous 560px.
+   ---------------------------------------------------------------------------- */
+.kd-sumcard {
+    margin: 0 0 var(--kd-space-9);
+    padding: var(--kd-space-7) var(--kd-space-8);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+}
+
+.kd-sumcard__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--kd-space-4);
+    margin-bottom: var(--kd-space-5);
+}
+
+.kd-sumcard__title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-bold);
+    font-size: 18px;
+    letter-spacing: var(--kd-tracking-display);
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-sumcard__list {
+    margin: 0;
+}
+
+.kd-sumcard__row {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    gap: var(--kd-space-4);
+    padding: var(--kd-space-4) 0;
+    border-top: 1px solid var(--color-divider);
+}
+
+.kd-sumcard__row dt {
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-semibold);
+    font-size: 13px;
+    letter-spacing: var(--kd-tracking-display);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-sumcard__row dd {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--color-text);
+}
+
+.kd-sumcard__row .kd-applog {
+    margin: 0;
+}
+
+.kd-sumcard__status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    font-weight: var(--kd-weight-semibold);
+}
+
+.kd-sumcard__status svg {
+    width: 15px;
+    height: 15px;
+}
+
+.kd-sumcard__status--done { color: var(--color-status-done); }
+.kd-sumcard__status--planned { color: var(--color-status-planned); }
+.kd-sumcard__status--missed { color: var(--color-status-missed); }
+
+/* Le commentaire est du contenu saisi : casse normale, retours à la ligne gardés. */
+.kd-sumcard__notes {
+    margin: 0;
+    white-space: normal;
+}
+
+.kd-sumcard__empty,
+.kd-sumcard__hint {
+    color: var(--color-text-soft);
+}
+
+.kd-sumcard__link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    color: var(--color-text);
+    font-weight: var(--kd-weight-medium);
+}
+
+.kd-sumcard__link svg {
+    width: 14px;
+    height: 14px;
+}
+
 /* ---- Menu kebab (actions secondaires) — <details> natif ---- */
 .kd-kebab {
     position: relative;
@@ -3733,6 +3836,16 @@ a.kd-scope--link:hover {
 
     .kd-wk__feedback:empty {
         display: none;
+    }
+
+    /* Bilan de séance datée : libellé au-dessus de sa valeur. */
+    .kd-sumcard {
+        padding: var(--kd-space-6);
+    }
+
+    .kd-sumcard__row {
+        grid-template-columns: 1fr;
+        gap: var(--kd-space-1);
     }
 
     /* Actions de fin de séance datée : une colonne, boutons pleine largeur. */
@@ -5604,8 +5717,9 @@ a.kd-planday__item:hover svg {
     cursor: pointer;
 }
 
-.kd-ratingpanel__form {
-    margin-top: var(--kd-space-6);
+.kd-done__rating > summary {
+    margin-bottom: var(--kd-space-4);
+    cursor: pointer;
 }
 
 .kd-ratingpick {

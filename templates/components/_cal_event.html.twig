@@ -195,13 +195,14 @@
 
             <div class="kd-modal__meta">
                 <span class="kd-badge kd-badge--{{ st }}"><span class="kd-badge__dot"></span>{{ scheduled.status.label }}</span>
-                {% if workout %}
-                    <a class="kd-btn kd-btn--ghost kd-btn--sm" href="{{ path('app_workout_show', {id: workout.id}|merge(back)) }}">
-                        {{ ux_icon('lucide:external-link') }} Voir la séance
-                    </a>
-                {% else %}
-                    {# Sans source, il n'y a aucune séance de bibliothèque à ouvrir :
-                       la marque prend la place du lien plutôt que de le laisser vide. #}
+                {# La séance datée, pas la séance type (#91) : la même page que
+                   l'œil, avec son statut, son commentaire et son ressenti. Elle
+                   mène elle-même à la séance type. Avant, ce lien ouvrait la
+                   bibliothèque, et deux « voir » menaient à deux pages. #}
+                <a class="kd-btn kd-btn--ghost kd-btn--sm" href="{{ path('app_scheduled_workout_show', {id: scheduled.id}|merge(back)) }}">
+                    {{ ux_icon('lucide:external-link') }} Voir la séance
+                </a>
+                {% if freeform %}
                     {{ include('components/_freeform_mark.html.twig') }}
                 {% endif %}
             </div>

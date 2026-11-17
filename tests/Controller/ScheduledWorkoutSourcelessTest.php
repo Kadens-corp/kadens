@@ -195,7 +195,10 @@ final class ScheduledWorkoutSourcelessTest extends WebTestCase
         self::assertResponseIsSuccessful();
         self::assertSelectorTextContains('.kd-wk__title', 'Séance improvisée');
         self::assertSelectorTextContains('.kd-wk__date', 'Dimanche 15 mars 2026');
-        self::assertSelectorTextContains('.kd-done', 'Marquer fait');
+        self::assertSelectorTextContains('#schedule-summary', 'Prévue');
+        self::assertSelectorTextContains('.kd-done', 'Enregistrer');
+        // Pas de séance type à ouvrir : le bilan n'en annonce pas.
+        self::assertSelectorTextNotContains('#schedule-summary', 'Séance type');
         self::assertStringNotContainsString('kd-wk__panel', $crawler->html());
     }
 

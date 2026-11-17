@@ -43,12 +43,18 @@
             scheduled: scheduled,
             comparison: comparison, logSummary: logSummary, defaultTab: defaultTab,
             volume: volume|default(null), load: load|default(null),
-            plates: plates|default([]), endurance: endurance|default([])
+            plates: plates|default([]), endurance: endurance|default([]),
+            eyebrow: 'Séance au calendrier', summaryContext: summaryContext
         } only %}
             {% block actions %}
                 {{ include('scheduled_workout/_hero_actions.html.twig', {
                     scheduled: scheduled, workout: flat.workout
                 }) }}
+            {% endblock %}
+            {# Le bilan, avant le programme : c'est ce qui distingue cette page
+               de la séance type (#91). #}
+            {% block afterhero %}
+                {{ include('components/_scheduled_summary.html.twig', summaryContext, with_context = false) }}
             {% endblock %}
         {% endembed %}
     {% else %}
@@ -67,6 +73,8 @@
                     </div>
                 </div>
             </header>
+
+            {{ include('components/_scheduled_summary.html.twig', summaryContext, with_context = false) }}
 
             {# Sans source, il n'y a rien à comparer : pas de colonne « Prévu »,
                seulement le réalisé — le tableau la fait tomber de lui-même quand
@@ -99,16 +107,14 @@
         attachable: attachableActivities
     }, with_context = false) }}
 
-    {# Le ressenti (forme, difficulté) : consigner, propriétaire seul pour la
-       saisie, coach en lecture. Après le réalisé, avant « Boucler » : on note la
-       séance qu'on vient de lire. #}
-    {{ include('components/_scheduled_rating.html.twig', {scheduled: scheduled, rating: rating}, with_context = false) }}
-
-    {# Boucler la séance : programmer, pas consigner. Bascule de statut, note
-       d'écart léger, déplacement, retrait — tout ce que le coach fait aussi.
-       Sortie en composant : c'est la cible du Turbo Stream renvoyé par le
-       changement de statut. #}
+    {# Statut, commentaire et ressenti : un seul formulaire, le même que la
+       modale du calendrier (#90, #91). Gestes de programmation (EDIT), que le
+       coach fait aussi ; le ressenti, lui, ne s'y saisit qu'au propriétaire
+       (LOG). Sorti en composant : c'est une cible du Turbo Stream renvoyé à
+       l'enregistrement. #}
     {% if is_granted('SCHEDULED_WORKOUT_EDIT', scheduled) %}
-        {{ include('components/_scheduled_done.html.twig', {scheduled: scheduled, strength: strength}) }}
+        {{ include('components/_scheduled_done.html.twig', {
+            scheduled: scheduled, rating: summaryContext.rating, statuses: statuses
+        }, with_context = false) }}
     {% endif %}
 {% endblock %}

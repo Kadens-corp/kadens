@@ -49,6 +49,8 @@ final class ScheduledWorkoutController extends AbstractController
         private readonly RequestStack $requestStack,
         private readonly ScheduledWorkoutRepository $scheduledWorkouts,
         private readonly TrackableSchedule $trackable,
+        private readonly LogMetrics $logMetrics,
+        private readonly ImportedActivityRepository $importedActivities,
     ) {
     }
 
@@ -186,9 +188,7 @@ final class ScheduledWorkoutController extends AbstractController
         PlanFlattener $planFlattener,
         WorkoutMetrics $metrics,
         LogComparator $comparator,
-        LogMetrics $logMetrics,
         VolumePanel $volumePanel,
-        ImportedActivityRepository $importedActivities,
         ImportedActivityPresenter $activityPresenter,
     ): Response {
         $this->denyAccessUnlessGranted(ScheduledWorkoutVoter::VIEW, $scheduled);
@@ -200,6 +200,9 @@ final class ScheduledWorkoutController extends AbstractController
         // son onglet n'apparaissent pas, plutôt que d'apparaître vides.
         $comparison = $comparator->compare($scheduled);
 
+        $activities = $this->importedActivityContext($scheduled, $activityPresenter);
+        $summaryContext = $this->summaryContext($scheduled, \count($activities['importedActivities']));
+
         // Séance libre, ou séance de bibliothèque supprimée depuis : il n'y a pas
         // de prescrit à rendre, la page se réduit à sa date, son statut, son titre
         // (snapshot) et son réalisé. Le contexte de lecture passe donc à null.
@@ -209,11 +212,11 @@ final class ScheduledWorkoutController extends AbstractController
             'summary' => null === $workout ? null : $metrics->summary($workout),
             'blockStats' => null === $workout ? [] : $metrics->blockBreakdown($workout),
             'comparison' => $comparison,
-            'logSummary' => $logMetrics->summary($scheduled),
+            'logSummary' => $summaryContext['logSummary'],
             'defaultTab' => $this->defaultTab($scheduled, $comparison),
-            'rating' => $this->ratingOf($scheduled),
-            'strength' => $this->trackable->prescribesStrength($workout),
-        ] + $this->importedActivityContext($scheduled, $importedActivities, $activityPresenter) + [
+            'summaryContext' => $summaryContext,
+            'statuses' => ScheduledStatus::cases(),
+        ] + $activities + [
             // Le volume PRÉVU, dans le HTML initial comme le reste de la page :
             // une vue de consultation ne charge rien après coup (cache offline).
             // Sans prescrit, il n'y a pas de volume prévu à annoncer.
@@ -228,8 +231,9 @@ final class ScheduledWorkoutController extends AbstractController
      *
      * @return array{importedActivities: list<array<string, mixed>>, activityComparison: list<array<string, mixed>>, attachableActivities: list<\App\Entity\ImportedActivity>}
      */
-    private function importedActivityContext(ScheduledWorkout $scheduled, ImportedActivityRepository $repository, ImportedActivityPresenter $presenter): array
+    private function importedActivityContext(ScheduledWorkout $scheduled, ImportedActivityPresenter $presenter): array
     {
+        $repository = $this->importedActivities;
         $attached = $repository->findForScheduledWorkout($scheduled);
         $owner = $scheduled->getOwner();
 
@@ -239,6 +243,26 @@ final class ScheduledWorkoutController extends AbstractController
             'attachableActivities' => null !== $owner && $this->isGranted(ScheduledWorkoutVoter::LOG, $scheduled)
                 ? $repository->findUnattachedForOwnerOn($owner, $scheduled->getScheduledDate())
                 : [],
+        ];
+    }
+
+    /**
+     * Ce que lit le bilan en tête de /schedule/{id} (#91) : statut, commentaire,
+     * ressenti, réalisé. Partagé par la page et par le flux Turbo renvoyé à
+     * l'enregistrement, pour que le bilan re-rendu dise exactement la même chose.
+     *
+     * @param int|null $importedCount activités rattachées, si l'appelant les a déjà
+     *
+     * @return array{scheduled: ScheduledWorkout, rating: SessionRating|null, logSummary: array<string, mixed>|null, importedCount: int, strength: bool}
+     */
+    private function summaryContext(ScheduledWorkout $scheduled, ?int $importedCount = null): array
+    {
+        return [
+            'scheduled' => $scheduled,
+            'rating' => $this->ratingOf($scheduled),
+            'logSummary' => $this->logMetrics->summary($scheduled),
+            'importedCount' => $importedCount ?? \count($this->importedActivities->findForScheduledWorkout($scheduled)),
+            'strength' => $this->trackable->prescribesStrength($scheduled->getWorkout()),
         ];
     }
 
@@ -330,33 +354,6 @@ final class ScheduledWorkoutController extends AbstractController
     }
 
     /**
-     * Le ressenti d'une séance faite, saisi ou corrigé sur le web : forme 1-5 et
-     * difficulté 1-10. C'est **consigner**, pas programmer : attribut LOG, le
-     * propriétaire seul, comme le réalisé série par série — personne ne dit à la
-     * place de l'athlète comment il s'est senti. Le coach le lit (VIEW).
-     */
-    #[Route('/{id}/rating', name: 'app_scheduled_workout_rating', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function rate(Request $request, ScheduledWorkout $scheduled): Response
-    {
-        $this->denyAccessUnlessGranted(ScheduledWorkoutVoter::LOG, $scheduled);
-
-        $payload = $request->getPayload();
-
-        if ($this->isCsrfTokenValid('rating'.$scheduled->getId(), $payload->getString('_token'))) {
-            $this->applyRating($payload, $scheduled);
-            $this->entityManager->flush();
-
-            if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
-                return $this->streamScheduleStatus($request, $scheduled);
-            }
-
-            $this->addFlash('success', 'Ressenti enregistré.');
-        }
-
-        return $this->redirectToRoute('app_scheduled_workout_show', ['id' => $scheduled->getId()]);
-    }
-
-    /**
      * Écrit le ressenti posté, axe par axe, **si le formulaire le porte** et si
      * le lecteur a le droit de consigner. Un formulaire sans sélecteur (celui du
      * coach) ne touche donc à rien. Vide = « non renseigné », la seule façon de
@@ -445,8 +442,8 @@ final class ScheduledWorkoutController extends AbstractController
     }
 
     /**
-     * Re-rend en Turbo Stream les deux zones de `/schedule/{id}` qui portent le
-     * statut : la pastille du hero et la section « Réalisé ». Pendant de
+     * Re-rend en Turbo Stream les trois zones de `/schedule/{id}` qui portent le
+     * statut : la pastille du hero, le bilan et le formulaire du bas. Pendant de
      * streamCalEvent() pour l'autre page appelante.
      */
     private function streamScheduleStatus(Request $request, ScheduledWorkout $scheduled): Response
@@ -454,11 +451,8 @@ final class ScheduledWorkoutController extends AbstractController
         $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
 
         return $this->render('scheduled_workout/stream/status.stream.html.twig', [
-            'scheduled' => $scheduled,
-            'rating' => $this->ratingOf($scheduled),
-            // « Boucler la séance » dit où se saisissent les charges : le
-            // fragment re-rendu doit le dire à l'identique (#63).
-            'strength' => $this->trackable->prescribesStrength($scheduled->getWorkout()),
+            'summaryContext' => $this->summaryContext($scheduled),
+            'statuses' => ScheduledStatus::cases(),
         ]);
     }
 
