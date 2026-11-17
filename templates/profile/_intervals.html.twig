@@ -44,6 +44,10 @@
             </form>
         </div>
 
+        {# La cadence vit dans le planificateur Infomaniak (/cron/intervals), pas
+           ici : la phrase ne la chiffre pas pour ne pas mentir si elle change. #}
+        <p class="kd-devices__hint">Kadens relit Intervals.icu tout seul plusieurs fois par jour. « Synchroniser » sert à ne pas attendre le prochain passage.</p>
+
         {% if unattachedActivities > 0 %}
             <p class="kd-devices__hint">Une activité reste à rattacher quand aucune séance du même jour ne lui correspond, ou quand plusieurs pourraient. Rattache-la depuis la page de la séance.</p>
         {% endif %}

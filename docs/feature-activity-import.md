@@ -149,7 +149,8 @@ php bin/console app:intervals:import athlete@example.com --since=2025-01-01 --fo
 
 ## 6. Limites connues
 
-- Pas de synchro automatique (ni webhook ni cron) : c'est un bouton.
+- Pas de webhook : la synchro automatique passe toutes les 6 h (§7), une
+  sortie peut donc attendre jusqu'à 6 h avant d'arriver sans clic.
 - Une coquille Strava réapparaît dans le compteur « ignorée » à chaque synchro
   tant qu'elle est dans la fenêtre.
 - Les splits comptent le temps de pause qu'ils contiennent.
@@ -157,3 +158,37 @@ php bin/console app:intervals:import athlete@example.com --since=2025-01-01 --fo
   créée par l'historique y apparaît faite, sans programme ni séries.
 - Une montre coupée puis relancée un jour sans séance prévue produit, en
   historique, deux séances libres au lieu d'une.
+
+## 7. Synchro automatique (planificateur Infomaniak)
+
+Le mutualisé n'a ni cron shell ni worker : son planificateur de tâches appelle
+une URL. `/cron/intervals` synchronise tous les comptes connectés par le chemin du
+bouton (`IntervalsAutoSync` → `IntervalsImporter::sync()`) : même fenêtre, même
+lot de 40, jamais de séance libre. Même modèle que Ranko et Villard.
+
+1. Sur le serveur, dans `.env.local` (sans secret, la route répond 403) :
+
+   ```dotenv
+   APP_CRON_SECRET=<php -r 'echo bin2hex(random_bytes(32));'>
+   CRON_TIME_LIMIT=15
+   ```
+
+2. Manager Infomaniak, Planifier une tâche : `https`, le domaine
+   `kadens.antoninpamart.fr`, chemin `cron/intervals?token=<APP_CRON_SECRET>`,
+   toutes les 6 heures.
+
+Réponse : `{"status":"ok","synced":3,"failed":0,"notReached":0,"imported":5,"attached":4,"remaining":0}`.
+`failed` = clé refusée ou Intervals injoignable (journalisé, les autres comptes
+passent quand même). `notReached` = comptes laissés par le budget de temps, ils
+passent en tête à l'appel suivant (ordre : jamais synchronisé, puis plus ancien
+`lastSyncedAt`). `remaining` = activités laissées par un lot coupé, reprises au
+passage suivant.
+
+**Durée d'un appel** : le budget n'est vérifié qu'entre deux comptes, un appel
+dure donc `CRON_TIME_LIMIT` + la synchro d'un compte (40 streams au pire, une
+vingtaine de secondes). Garder ce total sous le `max_execution_time` de PHP et
+sous le délai d'attente du planificateur.
+
+Garder l'URL privée : elle contient le secret. Changer `APP_CRON_SECRET` si elle
+fuite. La carte de `/profile/settings` dit « plusieurs fois par jour » sans
+chiffrer la cadence, qui ne vit que dans le Manager.
