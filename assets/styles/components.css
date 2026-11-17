@@ -12913,6 +12913,43 @@ a.kd-coachitem__date:hover {
     min-width: 0;
 }
 
+/* « Où trouver ma clé ? » (#100) : même lien discret que « Mot de passe
+   oublié ? » (#99), les étapes se déplient dans le flux sous le champ. */
+.kd-intervals__guide {
+    margin: calc(-1 * var(--kd-space-4)) 0 var(--kd-space-7);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-intervals__guide > summary {
+    display: inline;
+    list-style: none;
+    cursor: pointer;
+    color: var(--color-text-soft);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.kd-intervals__guide > summary::-webkit-details-marker {
+    display: none;
+}
+
+.kd-intervals__guide > summary:hover,
+.kd-intervals__guide[open] > summary {
+    color: var(--color-text);
+}
+
+.kd-intervals__guide > ol {
+    margin: var(--kd-space-3) 0 0;
+    padding-left: 1.4em;
+    max-width: 44rem;
+    line-height: 1.5;
+}
+
+.kd-intervals__guide li + li {
+    margin-top: var(--kd-space-2);
+}
+
 .kd-zonebars {
     list-style: none;
     margin: 0;

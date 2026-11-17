@@ -48,6 +48,12 @@ final class ImportedActivityPagesTest extends WebTestCase
         self::assertResponseIsSuccessful();
         self::assertCount(1, $crawler->filter('#intervals-panel form[action="/profile/intervals/connect"]'));
         self::assertCount(0, $crawler->filter('#intervals-panel form[action="/profile/intervals/sync"]'));
+
+        // #100 : la marche à suivre est dépliée tant que rien n'est connecté.
+        $guide = $crawler->filter('#intervals-panel details.kd-intervals__guide');
+        self::assertCount(1, $guide);
+        self::assertNotNull($guide->attr('open'));
+        self::assertStringContainsString('Developer Settings', $guide->text());
     }
 
     /** Connecté : la clé n'est jamais réaffichée, même scellée. */
@@ -61,6 +67,8 @@ final class ImportedActivityPagesTest extends WebTestCase
 
         self::assertStringContainsString('Coureur Grenoblois', $crawler->filter('#intervals-panel')->text());
         self::assertCount(1, $crawler->filter('#intervals-panel form[action="/profile/intervals/sync"]'));
+        // Connecté, la marche à suivre reste là pour remplacer la clé, mais repliée.
+        self::assertNull($crawler->filter('#intervals-panel details.kd-intervals__guide')->attr('open'));
         self::assertStringNotContainsString($connection->getSealedApiKey(), (string) $this->client->getResponse()->getContent());
         self::assertStringNotContainsString('cle-secrete', (string) $this->client->getResponse()->getContent());
     }

@@ -28,7 +28,9 @@ personnelle.
    est ignorée à l'import et le message de synchro le dit.
 2. Intervals.icu, Settings, Developer Settings : générer la clé d'API.
 3. Kadens, `/profile/settings`, carte « Activités cardio » : coller la clé.
-   Elle est validée par un appel réel avant d'être gardée.
+   Elle est validée par un appel réel avant d'être gardée. Ces trois étapes
+   sont aussi écrites sur la carte elle-même (« Où trouver ma clé ? », #100),
+   dépliées tant que rien n'est connecté : à tenir d'accord avec cette liste.
 4. « Synchroniser » à chaque fois qu'on veut rapatrier ses sorties.
 
 ## 3. Reprise d'historique (console)
