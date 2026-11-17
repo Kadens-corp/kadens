@@ -277,6 +277,45 @@ final class CoachControllerTest extends WebTestCase
     }
 
     /**
+     * #82 : le coach sait, avant d'envoyer, que la copie sera indépendante, et la
+     * fiche lui fournit la copie que l'athlète a déjà de chaque séance (la plus
+     * récemment modifiée, avec son nombre) pour lui proposer de l'ouvrir.
+     */
+    public function testCopyFormAnnouncesIndependentCopyAndExistingOnes(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $hills = $this->createWorkout($coach, 'Côtes 10 x 30 s');
+        $upper = $this->createWorkout($coach, 'Upper A');
+
+        $older = $this->createWorkout($athlete, 'Côtes 10x30')->setCopiedFrom($hills);
+        $latest = $this->createWorkout($athlete, 'Côtes adaptées')->setCopiedFrom($hills);
+        $this->em->flush();
+        // Le PreUpdate pose `updatedAt` à maintenant : on fixe les dates en SQL.
+        $this->em->getConnection()->executeStatement('UPDATE workout SET updated_at = ? WHERE id = ?', ['2026-11-02 10:00:00', $older->getId()]);
+        $this->em->getConnection()->executeStatement('UPDATE workout SET updated_at = ? WHERE id = ?', ['2026-11-12 10:00:00', $latest->getId()]);
+        $this->em->clear();
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertSelectorTextContains('.kd-coachform__hint', 'Une copie indépendante sera créée chez');
+        $form = $crawler->filter('form[action$="/workout/copy"]');
+        /** @var array<int, array{count: int, title: string, modifiedAt: string, url: string}> $copies */
+        $copies = json_decode((string) $form->attr('data-copy-notice-copies-value'), true, flags: \JSON_THROW_ON_ERROR);
+
+        self::assertSame([(int) $hills->getId()], array_keys($copies));
+        $copy = $copies[(int) $hills->getId()] ?? null;
+        self::assertNotNull($copy);
+        self::assertSame(2, $copy['count']);
+        self::assertSame('Côtes adaptées', $copy['title']);
+        self::assertSame('12/11/2026', $copy['modifiedAt']);
+        self::assertSame('/workout/'.$latest->getId().'/edit?from=athlete-'.$athlete->getId(), $copy['url']);
+        self::assertArrayNotHasKey((int) $upper->getId(), $copies);
+    }
+
+    /**
      * Seule une séance de SA bibliothèque se donne : ni celle de l'athlète (qui
      * l'a déjà), ni celle d'un tiers, que le coach ne peut même pas lire.
      */

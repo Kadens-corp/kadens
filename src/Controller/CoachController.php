@@ -113,14 +113,18 @@ final class CoachController extends AbstractController
             static fn (ScheduledWorkout $scheduled): bool => !RecentSessions::isPast($scheduled, $today),
         ));
         $plans = $planTemplateRepository->findBy(['owner' => $athlete], ['title' => 'ASC']);
+        $workouts = $workoutRepository->findLibraryForOwner($athlete);
+        $coachWorkouts = $workoutRepository->findLibraryForOwner($coach);
 
         return $this->render('coach/athlete.html.twig', [
             'athlete' => $athlete,
             // La relation porte les notes privées du coach (#65).
             'coaching' => $this->acceptedRelation($coach, $athlete),
-            'workouts' => $workoutRepository->findLibraryForOwner($athlete),
+            'workouts' => $workouts,
             // Le seul élément de la page qui parle du coach : ce qu'il peut donner.
-            'coachWorkouts' => $workoutRepository->findLibraryForOwner($coach),
+            'coachWorkouts' => $coachWorkouts,
+            // Prévenir le doublon avant de redonner une séance (#82).
+            'existingCopies' => $this->existingCopies($workouts, $coachWorkouts, $athlete),
             'plans' => $plans,
             // Aperçu des dates avant de placer un plan (#68), et présélection
             // depuis « Placer dans son agenda » sur la page du plan.
@@ -372,6 +376,58 @@ final class CoachController extends AbstractController
             'id' => $copy->getId(),
             'from' => BackTarget::token(BackTarget::ATHLETE, (int) $athlete->getId()),
         ]);
+    }
+
+    /**
+     * Les copies que l'athlète a déjà des séances du coach (#82), par id de séance
+     * source : combien, et la plus récemment modifiée, celle qu'on lui propose
+     * d'ouvrir plutôt que d'en créer une de plus. Toute copie de bibliothèque
+     * compte, qu'elle vienne de « Ajouter à sa bibliothèque » ou d'une séance
+     * posée dans son plan (`SharedWorkoutCopier::libraryCopyFor`).
+     *
+     * Filtré sur les ids des séances du coach, sans remonter `copiedFrom` : lire
+     * l'id d'un proxy ne le charge pas, lire son propriétaire si.
+     *
+     * @param list<Workout> $athleteWorkouts
+     * @param list<Workout> $coachWorkouts
+     *
+     * @return array<int, array{count: int, title: string, modifiedAt: string, url: string}>
+     */
+    private function existingCopies(array $athleteWorkouts, array $coachWorkouts, User $athlete): array
+    {
+        $sourceIds = array_flip(array_map(static fn (Workout $workout): int => (int) $workout->getId(), $coachWorkouts));
+
+        /** @var array<int, list<Workout>> $bySource */
+        $bySource = [];
+        foreach ($athleteWorkouts as $workout) {
+            $sourceId = $workout->getCopiedFrom()?->getId();
+            if (null !== $sourceId && isset($sourceIds[$sourceId])) {
+                $bySource[$sourceId][] = $workout;
+            }
+        }
+
+        $copies = [];
+        foreach ($bySource as $sourceId => $workouts) {
+            usort($workouts, static fn (Workout $a, Workout $b): int => self::modifiedAt($b) <=> self::modifiedAt($a));
+            $latest = $workouts[0];
+
+            $copies[$sourceId] = [
+                'count' => count($workouts),
+                'title' => (string) $latest->getTitle(),
+                'modifiedAt' => self::modifiedAt($latest)->format('d/m/Y'),
+                'url' => $this->generateUrl('app_workout_edit', [
+                    'id' => $latest->getId(),
+                    'from' => BackTarget::token(BackTarget::ATHLETE, (int) $athlete->getId()),
+                ]),
+            ];
+        }
+
+        return $copies;
+    }
+
+    private static function modifiedAt(Workout $workout): \DateTimeImmutable
+    {
+        return $workout->getUpdatedAt() ?? $workout->getCreatedAt() ?? new \DateTimeImmutable();
     }
 
     /**

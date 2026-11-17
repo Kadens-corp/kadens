@@ -95,25 +95,37 @@
             </section>
 
             {# Une séance de SA bibliothèque à lui, copiée chez l'athlète : l'original
-               reste intact, la copie appartient à l'athlète (#58). #}
+               reste intact, la copie appartient à l'athlète (#58). Le dire avant
+               l'envoi, et prévenir le doublon quand il en a déjà une copie (#82). #}
             <section class="kd-card">
                 <h3 class="kd-card__title">{{ ux_icon('lucide:copy') }} Une de mes séances</h3>
                 {% if coachWorkouts is empty %}
                     <p class="kd-lead">Ta bibliothèque est vide : compose d'abord une séance dans « Mes séances ».</p>
                 {% else %}
-                    <form method="post" action="{{ path('app_coach_workout_copy', {id: athlete.id}) }}" class="kd-coachform">
+                    <p class="kd-coachform__hint">Une copie indépendante sera créée chez {{ athlete.displayName }}. Tes modifications futures ne la toucheront pas.</p>
+                    <form method="post" action="{{ path('app_coach_workout_copy', {id: athlete.id}) }}" class="kd-coachform"
+                          data-controller="copy-notice"
+                          data-copy-notice-copies-value="{{ existingCopies|json_encode(constant('JSON_FORCE_OBJECT')) }}"
+                          data-copy-notice-name-value="{{ athlete.displayName }}"
+                          data-action="change->copy-notice#update">
                         <input type="hidden" name="_token" value="{{ csrf_token('coach_workout_copy' ~ athlete.id) }}">
                         <div class="kd-field kd-coachform__field">
                             <label class="kd-label" for="coach_workout_copy">Séance à lui donner</label>
-                            <select class="kd-input" id="coach_workout_copy" name="workout" required>
+                            <select class="kd-input" id="coach_workout_copy" name="workout" required
+                                    data-copy-notice-target="workout">
                                 {% for workout in coachWorkouts %}
                                     <option value="{{ workout.id }}">{{ workout.title }}</option>
                                 {% endfor %}
                             </select>
                         </div>
                         <button type="submit" class="kd-btn kd-btn--primary">
-                            {{ ux_icon('lucide:plus') }} Ajouter à sa bibliothèque
+                            {{ ux_icon('lucide:plus') }} <span data-copy-notice-target="label">Ajouter à sa bibliothèque</span>
                         </button>
+                        <p class="kd-coachform__notice" data-copy-notice-target="notice" role="status" hidden>
+                            {{ ux_icon('lucide:copy') }}
+                            <span data-copy-notice-target="text"></span>
+                            <a href="#" class="kd-btn kd-btn--ghost kd-btn--sm" data-copy-notice-target="open">L'ouvrir</a>
+                        </p>
                     </form>
                 {% endif %}
             </section>
