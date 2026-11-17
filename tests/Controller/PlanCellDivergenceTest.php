@@ -161,10 +161,10 @@ final class PlanCellDivergenceTest extends WebTestCase
         $crawler = $this->client->request('GET', '/workout/'.$this->week2->getId().'/quick-panel');
         $form = $crawler->filter('form[name="prescribed_'.$prescribedId.'"]');
 
-        // L'athlète remet 400 m (le champ se saisit en km) : la case redevient
+        // L'athlète remet 400 m (valeur et unité, #97) : la case redevient
         // fidèle, le rappel s'efface.
         $values = $form->form()->getPhpValues();
-        $values['prescribed_'.$prescribedId]['distanceMeters'] = '0.4';
+        $values['prescribed_'.$prescribedId]['distanceMeters'] = ['value' => '400', 'unit' => 'm'];
         $this->client->request('POST', (string) $form->attr('action'), $values, [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']);
         self::assertResponseIsSuccessful();
         $content = (string) $this->client->getResponse()->getContent();
@@ -172,7 +172,7 @@ final class PlanCellDivergenceTest extends WebTestCase
         self::assertStringNotContainsString('kd-quicktitle__hint', $content);
 
         // Et à 800 m il reparaît, au tutoiement : c'est son propre agenda.
-        $values['prescribed_'.$prescribedId]['distanceMeters'] = '0.8';
+        $values['prescribed_'.$prescribedId]['distanceMeters'] = ['value' => '0,8', 'unit' => 'km'];
         $this->client->request('POST', (string) $form->attr('action'), $values, [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']);
         self::assertStringContainsString('tu liras dans ton agenda', (string) $this->client->getResponse()->getContent());
     }

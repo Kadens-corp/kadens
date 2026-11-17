@@ -13,7 +13,7 @@
     athlete.age is not null ? athlete.age ~ ' ans',
     athlete.sex ? athlete.sex.label,
     athlete.heightCm is not null ? athlete.heightCm ~ ' cm',
-    athlete.weightKg is not null ? (athlete.weightKg|number_format(athlete.weightKg == athlete.weightKg|round ? 0 : 1, ',', ' ')) ~ ' kg',
+    athlete.weightKg is not null ? athlete.weightKg|weight,
     athlete.mainGoal ? 'Objectif ' ~ athlete.mainGoal.label|lower,
 ]|filter(v => v) %}
 

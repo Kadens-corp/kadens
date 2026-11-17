@@ -1538,8 +1538,53 @@ a.kd-scope--link:hover {
     transition: border-color .12s ease, box-shadow .12s ease;
 }
 
+/* L'exemple d'un champ vide ne doit pas passer pour une valeur saisie (#97) :
+   préfixé « ex. » dans le texte, et en italique ici. Le gris reste celui du
+   token (4.8:1) : le pâlir encore ferait passer l'exemple sous le seuil de
+   lecture, c'est l'italique et le « ex. » qui le distinguent. */
 .kd-input::placeholder {
     color: var(--color-text-placeholder);
+    font-style: italic;
+}
+
+/* Valeur + unité côte à côte (DistanceType, #97) : un seul champ à l'œil. Le
+   sélecteur d'unité prend la largeur de « km », la valeur le reste. */
+.kd-unitinput {
+    display: flex;
+    gap: var(--kd-space-2);
+}
+
+.kd-unitinput__value {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.kd-unitinput__unit {
+    flex: 0 0 auto;
+    width: auto;
+}
+
+/* Alerte de vraisemblance sous une distance (#97). Encre forte et icône, pas de
+   rouge : rien n'a échoué, la valeur est enregistrée, on demande de vérifier. */
+.kd-distcheck {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-2) 0 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-strong);
+}
+
+.kd-distcheck:empty {
+    display: none;
+}
+
+.kd-distcheck svg {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    margin-top: 1px;
 }
 
 /* Le halo teinté d'avant ne tenait pas les 3:1 de WCAG 1.4.11. On garde l'aide

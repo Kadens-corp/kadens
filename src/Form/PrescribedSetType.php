@@ -8,7 +8,6 @@ use App\Enum\SetType;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\EnumType;
 use Symfony\Component\Form\Extension\Core\Type\IntegerType;
-use Symfony\Component\Form\Extension\Core\Type\NumberType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
@@ -34,7 +33,7 @@ class PrescribedSetType extends AbstractType
             $builder->add('durationSeconds', DurationType::class, [
                 'label' => 'Durée (mm:ss)',
                 'required' => false,
-                'attr' => ['placeholder' => '0:45'],
+                'attr' => ['placeholder' => 'ex. 0:45'],
             ]);
         } else {
             $builder->add('reps', IntegerType::class, [
@@ -44,11 +43,9 @@ class PrescribedSetType extends AbstractType
             ]);
         }
 
-        $builder->add('weightKg', NumberType::class, [
+        $builder->add('weightKg', WeightType::class, [
             'label' => 'Charge (kg)',
             'required' => false,
-            'scale' => 2,
-            'attr' => ['min' => 0, 'step' => 0.5],
         ]);
     }
 

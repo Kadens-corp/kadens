@@ -12,6 +12,7 @@ use App\Http\BackTarget;
 use App\Service\ActivityPalette;
 use App\Service\BackLink;
 use App\Service\CustomMessageInbox;
+use App\Service\DistancePlausibility;
 use App\Service\ExerciseNaming;
 use App\Service\SessionRating;
 use App\Service\UnitFormatter;
@@ -60,6 +61,7 @@ final class AppExtension extends AbstractExtension
         private readonly UnitFormatter $units,
         private readonly FormFactoryInterface $forms,
         private readonly CustomMessageInbox $inbox,
+        private readonly DistancePlausibility $distancePlausibility,
     ) {
     }
 
@@ -67,6 +69,8 @@ final class AppExtension extends AbstractExtension
     {
         return [
             new TwigFilter('tonnage', [$this->units, 'tonnage']),
+            // Une charge : « 70 kg », « 32,5 kg », « 1,25 kg » (#97).
+            new TwigFilter('weight', [$this->units, 'weight']),
         ];
     }
 
@@ -74,6 +78,8 @@ final class AppExtension extends AbstractExtension
     {
         return [
             new TwigFunction('prescription_type_fields_map', [$this, 'prescriptionTypeFieldsMap']),
+            // Alerte « vérifie l'unité » sous la distance d'un exercice (#97).
+            new TwigFunction('distance_warning', [$this->distancePlausibility, 'warning']),
             new TwigFunction('exercise_name', [$this->naming, 'label']),
             new TwigFunction('exercise_alt_name', [$this->naming, 'alternate']),
             new TwigFunction('exercise_search_text', [$this, 'exerciseSearchText']),

@@ -1,9 +1,11 @@
 {# Réponse d'un enregistrement de paramètres d'exercice (compositeur). On ne
    remplace QUE la ligne de résumé de l'exercice (pastille + type), pas tout
    #workout-blocks : le panneau de params (le formulaire en cours de saisie)
-   reste intact, ouvert, focus préservé. Contexte : workout, prescribed, summary. #}
+   reste intact, ouvert, focus préservé. Seule l'alerte de distance sous le champ
+   suit (#97). Contexte : workout, prescribed, summary. #}
 <turbo-stream action="replace" target="cexo-row-{{ prescribed.id }}">
     <template>
         {{ include('workout/_cexo_row.html.twig') }}
     </template>
 </turbo-stream>
+{{ include('workout/stream/distance_check.stream.html.twig') }}

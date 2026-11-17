@@ -19,7 +19,7 @@
             {% set vitals = [
                 athlete.age is not null ? athlete.age ~ ' ans',
                 athlete.sex ? athlete.sex.label,
-                athlete.weightKg is not null ? (athlete.weightKg|number_format(athlete.weightKg == athlete.weightKg|round ? 0 : 1, ',', ' ')) ~ ' kg',
+                athlete.weightKg is not null ? athlete.weightKg|weight,
                 athlete.mainGoal ? athlete.mainGoal.label,
                 athlete.trainingYears is not null ? athlete.trainingYears ~ ' an' ~ (athlete.trainingYears > 1 ? 's') ~ ' de pratique',
             ]|filter(v => v) %}

@@ -2,6 +2,12 @@ twig:
     file_name_pattern: '*.twig'
     form_themes:
         - 'form/kadens_theme.html.twig'
+    # Format français par défaut de `|number_format` (#97) : un appel sans
+    # séparateurs explicites écrivait « 1,234.5 » à l'anglaise.
+    number_format:
+        decimals: 0
+        decimal_point: ','
+        thousands_separator: ' '
 
 when@test:
     twig:

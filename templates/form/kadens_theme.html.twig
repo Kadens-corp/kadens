@@ -41,6 +41,17 @@
     {{- parent() -}}
 {%- endblock -%}
 
+{# Distance (DistanceType) : la valeur et son unité côte à côte, comme un seul
+   champ. Le conteneur porte les `attr` du champ (dont le `data-action` de
+   l'enregistrement automatique, que le `change` des deux enfants traverse). #}
+{%- block distance_widget -%}
+    {%- set attr = attr|merge({class: (attr.class|default('') ~ ' kd-unitinput')|trim}) -%}
+    <div {{ block('widget_container_attributes') }}>
+        {{- form_widget(form.value, {attr: form.value.vars.attr|merge({class: 'kd-unitinput__value'})}) -}}
+        {{- form_widget(form.unit, {attr: form.unit.vars.attr|merge({class: 'kd-unitinput__unit'})}) -}}
+    </div>
+{%- endblock -%}
+
 {%- block choice_widget_expanded -%}
     <div class="kd-choicegrid" {{ block('widget_container_attributes') }}>
     {%- for child in form -%}

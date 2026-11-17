@@ -1,0 +1,6 @@
+{# Contenu de l'alerte de distance (#97), seul : rien quand la distance est
+   vraisemblable. Voir `_distance_check`. Contexte : prescribed. #}
+{%- set warning = distance_warning(prescribed) -%}
+{%- if warning is not null -%}
+    {{ ux_icon('lucide:circle-alert', {'aria-hidden': 'true'}) }} {{ warning }}
+{%- endif -%}

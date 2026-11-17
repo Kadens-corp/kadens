@@ -284,7 +284,7 @@ final class PlanFlattenerTest extends TestCase
 
     /**
      * L'allure s'affiche dans l'unité naturelle de l'activité de l'exercice :
-     * min/km (course), km/h (vélo), min/100m (natation).
+     * min/km (course), km/h (vélo), min/100m (natation), min/500m (rameur, #97).
      */
     #[DataProvider('paceUnitCases')]
     public function testPaceUnitFollowsActivity(ActivityType $activity, int $distanceMeters, int $paceSecondsPerKm, string $expected): void
@@ -313,6 +313,8 @@ final class PlanFlattenerTest extends TestCase
         yield 'course en min/km' => [ActivityType::RUNNING, 5000, 300, '5 km @ 5:00/km'];
         yield 'vélo en km/h' => [ActivityType::CYCLING, 40000, 120, '40 km @ 30 km/h'];
         yield 'natation en min/100m' => [ActivityType::SWIMMING, 2000, 1050, '2 km @ 1:45/100m'];
+        // 2:00/500m = 240 s/km : l'allure d'un ergomètre se lit au 500 m.
+        yield 'rameur en min/500m' => [ActivityType::OTHER, 2000, 240, '2 km @ 2:00/500m'];
     }
 
     public function testFlattenPlanTemplateProducesDenseGrid(): void

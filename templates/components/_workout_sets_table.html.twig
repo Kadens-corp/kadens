@@ -52,7 +52,7 @@
         {{- settype.badge(line.type) -}}
         <span class="kd-setcell__effort">{{ line.effort }}</span>
         {%- if line.weightKg is not null %}
-            <span class="kd-setcell__load">{{ line.weightKg|number_format(line.weightKg == line.weightKg|round ? 0 : 1, ',', ' ') }} kg</span>
+            <span class="kd-setcell__load">{{ line.weightKg|weight }}</span>
         {%- endif %}
         {%- if line.rpe|default(null) is not null %}
             <span class="kd-setcell__rpe">RPE {{ line.rpe }}</span>
@@ -141,7 +141,7 @@
                             {% if l.typeLabel %}<span class="kd-setrow__tag">· {{ l.typeLabel|lower }}</span>{% endif %}
                         </td>
                         <td class="kd-settable__c-num">
-                            {{- l.weightKg is not null ? l.weightKg|number_format(l.weightKg == l.weightKg|round ? 0 : 1, ',', ' ') ~ ' kg' : '—' -}}
+                            {{- l.weightKg is not null ? l.weightKg|weight : '—' -}}
                         </td>
                         {% if show_percent %}
                             <td class="kd-settable__c-num kd-setrow__pct">

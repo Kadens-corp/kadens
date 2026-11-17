@@ -45,6 +45,10 @@
                     {% endif %}
                     <div class="kd-fieldrow__cell" data-prescription-fields-target="field" data-field="{{ field }}">
                         {{ form_row(attribute(form, field), opts) }}
+                        {# « 6 × 400 km » : on le signale sous le champ (#97). #}
+                        {% if field == 'distanceMeters' and pe.id %}
+                            {{ include('workout/_distance_check.html.twig', { prescribed: pe }, with_context = false) }}
+                        {% endif %}
                     </div>
                 {% endif %}
             {% endfor %}

@@ -13,7 +13,8 @@ use Symfony\Component\Form\Exception\TransformationFailedException;
  * kilomètre (`paceSecondsPerKm`, cf. la règle « unités normalisées »). km/h et
  * min/100m sont de simples représentations de cette même vitesse. Cet enum porte
  * la conversion aller/retour, pour que chaque sport se saisisse dans son unité
- * naturelle (course en min/km, vélo en km/h, natation en min/100m) sans jamais
+ * naturelle (course en min/km, vélo en km/h, natation en min/100m, rameur en
+ * min/500m) sans jamais
  * exposer les secondes/km à l'utilisateur.
  */
 enum PaceUnit: string
@@ -21,16 +22,24 @@ enum PaceUnit: string
     case MIN_PER_KM = 'min_per_km';
     case KM_PER_H = 'km_per_h';
     case MIN_PER_100M = 'min_per_100m';
+    case MIN_PER_500M = 'min_per_500m';
 
     /**
      * Unité naturelle d'une activité. Endurance à pied (course) et défaut =
-     * min/km ; vélo = km/h ; natation = min/100m.
+     * min/km ; vélo = km/h ; natation = min/100m ; « Autre » = min/500m (#97).
+     *
+     * « Autre », parce que c'est là que vivent le rameur et le ski-erg, les seuls
+     * exercices de cette activité qui ont une allure : un ergomètre l'affiche
+     * au 500 m, et c'est ce chiffre que l'athlète vise. Les autres (burpees,
+     * corde à sauter) n'ont pas d'allure, l'unité ne s'y montre jamais. Aucune
+     * activité importée de la montre n'est « Autre » (cf. ImportedActivityMapper).
      */
     public static function forActivity(?ActivityType $activity): self
     {
         return match ($activity) {
             ActivityType::CYCLING => self::KM_PER_H,
             ActivityType::SWIMMING => self::MIN_PER_100M,
+            ActivityType::OTHER => self::MIN_PER_500M,
             default => self::MIN_PER_KM,
         };
     }
@@ -41,15 +50,21 @@ enum PaceUnit: string
             self::MIN_PER_KM => 'min/km',
             self::KM_PER_H => 'km/h',
             self::MIN_PER_100M => 'min/100m',
+            self::MIN_PER_500M => 'min/500m',
         };
     }
 
+    /**
+     * Exemple affiché dans le champ vide, préfixé « ex. » pour ne pas passer pour
+     * une valeur déjà saisie (#97).
+     */
     public function placeholder(): string
     {
         return match ($this) {
-            self::MIN_PER_KM => '5:30',
-            self::KM_PER_H => '30',
-            self::MIN_PER_100M => '1:45',
+            self::MIN_PER_KM => 'ex. 5:30',
+            self::KM_PER_H => 'ex. 30',
+            self::MIN_PER_100M => 'ex. 1:45',
+            self::MIN_PER_500M => 'ex. 2:00',
         };
     }
 
@@ -67,6 +82,7 @@ enum PaceUnit: string
         return match ($this) {
             self::MIN_PER_KM => $this->minPerDistanceToSeconds($text, 1000),
             self::MIN_PER_100M => $this->minPerDistanceToSeconds($text, 100),
+            self::MIN_PER_500M => $this->minPerDistanceToSeconds($text, 500),
             self::KM_PER_H => $this->kmhToSeconds($text),
         };
     }
@@ -80,6 +96,7 @@ enum PaceUnit: string
         return match ($this) {
             self::MIN_PER_KM => $this->secondsToMinPer($secondsPerKm, 1000),
             self::MIN_PER_100M => $this->secondsToMinPer($secondsPerKm, 100),
+            self::MIN_PER_500M => $this->secondsToMinPer($secondsPerKm, 500),
             self::KM_PER_H => $this->secondsToKmh($secondsPerKm),
         };
     }
@@ -92,6 +109,7 @@ enum PaceUnit: string
         return match ($this) {
             self::MIN_PER_KM => $this->secondsToMinPer($secondsPerKm, 1000).'/km',
             self::MIN_PER_100M => $this->secondsToMinPer($secondsPerKm, 100).'/100m',
+            self::MIN_PER_500M => $this->secondsToMinPer($secondsPerKm, 500).'/500m',
             self::KM_PER_H => $this->secondsToKmh($secondsPerKm).' km/h',
         };
     }

@@ -175,7 +175,7 @@ final class WorkoutControllerTest extends WebTestCase
         $form['prescribed_'.$prescribedId.'[sets]'] = '4';
         $form['prescribed_'.$prescribedId.'[reps]'] = '8';
         $form['prescribed_'.$prescribedId.'[weightKg]'] = '60';
-        $form['prescribed_'.$prescribedId.'[distanceMeters]'] = '999';
+        $form['prescribed_'.$prescribedId.'[distanceMeters][value]'] = '999';
         $this->client->submit($form);
 
         $this->em->clear();
@@ -1205,6 +1205,97 @@ final class WorkoutControllerTest extends WebTestCase
         }
 
         $this->em->flush();
+    }
+
+    /**
+     * Saisie d'une distance (#97) : l'unité se choisit à côté du champ, une
+     * distance sous le kilomètre se relit en mètres même en course, et « 6 ×
+     * 400 km » enregistré par erreur est signalé sous le champ par le stream de
+     * l'enregistrement automatique, sans être refusé.
+     */
+    public function testDistanceIsTypedWithItsUnitAndImplausibleTotalsAreFlagged(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $run = $this->createExercise($user, 'Course fractionnée')->setActivity(ActivityType::RUNNING);
+        $workout = $this->createWorkout($user, 'Fractionné');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $prescribed = $this->makePrescribed($run, 0)
+            ->setPrescriptionType(PrescriptionType::DISTANCE_PACE)
+            ->setSets(6)
+            ->setDistanceMeters(400);
+        $block->addPrescribedExercise($prescribed);
+        $workout->addBlock($block);
+        $this->em->persist($block);
+        $this->em->flush();
+        $workoutId = $workout->getId();
+        $prescribedId = (int) $prescribed->getId();
+        $name = 'prescribed_'.$prescribedId;
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workoutId.'/edit');
+        self::assertResponseIsSuccessful();
+
+        // 400 m se relit « 400 » + « m », pas « 0,4 » + « km », même en course.
+        self::assertSame('400', $crawler->filter('input[name="'.$name.'[distanceMeters][value]"]')->attr('value'));
+        self::assertSame('m', $crawler->filter('select[name="'.$name.'[distanceMeters][unit]"] option[selected]')->attr('value'));
+        // Le libellé pointe la saisie, et l'alerte est là, vide.
+        self::assertCount(1, $crawler->filter('label[for="'.$name.'_distanceMeters_value"]'));
+        self::assertSame('', trim($crawler->filter('#distance-check-'.$prescribedId)->text()));
+
+        // 400 avec « km » : enregistré tel quel, mais signalé.
+        $form = $crawler->filter('form[name="'.$name.'"]');
+        $values = $form->form()->getPhpValues();
+        $values[$name]['distanceMeters'] = ['value' => '400', 'unit' => 'km'];
+        $this->client->request('POST', (string) $form->attr('action'), $values, [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']);
+
+        self::assertResponseIsSuccessful();
+        $content = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('<turbo-stream action="update" target="distance-check-'.$prescribedId.'">', $content);
+        self::assertStringContainsString('6 × 400 km, soit 2 400 km au total : vérifie l&#039;unité (m ou km).', $content);
+        $this->em->clear();
+        self::assertSame(400_000, $this->mustFind(PrescribedExercise::class, $prescribedId)->getDistanceMeters());
+
+        // Corrigé en mètres : l'alerte se vide.
+        $values[$name]['distanceMeters'] = ['value' => '400', 'unit' => 'm'];
+        $this->client->request('POST', (string) $form->attr('action'), $values, [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']);
+
+        $content = (string) $this->client->getResponse()->getContent();
+        self::assertStringNotContainsString('vérifie', $content);
+        $this->em->clear();
+        self::assertSame(400, $this->mustFind(PrescribedExercise::class, $prescribedId)->getDistanceMeters());
+    }
+
+    /**
+     * Charges au format français dans le compositeur (#97) : « 62,5 » et non
+     * « 62.50 » ; la virgule comme le point sont acceptés à la saisie.
+     */
+    public function testWeightIsShownAndTypedInFrenchFormat(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Haut du corps');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $prescribed = $this->makePrescribed($this->createExercise($user, 'Développé couché'), 0)
+            ->setSets(3)->setReps(8)->setWeightKg(62.5);
+        $block->addPrescribedExercise($prescribed);
+        $workout->addBlock($block);
+        $this->em->persist($block);
+        $this->em->flush();
+        $prescribedId = (int) $prescribed->getId();
+        $name = 'prescribed_'.$prescribedId;
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        self::assertSame('62,5', $crawler->filter('input[name="'.$name.'[weightKg]"]')->attr('value'));
+
+        $form = $crawler->filter('form[name="'.$name.'"]')->form();
+        $form[$name.'[weightKg]'] = '70,25';
+        $this->client->submit($form);
+
+        $this->em->clear();
+        self::assertSame(70.25, $this->mustFind(PrescribedExercise::class, $prescribedId)->getWeightKg());
+
+        $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        self::assertSame('70,25', $crawler->filter('input[name="'.$name.'[weightKg]"]')->attr('value'));
     }
 
     private function makePrescribed(Exercise $exercise, int $position): PrescribedExercise
