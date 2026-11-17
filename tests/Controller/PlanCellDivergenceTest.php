@@ -123,16 +123,27 @@ final class PlanCellDivergenceTest extends WebTestCase
         self::assertArrayNotHasKey(self::id($this->week3), $marks, 'S3 se compare à S2, qui a changé : elle n\'est plus « la même que la fois d\'avant ».');
     }
 
-    public function testTheQuickPanelOffersToRenameAndSaysWhoReadsTheTitle(): void
+    public function testTheCellIsRenamedFromTheTitleOfItsQuickEdit(): void
     {
         $this->client->loginUser($this->coach);
 
-        // Contenu inchangé : le titre est éditable, sans rappel.
+        // Le titre se renomme dans l'en-tête de la modale (#94) : la case porte
+        // l'adresse et le jeton qu'on lui donne à l'ouverture.
+        $button = $this->cellButton($this->week2);
+        self::assertSame('/workout/'.$this->week2->getId().'/meta', $button->attr('data-meta-url'));
+        self::assertNotEmpty($button->attr('data-meta-token'));
+        self::assertSelectorExists('#quick-modal-title [data-controller="inline-edit"][data-inline-edit-field-value="title"]');
+    }
+
+    public function testTheQuickPanelSaysWhoReadsTheTitle(): void
+    {
+        $this->client->loginUser($this->coach);
+
+        // Contenu inchangé : pas de rappel, et le panneau ne redouble plus le titre.
         $crawler = $this->client->request('GET', '/workout/'.$this->week2->getId().'/quick-panel');
         self::assertResponseIsSuccessful();
-        self::assertSame('Fractionné 6 x 400 m', trim($crawler->filter('.kd-quicktitle__value')->text()));
-        self::assertSame('title', $crawler->filter('.kd-quicktitle__value')->attr('data-inline-edit-field-value'));
         self::assertCount(0, $crawler->filter('.kd-quicktitle__hint'));
+        self::assertCount(0, $crawler->filter('[data-controller="inline-edit"][data-inline-edit-field-value="title"]'));
 
         // La case passe à 8 tours : le rappel paraît, et nomme l'athlète, qui
         // lira ce titre.
@@ -171,10 +182,9 @@ final class PlanCellDivergenceTest extends WebTestCase
         $this->roundsOf($this->week2, 8);
 
         $this->client->loginUser($this->coach);
-        $crawler = $this->client->request('GET', '/workout/'.$this->week2->getId().'/quick-panel');
-        $title = $crawler->filter('.kd-quicktitle__value');
-        $this->client->request('POST', (string) $title->attr('data-inline-edit-url-value'), [
-            '_token' => $title->attr('data-inline-edit-token-value'),
+        $button = $this->cellButton($this->week2);
+        $this->client->request('POST', (string) $button->attr('data-meta-url'), [
+            '_token' => $button->attr('data-meta-token'),
             'field' => 'title',
             'value' => 'Fractionné 8 x 400 m',
         ]);
@@ -193,6 +203,17 @@ final class PlanCellDivergenceTest extends WebTestCase
         // La grille re-rendue montre le nouveau titre.
         $this->client->request('GET', '/plan-template/'.$this->plan->getId().'/grid', [], [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']);
         self::assertStringContainsString('Fractionné 8 x 400 m', (string) $this->client->getResponse()->getContent());
+    }
+
+    /** Le bouton d'une case dans la trame : c'est lui qui ouvre l'édition rapide. */
+    private function cellButton(Workout $cell): Crawler
+    {
+        $crawler = $this->client->request('GET', '/plan-template/'.$this->plan->getId().'/edit');
+        self::assertResponseIsSuccessful();
+        $button = $crawler->filter('.kd-planitem__link[data-panel-url$="/workout/'.self::id($cell).'/quick-panel"]');
+        self::assertCount(1, $button);
+
+        return $button;
     }
 
     private function cell(int $week, int $day): Workout

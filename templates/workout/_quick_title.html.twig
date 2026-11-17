@@ -1,28 +1,14 @@
-{# Titre de la case, en tête de l'édition rapide (#93). Une case garde le titre de
-   sa séance d'origine : quand on la fait passer de 6 × 400 à 8 × 400, c'est encore
-   « Fractionné 6 x 400 m » que lit l'athlète dans son agenda. On le renomme donc
-   ici, là où l'on change le contenu, sans passer par le compositeur.
+{# Rappel sur le titre de la case, en tête de l'édition rapide (#93). Une case
+   garde le titre de sa séance d'origine : quand on la fait passer de 6 × 400 à
+   8 × 400, c'est encore « Fractionné 6 x 400 m » que lit l'athlète dans son agenda.
 
-   Renommer la copie ne casse rien : la lignée (`origin`) dit déjà que c'est la
-   même séance, même renommée. Le titre suit au calendrier d'office (la séance
-   datée référence la copie).
+   Le titre lui-même vit dans l'en-tête de la modale, où il se renomme en ligne
+   (#94) : l'afficher aussi ici le doublait. Renommer la copie ne casse rien : la
+   lignée (`origin`) dit déjà que c'est la même séance, même renommée.
 
+   Re-rendu seul après chaque enregistrement d'un exercice : le rappel apparaît
+   dès que le contenu s'écarte de la séance d'origine.
    Contexte : workout, staleTitle (LineageDivergence::titleMayBeStale). #}
-<div class="kd-quicktitle">
-    <span class="kd-quicktitle__label" id="quick-title-label">Titre de la case</span>
-    <p class="kd-quicktitle__value kd-inlineedit"
-       data-controller="inline-edit"
-       data-inline-edit-url-value="{{ path('app_workout_meta', {id: workout.id}) }}"
-       data-inline-edit-token-value="{{ csrf_token('workout_meta' ~ workout.id) }}"
-       data-inline-edit-field-value="title"
-       data-inline-edit-target="display"
-       data-value="{{ workout.title }}"
-       data-action="click->inline-edit#start keydown.enter->inline-edit#start"
-       role="button" tabindex="0" aria-describedby="quick-title-label"
-       title="Cliquer pour renommer cette case">{{ workout.title }}</p>
-    {# Re-rendu seul après chaque enregistrement d'un exercice : le rappel apparaît
-       dès que le contenu s'écarte de la séance d'origine. #}
-    <div id="quick-title-hint">
-        {{ include('workout/_quick_title_hint.html.twig') }}
-    </div>
+<div id="quick-title-hint" class="kd-quicktitle">
+    {{ include('workout/_quick_title_hint.html.twig') }}
 </div>

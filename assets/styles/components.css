@@ -8636,21 +8636,68 @@ textarea.kd-inlineedit__input {
     max-height: min(88vh, 820px);
 }
 
+/* En-tête sur deux lignes (#94) : la case éditée et la croix, puis l'état
+   d'enregistrement et le lien vers l'éditeur. Sur une seule ligne, les actions
+   prenaient toute la largeur et le titre tombait à « S6 … ». */
 .kd-modal__card--quick .kd-modal__head {
     margin: 0;
+    flex-wrap: wrap;
     align-items: center;
+    row-gap: var(--kd-space-3);
     padding: var(--kd-space-5) var(--kd-space-6);
     border-bottom: 1px solid var(--color-divider);
 }
 
+.kd-modal__card--quick .kd-modal__headactions {
+    flex: 1 1 100%;
+    justify-content: space-between;
+}
+
 .kd-modal__card--quick .kd-modal__title {
-    display: inline-flex;
-    align-items: center;
+    display: flex;
+    align-items: baseline;
     gap: var(--kd-space-3);
     font-size: 15px;
 }
 
+.kd-quickhead__cell {
+    flex: none;
+    white-space: nowrap;
+}
+
+.kd-quickhead__sep {
+    flex: none;
+    color: var(--color-text-faint);
+}
+
+/* Le titre de la séance est du contenu saisi : police de texte, casse normale.
+   Il se renomme en ligne, et le champ qui le remplace garde la même voix. */
+.kd-quickhead__title,
+.kd-quickhead .kd-inlineedit__input {
+    min-width: 0;
+    font-family: var(--font-body);
+    font-weight: var(--kd-weight-semibold);
+    font-size: 15px;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--color-text-strong);
+}
+
+.kd-quickhead__title {
+    padding: 1px var(--kd-space-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kd-quickhead .kd-inlineedit__input {
+    flex: 1 1 auto;
+    width: auto;
+}
+
 .kd-modal__card--quick .kd-modal__title svg {
+    flex: none;
+    align-self: center;
     width: 16px;
     height: 16px;
     color: var(--color-primary);
@@ -8691,32 +8738,16 @@ textarea.kd-inlineedit__input {
     height: 18px;
 }
 
-/* Titre de la case en tête de l'édition rapide (#93) : renommable en ligne,
-   avec le rappel de le faire quand le contenu a changé et pas lui. Le titre est
-   du contenu saisi : Barlow, casse normale. */
+/* Rappel sur le titre de la case, en tête du panneau (#93). Le titre lui-même
+   est dans l'en-tête de la modale (#94). Vide, le conteneur ne prend pas de place. */
 .kd-quicktitle {
     display: flex;
     flex-direction: column;
     gap: var(--kd-space-1);
 }
 
-.kd-quicktitle__label {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: var(--kd-weight-semibold);
-    letter-spacing: var(--kd-tracking-eyebrow-lg);
-    text-transform: uppercase;
-    color: var(--color-text-faint);
-}
-
-.kd-quicktitle__value {
-    margin: 0;
-    padding: 2px var(--kd-space-1);
-    margin-left: calc(-1 * var(--kd-space-1));
-    font-family: var(--font-body);
-    font-size: 16px;
-    font-weight: var(--kd-weight-semibold);
-    color: var(--color-text-strong);
+.kd-quicktitle:not(:has(*)) {
+    display: none;
 }
 
 .kd-quicktitle__hint {
@@ -8813,9 +8844,18 @@ textarea.kd-inlineedit__input {
     display: none;
 }
 
-.kd-quickexo__name {
+/* Nom puis résumé, empilés (#94) : le nom ne cède jamais sa place au résumé. */
+.kd-quickexo__body {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+}
+
+.kd-quickexo__name {
+    max-width: 100%;
     font-family: var(--font-body);
     font-size: 13px;
     font-weight: var(--kd-weight-medium);

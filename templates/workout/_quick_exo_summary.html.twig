@@ -5,6 +5,9 @@
    automatique (#86), comme `_cexo_row` au compositeur : le formulaire reste
    ouvert, le curseur dans le champ suivant. L'état déplié est porté par le
    <details>, qui n'est pas remplacé.
+   Le résumé passe SOUS le nom, comme au compositeur (`_cexo_row`) : posé à côté,
+   le long résumé des séries détaillées (« Échauf 10 reps @ 40 kg · 8 reps… »)
+   prenait toute la ligne et le nom disparaissait (#94).
    Contexte : prescribed, rank (« A1 » ou null), summary. #}
 {% import 'components/_activity.html.twig' as activity %}
 {% set ex = prescribed.exercise %}
@@ -14,9 +17,11 @@
         <span class="kd-cexo__rank" title="Enchaîné sans repos">{{ rank }}</span>
     {% endif %}
     <span class="kd-cexo__code{{ mod ? ' kd-cexo__code--act kd-act--' ~ mod }}">{{ ex ? exercise_name(ex)|slice(0, 2)|upper : '??' }}</span>
-    <span class="kd-quickexo__name">{{ ex ? exercise_name(ex) : 'Exercice supprimé' }}</span>
-    {% if summary is not empty %}
-        <span class="kd-cexo__pill">{{ summary }}</span>
-    {% endif %}
+    <span class="kd-quickexo__body">
+        <span class="kd-quickexo__name">{{ ex ? exercise_name(ex) : 'Exercice supprimé' }}</span>
+        {% if summary is not empty %}
+            <span class="kd-cexo__pill" title="{{ summary }}">{{ summary }}</span>
+        {% endif %}
+    </span>
     <span class="kd-quickexo__chevron">{{ ux_icon('lucide:chevron-down') }}</span>
 </summary>

@@ -43,7 +43,7 @@ import { SAVE_EVENT, ensureSaved, resetSaveStatus, trackSave } from 'save-status
  *    ferait remonter en haut au moindre ajustement.
  */
 export default class extends Controller {
-    static targets = ['cell', 'dialog', 'panel', 'fullLink', 'palette', 'paletteList', 'palettecard',
+    static targets = ['cell', 'dialog', 'heading', 'headingTitle', 'panel', 'fullLink', 'palette', 'paletteList', 'palettecard',
         'sheet', 'search', 'targetLabel'];
 
     static values = { gridUrl: String };
@@ -241,6 +241,7 @@ export default class extends Controller {
         this.dirty = false;
         resetSaveStatus(this.dialogTarget);
         if (this.hasFullLinkTarget && fullUrl) this.fullLinkTarget.href = fullUrl;
+        this.renderHeading(button);
         this.panelTarget.innerHTML = '<p class="kd-quickedit__loading">Chargement…</p>';
         this.dialogTarget.showModal();
 
@@ -251,6 +252,24 @@ export default class extends Controller {
             console.error('Quick panel load failed:', error);
             this.panelTarget.innerHTML = '<p class="kd-quickedit__error">Chargement impossible.</p>';
         }
+    }
+
+    /**
+     * Titre de la modale : la case éditée, « S2 · mardi · Fractionné 6 x 400 m »
+     * (#94), posé avant le chargement du panneau. Le titre de la séance est aussi
+     * le champ de renommage (`inline-edit`, #93) : on lui donne l'adresse et le
+     * jeton de CETTE case, et la valeur de départ qu'il relit à l'ouverture.
+     */
+    renderHeading(button) {
+        if (!this.hasHeadingTarget || !this.hasHeadingTitleTarget) return;
+        const title = button.querySelector('.kd-planitem__title')?.textContent.trim() ?? '';
+        const el = this.headingTitleTarget;
+
+        this.headingTarget.textContent = button.dataset.cellLabel ?? '';
+        el.textContent = title;
+        el.dataset.value = title;
+        el.dataset.inlineEditUrlValue = button.dataset.metaUrl ?? '';
+        el.dataset.inlineEditTokenValue = button.dataset.metaToken ?? '';
     }
 
     /** Un champ du panneau a changé : on enregistre son exercice (cf. onPanelSubmit). */

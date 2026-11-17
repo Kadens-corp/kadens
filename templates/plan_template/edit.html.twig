@@ -164,21 +164,41 @@
            formulaire de la modale, le contrôleur applique lui-même les streams.
            `save-status` : la modale a son propre indicateur d'enregistrement,
            celui de la page est sous le voile. Il reste affiché après « Enregistré »
-           (`hide-after` à 0) : c'est lui qu'on regarde avant de fermer. #}
+           (`hide-after` à 0) : c'est lui qu'on regarde avant de fermer.
+           Le titre dit QUELLE case on édite (« S2 · mardi · Fractionné 6 x 400 m »,
+           #94) : sans lui, rien ne distingue la semaine 2 de la semaine 3 d'une même
+           séance. Posé par `plangrid#edit` dès l'ouverture, avant le chargement. #}
         <dialog class="kd-modal kd-modal--quick" data-plangrid-target="dialog" data-turbo="false"
                 data-controller="save-status" data-save-status-hide-after-value="0"
-                data-action="click->plangrid#backdrop">
+                data-action="click->plangrid#backdrop" aria-labelledby="quick-modal-title">
             <div class="kd-modal__card kd-modal__card--quick">
                 <header class="kd-modal__head">
-                    <span class="kd-modal__title">{{ ux_icon('lucide:sliders-horizontal') }} Modifier cette case seulement</span>
+                    {# La case (« S2 · mardi », condensé capitales) puis le titre de la
+                       séance, en casse normale : c'est du contenu saisi. Seul sur sa
+                       ligne avec la croix, il ne se fait plus écraser par les actions.
+                       Le titre se renomme ici même (#93) : un clic l'ouvre en saisie,
+                       `plangrid#edit` y pose l'adresse et le jeton de la case. #}
+                    <h2 class="kd-modal__title kd-quickhead" id="quick-modal-title">
+                        {{ ux_icon('lucide:sliders-horizontal') }}
+                        <span class="kd-quickhead__cell" data-plangrid-target="heading">Édition rapide</span>
+                        <span class="kd-quickhead__sep" aria-hidden="true">·</span>
+                        <span class="kd-quickhead__title kd-inlineedit"
+                              data-plangrid-target="headingTitle"
+                              data-controller="inline-edit"
+                              data-inline-edit-field-value="title"
+                              data-inline-edit-target="display"
+                              data-action="click->inline-edit#start keydown.enter->inline-edit#start"
+                              role="button" tabindex="0"
+                              title="Cliquer pour renommer cette case"></span>
+                    </h2>
+                    <button type="button" class="kd-modal__close" data-action="plangrid#close" aria-label="Fermer">
+                        {{ ux_icon('lucide:x') }}
+                    </button>
                     <div class="kd-modal__headactions">
                         {{ include('components/_save_status.html.twig', {inline: true}, with_context = false) }}
                         <a data-plangrid-target="fullLink" href="#" class="kd-btn kd-btn--secondary kd-btn--sm">
                             {{ ux_icon('lucide:square-pen') }} Ouvrir dans l'éditeur de séance
                         </a>
-                        <button type="button" class="kd-modal__close" data-action="plangrid#close" aria-label="Fermer">
-                            {{ ux_icon('lucide:x') }}
-                        </button>
                     </div>
                 </header>
                 <div id="quick-panel" class="kd-quickedit" data-plangrid-target="panel"></div>

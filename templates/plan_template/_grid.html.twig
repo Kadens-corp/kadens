@@ -112,6 +112,9 @@
                                             <button type="button" class="kd-planitem__link"
                                                     data-action="plangrid#edit"
                                                     data-panel-url="{{ path('app_workout_quick_panel', {id: entry.item.workout.id}) }}"
+                                                    data-cell-label="S{{ week.weekNumber }} · {{ dayFull[day.dayOfWeek] }}"
+                                                    data-meta-url="{{ path('app_workout_meta', {id: entry.item.workout.id}) }}"
+                                                    data-meta-token="{{ csrf_token('workout_meta' ~ entry.item.workout.id) }}"
                                                     data-full-url="{{ path('app_workout_edit', {id: entry.item.workout.id}|merge(back_to('plan-edit', template.id))) }}">
                                                 <span class="kd-planitem__title">{{ entry.workout.workout.title }}</span>
                                                 <span class="kd-planitem__meta">
