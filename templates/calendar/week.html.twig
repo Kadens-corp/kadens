@@ -72,7 +72,7 @@
                         {{ ux_icon('lucide:history') }} Historique
                     </a>
                     <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_export_schedule', {year: monthPivot.year, month: monthPivot.month}) }}">
-                        {{ ux_icon('lucide:file-down') }} Exporter
+                        {{ ux_icon('lucide:file-down') }} Exporter en Excel
                     </a>
                     {{ include('calendar/_subscribe.html.twig') }}
                     {{ include('components/_help.html.twig', {topic: 'calendar', title: 'Comment marche le calendrier'}, with_context = false) }}

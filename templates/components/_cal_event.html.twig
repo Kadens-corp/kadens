@@ -125,7 +125,8 @@
     </form>
 
     <a href="{{ path('app_scheduled_workout_show', {id: scheduled.id}|merge(back)) }}"
-       class="kd-calevent__eye" aria-label="Voir « {{ title }} » en entier">
+       class="kd-calevent__eye" aria-label="Voir « {{ title }} » en entier"
+       title="Voir la séance en entier">
         {{ ux_icon('lucide:eye') }}
     </a>
 
