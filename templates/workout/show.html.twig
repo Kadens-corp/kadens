@@ -54,12 +54,16 @@
                             <a href="{{ path('app_export_workout', {id: flat.workout.id}) }}" class="kd-kebab__item">
                                 {{ ux_icon('lucide:file-down') }} Exporter en Excel
                             </a>
-                            <form method="post" action="{{ path('app_workout_duplicate', {id: flat.workout.id}) }}">
-                                <input type="hidden" name="_token" value="{{ csrf_token('duplicate' ~ flat.workout.id) }}">
-                                <button type="submit" class="kd-kebab__item">
-                                    {{ ux_icon('lucide:copy') }} Dupliquer la séance
-                                </button>
-                            </form>
+                            {% if flat.workout.owner and flat.workout.owner.id != app.user.id %}
+                                {{ include('workout/_duplicate_items.html.twig', {workout: flat.workout}, with_context = false) }}
+                            {% else %}
+                                <form method="post" action="{{ path('app_workout_duplicate', {id: flat.workout.id}) }}">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('duplicate' ~ flat.workout.id) }}">
+                                    <button type="submit" class="kd-kebab__item">
+                                        {{ ux_icon('lucide:copy') }} Dupliquer la séance
+                                    </button>
+                                </form>
+                            {% endif %}
                         </div>
                     </details>
                 </div>

@@ -1175,6 +1175,13 @@ turbo-frame {
     transform: translateY(-2px);
 }
 
+/* Menu « Dupliquer chez… » ouvert (#83) : un `transform` fait de la carte le bloc
+   conteneur des descendants en `position: fixed`, et le panneau mobile de
+   .kd-kebab--row, calé sur l'écran, se retrouverait calé sur la carte. */
+.kd-libcard:has(.kd-kebab[open]) {
+    transform: none;
+}
+
 /* Carte d'une activité (exercice) ou d'une séance qui en a : filet gauche et
    pastille d'icône à la couleur de la dominante (--act), la deuxième activité
    en bande basse de la pastille (--act2). */

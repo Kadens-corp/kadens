@@ -253,6 +253,9 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   `WorkoutController::duplicate` : la copie appartient au propriétaire de la
   source. Une copie qui atterrirait chez le coach serait inerte — ni posable au
   calendrier de l'athlète ni dans son plan, qui n'acceptent que son contenu.
+  C'est le défaut, et l'écran le nomme (« Dupliquer chez <athlète> », #83) ;
+  `target=mine` (« Copier chez moi ») passe par `SharedWorkoutCopier::copyFor`
+  et donne au coach une séance pour lui, que l'athlète ne voit pas.
   **Portée des index (`CoachedLibrary`)** : les bibliothèques `/workout` et
   `/plan-template` listent **soi + ses athlètes en relation acceptée**, pour qu'un
   coach retrouve ce qu'il a composé (le contenu appartenant à l'athlète en

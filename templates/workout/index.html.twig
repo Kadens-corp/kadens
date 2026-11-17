@@ -90,12 +90,28 @@
                             <a href="{{ path('app_workout_edit', {id: workout.id}) }}" class="kd-btn kd-btn--ghost kd-btn--sm kd-libcard__foot-sep">
                                 {{ ux_icon('lucide:square-pen') }} Éditer
                             </a>
-                            <form method="post" action="{{ path('app_workout_duplicate', {id: workout.id}) }}" style="margin:0;">
-                                <input type="hidden" name="_token" value="{{ csrf_token('duplicate' ~ workout.id) }}">
-                                <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm" title="Dupliquer" aria-label="Dupliquer">
-                                    {{ ux_icon('lucide:copy') }}
-                                </button>
-                            </form>
+                            {# La séance d'un athlète (#83) : dupliquer la copie chez lui, ce
+                               que le coach ne devine pas, ou chez soi. Le choix se fait avant
+                               le clic, dans un menu, plutôt qu'en silence. #}
+                            {% if workout.owner and workout.owner.id != app.user.id %}
+                                <details class="kd-kebab kd-kebab--row" data-controller="dismiss">
+                                    <summary class="kd-kebab__trigger kd-kebab__trigger--plain"
+                                             title="Dupliquer chez {{ workout.owner.displayName }} ou chez moi"
+                                             aria-label="Dupliquer {{ workout.title }} : chez {{ workout.owner.displayName }} ou chez moi">
+                                        {{ ux_icon('lucide:copy') }}
+                                    </summary>
+                                    <div class="kd-kebab__panel">
+                                        {{ include('workout/_duplicate_items.html.twig', {workout: workout}, with_context = false) }}
+                                    </div>
+                                </details>
+                            {% else %}
+                                <form method="post" action="{{ path('app_workout_duplicate', {id: workout.id}) }}" style="margin:0;">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('duplicate' ~ workout.id) }}">
+                                    <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm" title="Dupliquer" aria-label="Dupliquer">
+                                        {{ ux_icon('lucide:copy') }}
+                                    </button>
+                                </form>
+                            {% endif %}
                         </div>
                     </article>
                 {% endfor %}

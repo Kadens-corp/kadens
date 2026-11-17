@@ -778,6 +778,104 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertResponseStatusCodeSame(403);
     }
 
+    /**
+     * #83 : sur la séance d'un athlète, le menu nomme les deux bibliothèques
+     * d'arrivée. « Chez lui » reste le défaut : la copie lui appartient, et le
+     * message le dit au lieu d'un « Séance dupliquée » muet.
+     */
+    public function testACoachDuplicatesHisAthletesWorkoutIntoTheAthletesLibrary(): void
+    {
+        [$coach, $athlete, $source] = $this->coachFacingAthleteWorkout();
+
+        $crawler = $this->client->request('GET', '/workout/'.$source->getId());
+        self::assertSelectorTextContains('.kd-kebab__panel', 'Dupliquer chez Trailer38');
+        self::assertSelectorTextContains('.kd-kebab__panel', 'Copier chez moi');
+
+        $form = $crawler->filterXPath('//form[contains(@action, "/duplicate")][not(input[@name="target"])]');
+        self::assertCount(1, $form);
+        $this->client->request('POST', '/workout/'.$source->getId().'/duplicate', [
+            '_token' => $form->filter('input[name="_token"]')->attr('value'),
+        ]);
+
+        $copy = $this->em->getRepository(Workout::class)->findOneBy(['title' => 'Footing endurance 40 min (copie)']);
+        self::assertNotNull($copy);
+        self::assertSame($athlete->getId(), $copy->getOwner()?->getId());
+        self::assertResponseRedirects('/workout/'.$copy->getId().'/edit');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('body', 'Copie créée dans la bibliothèque de Trailer38.');
+    }
+
+    /**
+     * #83 : « Copier chez moi » en fait une séance du coach, par la copie vers une
+     * autre bibliothèque (`SharedWorkoutCopier` : titre gardé, `copiedFrom`).
+     * L'athlète n'y gagne rien dans sa bibliothèque.
+     */
+    public function testACoachCanCopyHisAthletesWorkoutIntoHisOwnLibrary(): void
+    {
+        [$coach, $athlete, $source] = $this->coachFacingAthleteWorkout();
+
+        $crawler = $this->client->request('GET', '/workout');
+        $form = $crawler->filter('form[action$="/'.$source->getId().'/duplicate"]:has(input[name="target"][value="mine"])');
+        self::assertCount(1, $form);
+        self::assertSelectorExists('summary[title="Dupliquer chez Trailer38 ou chez moi"]');
+
+        $this->client->request('POST', '/workout/'.$source->getId().'/duplicate', [
+            '_token' => $form->filter('input[name="_token"]')->attr('value'),
+            'target' => 'mine',
+        ]);
+
+        $copy = $this->em->getRepository(Workout::class)->findOneBy(['owner' => $coach]);
+        self::assertNotNull($copy);
+        self::assertSame('Footing endurance 40 min', $copy->getTitle());
+        self::assertSame($source->getId(), $copy->getCopiedFrom()?->getId());
+        self::assertCount(1, $this->em->getRepository(Workout::class)->findBy(['owner' => $athlete]));
+        self::assertResponseRedirects('/workout/'.$copy->getId().'/edit');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('body', 'Copie créée dans ta bibliothèque. Elle est à toi : Trailer38 ne la voit pas.');
+    }
+
+    /**
+     * Sur sa propre séance, rien ne change : un seul bouton, et `target=mine`
+     * forgé n'y fait rien de plus qu'une duplication ordinaire.
+     */
+    public function testDuplicatingOnesOwnWorkoutKeepsTheSingleButton(): void
+    {
+        $owner = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($owner, 'Upper A');
+        $this->client->loginUser($owner);
+
+        $crawler = $this->client->request('GET', '/workout');
+        self::assertSelectorNotExists('input[name="target"]');
+        self::assertSelectorExists('button[title="Dupliquer"]');
+
+        $this->client->request('POST', '/workout/'.$workout->getId().'/duplicate', [
+            '_token' => $crawler->filter('form[action$="/duplicate"] input[name="_token"]')->attr('value'),
+            'target' => 'mine',
+        ]);
+
+        $copy = $this->em->getRepository(Workout::class)->findOneBy(['title' => 'Upper A (copie)']);
+        self::assertNotNull($copy);
+        self::assertSame($owner->getId(), $copy->getOwner()?->getId());
+        self::assertNull($copy->getCopiedFrom());
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('body', 'Séance dupliquée. Compose-la maintenant.');
+    }
+
+    /**
+     * @return array{User, User, Workout} le coach connecté, son athlète, la séance de l'athlète
+     */
+    private function coachFacingAthleteWorkout(): array
+    {
+        $coach = $this->createUser('coach@example.com');
+        $athlete = $this->createUser('athlete@example.com');
+        $athlete->setUsername('Trailer38');
+        $this->acceptCoaching($coach, $athlete);
+        $source = $this->createWorkout($athlete, 'Footing endurance 40 min');
+        $this->client->loginUser($coach);
+
+        return [$coach, $athlete, $source];
+    }
+
     private function acceptCoaching(User $coach, User $athlete): void
     {
         $this->em->persist(

@@ -1,0 +1,24 @@
+{# ============================================================================
+   Les deux duplications d'une séance qui n'est pas au lecteur (#83).
+
+   Ne se rend que pour un coach devant la séance de son athlète. « Chez lui » est
+   le défaut historique (`WorkoutController::duplicate`) : la copie reste dans la
+   bibliothèque de l'athlète, la seule que le coach puisse poser sur son calendrier
+   ou dans son plan. « Chez moi » en fait une séance pour soi, que l'athlète ne
+   voit pas. Les deux libellés nomment la bibliothèque d'arrivée.
+
+   Paramètre : workout (Workout), dont owner n'est pas l'utilisateur connecté.
+   ============================================================================ #}
+<form method="post" action="{{ path('app_workout_duplicate', {id: workout.id}) }}">
+    <input type="hidden" name="_token" value="{{ csrf_token('duplicate' ~ workout.id) }}">
+    <button type="submit" class="kd-kebab__item">
+        {{ ux_icon('lucide:copy') }} Dupliquer chez {{ workout.owner.displayName }}
+    </button>
+</form>
+<form method="post" action="{{ path('app_workout_duplicate', {id: workout.id}) }}">
+    <input type="hidden" name="_token" value="{{ csrf_token('duplicate' ~ workout.id) }}">
+    <input type="hidden" name="target" value="mine">
+    <button type="submit" class="kd-kebab__item">
+        {{ ux_icon('lucide:copy-plus') }} Copier chez moi, pour mes séances
+    </button>
+</form>

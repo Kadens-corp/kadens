@@ -326,8 +326,22 @@ final class WorkoutController extends AbstractController
         return $this->redirectToRoute('app_workout_index');
     }
 
+    /**
+     * Duplique une séance de bibliothèque (planLocal = false) : réutilisable et listée.
+     *
+     * Par défaut, la copie appartient au propriétaire de la source, pas à
+     * l'utilisateur courant : un coach qui duplique la séance de son athlète (l'index
+     * les liste) obtient une variante DANS la bibliothèque de cet athlète, la seule
+     * qu'il puisse poser sur son calendrier ou dans son plan. Le libellé du bouton et
+     * le message le disent (#83), sans quoi le coach encombre en silence la
+     * bibliothèque de l'athlète.
+     *
+     * `target=mine` copie au contraire chez l'utilisateur courant, par
+     * `SharedWorkoutCopier` comme toute copie vers une autre bibliothèque : une séance
+     * pour soi, sans lien avec l'athlète, que ce dernier ne voit pas.
+     */
     #[Route('/{id}/duplicate', name: 'app_workout_duplicate', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function duplicate(Request $request, Workout $workout, WorkoutCloner $cloner): Response
+    public function duplicate(Request $request, Workout $workout, WorkoutCloner $cloner, SharedWorkoutCopier $copier): Response
     {
         $this->denyAccessUnlessGranted(WorkoutVoter::VIEW, $workout);
 
@@ -335,18 +349,26 @@ final class WorkoutController extends AbstractController
             return $this->redirectToRoute('app_workout_show', ['id' => $workout->getId()]);
         }
 
-        // Copie de bibliothèque (planLocal = false) : réutilisable et listée. Elle
-        // appartient au propriétaire de la source, pas à l'utilisateur courant : un
-        // coach qui duplique la séance de son athlète (l'index les liste désormais)
-        // obtient une variante DANS la bibliothèque de cet athlète. Chez le coach,
-        // elle serait inerte — il ne pourrait ni la poser sur le calendrier de
-        // l'athlète ni dans son plan, qui n'acceptent que du contenu de l'athlète.
-        /** @var User $owner */
-        $owner = $workout->getOwner() ?? $this->getUser();
+        /** @var User $user */
+        $user = $this->getUser();
+        $owner = $workout->getOwner() ?? $user;
+        $foreign = $owner->getId() !== $user->getId();
+
+        if ($foreign && 'mine' === $request->getPayload()->getString('target')) {
+            $copy = $copier->copyFor($workout, $user)->workout;
+            $this->entityManager->flush();
+
+            $this->addFlash('success', sprintf('Copie créée dans ta bibliothèque. Elle est à toi : %s ne la voit pas.', $owner->getDisplayName()));
+
+            return $this->redirectToRoute('app_workout_edit', ['id' => $copy->getId()]);
+        }
+
         $copy = $cloner->cloneWorkout($workout, $owner, $workout->getTitle().' (copie)', false);
         $this->entityManager->flush();
 
-        $this->addFlash('success', 'Séance dupliquée. Compose-la maintenant.');
+        $this->addFlash('success', $foreign
+            ? sprintf('Copie créée dans la bibliothèque de %s. Compose-la maintenant.', $owner->getDisplayName())
+            : 'Séance dupliquée. Compose-la maintenant.');
 
         return $this->redirectToRoute('app_workout_edit', ['id' => $copy->getId()]);
     }
