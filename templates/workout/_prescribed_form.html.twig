@@ -50,8 +50,11 @@
             {% endfor %}
         </div>
 
+        {# `--rest` : masqué par le compositeur sur un membre de superset qui n'est pas
+           le dernier (enchaîné sans repos, #85). Le champ reste dans le formulaire :
+           sa valeur survit et revient si l'on détache l'exercice. #}
         <div class="kd-fieldrow">
-            <div class="kd-fieldrow__cell">{{ form_row(form.restSeconds, auto ? { attr: { 'data-action': auto } } : {}) }}</div>
+            <div class="kd-fieldrow__cell kd-fieldrow__cell--rest">{{ form_row(form.restSeconds, auto ? { attr: { 'data-action': auto } } : {}) }}</div>
             <div class="kd-fieldrow__cell">{{ form_row(form.rpe, auto ? { attr: { 'data-action': auto } } : {}) }}</div>
         </div>
         {# Chez le coach d'un athlète, la note d'exercice est une consigne que

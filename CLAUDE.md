@@ -117,7 +117,11 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   numéros sont renumérotés 1..n, ils se comparent mais ne s'interprètent pas ; les
   libellés A1/A2 sont **dérivés** de l'ordre, jamais stockés. Le groupe ne porte
   **ni tours ni repos propres** (le nombre de tours est déjà dans le `sets` de
-  chaque exercice, `Block.rounds` reste au bloc). Conséquences à ne pas casser :
+  chaque exercice, `Block.rounds` reste au bloc). **Seul le repos du dernier
+  membre compte** (la pause avant de reprendre le premier) : celui des autres est
+  masqué au compositeur, compté zéro par `WorkoutEstimator` et sorti à `0` par
+  `PlanFlattener` (drapeau `chained`), mais gardé en base. `0` et non `null` : pour
+  l'app mobile, `null` veut dire « repos par défaut des réglages », `0` « enchaîner ». Conséquences à ne pas casser :
   changer de bloc détache (le numéro n'a de sens que dans son bloc) ; déposer un
   exercice **strictement à l'intérieur** d'un groupe l'y fait entrer ; le DOM du
   compositeur reste **plat** (SortableJS ne trie que ses enfants directs), le

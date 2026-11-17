@@ -6078,6 +6078,19 @@ a.kd-summplan__title:hover {
     color: var(--color-text-placeholder);
 }
 
+/* « Ajout dans : … » : la cible du prochain ajout, dite en tête de colonne. */
+.kd-libpanel__target {
+    margin: var(--kd-space-3) 0 0;
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+.kd-libpanel__target strong {
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-primary-on-tint);
+}
+
 /* N'a de sens qu'en feuille : sur écran large la bibliothèque est une colonne, il
    n'y a rien à fermer. */
 .kd-libpanel__close {
@@ -6717,9 +6730,14 @@ button.kd-libx:active {
      passe sous la flèche et paraît tronqué. min-width évite tout écrasement. */
     min-width: fit-content;
     padding: var(--kd-space-1) var(--kd-space-10) var(--kd-space-1) var(--kd-space-3);
-    border: 1px solid transparent;
+    /* Toujours lisible comme une liste (#85) : bordure discrète et flèche
+       permanentes, pas seulement au survol. `background-color` et non `background` :
+       le raccourci effaçait l'image de flèche posée par `.kd-select`. */
+    border: 1px solid var(--color-divider);
     border-radius: var(--kd-radius-sm);
-    background: transparent;
+    background-color: transparent;
+    background-position: right var(--kd-space-2) center;
+    background-size: 14px 14px;
     font-family: var(--font-mono);
     font-size: 11px;
     font-weight: var(--kd-weight-semibold);
@@ -6863,9 +6881,79 @@ button.kd-libx:active {
 
 /* ---- Ligne d'exercice ---- */
 .kd-cexo {
+    position: relative;
     border: 1px solid var(--color-divider);
     border-radius: var(--kd-radius-lg);
     background: var(--color-surface-raised);
+}
+
+/* « Enchaîner » entre deux cartes (#85). Le bouton vit dans la carte du dessous
+   (DOM plat, cf. _block.html.twig) : on élargit l'espace au-dessus d'elle et on y
+   remonte le bouton, centré sur la jointure. Room = marge + gap du conteneur. */
+.kd-cexo.kd-cexo--seam {
+    margin-top: var(--kd-space-7);
+}
+
+.kd-cexo__seam {
+    position: absolute;
+    top: calc((var(--kd-space-7) + var(--kd-space-2)) / -2);
+    left: 50%;
+    z-index: 1;
+    margin: 0;
+    transform: translate(-50%, -50%);
+}
+
+.kd-cexo__seambtn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+    min-height: 22px;
+    padding: 0 var(--kd-space-4);
+    border: 1px dashed var(--color-border-strong);
+    border-radius: var(--kd-radius-full);
+    background: var(--color-surface-raised);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+
+.kd-cexo__seambtn svg {
+    width: 12px;
+    height: 12px;
+}
+
+.kd-cexo__seambtn:hover,
+.kd-cexo__seambtn:focus-visible {
+    border-style: solid;
+    color: var(--color-primary-on-tint);
+}
+
+/* Membre de superset suivi d'un autre : enchaîné sans repos, son champ repos ne
+   compte pas (WorkoutEstimator l'ignore). Masqué, pas retiré : la valeur survit. */
+.kd-cexo--chained .kd-fieldrow__cell--rest {
+    display: none;
+}
+
+.kd-cexo__restnote {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-2);
+    margin: 0 0 var(--kd-space-4);
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+}
+
+.kd-cexo__restnote svg {
+    flex: none;
+    width: 12px;
+    height: 12px;
+    margin-top: 2px;
 }
 
 .kd-cexo--open {

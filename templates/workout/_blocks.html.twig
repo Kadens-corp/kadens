@@ -7,9 +7,16 @@
     }, with_context = false) }}
 
     {% if workout.blocks is empty %}
+        {# Le premier exercice crée le premier bloc (#85) : on n'impose plus la
+           notion de bloc avant d'avoir posé quoi que ce soit. Le bouton est le seul
+           chemin vers la bibliothèque sous 900px, où elle est une feuille fermée
+           et où aucun bloc n'offre encore son « Ajouter un exercice ». #}
         <div class="kd-cblocks__empty">
             {{ ux_icon('lucide:layers') }}
-            <p>Aucun bloc. Ajoute-en un, puis glisse des exercices depuis la bibliothèque.</p>
+            <p>Séance vide. Choisis un exercice dans la bibliothèque : un premier bloc se crée tout seul.</p>
+            <button type="button" class="kd-btn kd-btn--secondary kd-btn--sm" data-action="composer#openLib">
+                {{ ux_icon('lucide:plus') }} Ajouter un exercice
+            </button>
         </div>
     {% else %}
         {# Tri par position en mémoire : après un déplacement, la PersistentCollection

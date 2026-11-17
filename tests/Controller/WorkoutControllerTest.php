@@ -223,6 +223,109 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertNull($prescribed->getSets(), 'Ajout express : aucune valeur posée, à affiner ensuite.');
     }
 
+    public function testQuickAddWithoutBlockCreatesTheFirstOne(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $exercise = $this->createExercise($user, 'Squat');
+        $workout = $this->createWorkout($user, 'Séance vide');
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        // L'état vide n'impose plus de créer un bloc d'abord, et dit où part l'ajout.
+        self::assertSelectorTextContains('.kd-cblocks__empty', 'un premier bloc se crée tout seul');
+        self::assertSelectorExists('.kd-cblocks__empty button[data-action="composer#openLib"]');
+        self::assertSelectorTextContains('.kd-libpanel__target', 'Ajout dans : un nouveau bloc');
+        $token = $crawler->filter('form[data-composer-target="quickAddForm"] input[name="_token"]')->attr('value');
+
+        $this->client->request('POST', '/workout/'.$workout->getId().'/exercises/quick-add', [
+            '_token' => $token,
+            'exerciseId' => $exercise->getId(),
+            'blockId' => 0,
+        ]);
+
+        $this->em->clear();
+        $workout = $this->mustFind(Workout::class, $workout->getId());
+        self::assertCount(1, $workout->getBlocks());
+        $block = $workout->getBlocks()->first();
+        self::assertNotFalse($block);
+        self::assertSame(BlockRole::MAIN, $block->getRole());
+        self::assertSame(1, $block->getRounds());
+        self::assertCount(1, $block->getPrescribedExercises());
+        $prescribed = $block->getPrescribedExercises()->first();
+        self::assertNotFalse($prescribed);
+        self::assertSame($exercise->getId(), $prescribed->getExercise()?->getId());
+    }
+
+    public function testQuickAddWithoutBlockLeavesNoEmptyBlockWhenRefused(): void
+    {
+        $owner = $this->createUser('owner@example.com');
+        $stranger = $this->createUser('stranger@example.com');
+        $foreignExercise = $this->createExercise($stranger, 'Exo privé');
+        $workout = $this->createWorkout($owner, 'Séance vide');
+
+        $this->client->loginUser($owner);
+        $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        $token = $crawler->filter('form[data-composer-target="quickAddForm"] input[name="_token"]')->attr('value');
+
+        $this->client->request('POST', '/workout/'.$workout->getId().'/exercises/quick-add', [
+            '_token' => $token,
+            'exerciseId' => $foreignExercise->getId(),
+            'blockId' => 0,
+        ]);
+
+        $this->em->clear();
+        self::assertCount(0, $this->mustFind(Workout::class, $workout->getId())->getBlocks());
+    }
+
+    public function testComposerOffersChainingBetweenExercisesAndSaysWhichRestCounts(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Haut du corps');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $workout->addBlock($block);
+        $this->em->persist($block);
+
+        $made = [];
+        foreach (['Développé couché', 'Rowing', 'Curl'] as $i => $name) {
+            $prescribed = (new PrescribedExercise())
+                ->setExercise($this->createExercise($user, $name))
+                ->setPrescriptionType(PrescriptionType::SETS_REPS)
+                ->setRestSeconds(90)
+                ->setPosition($i);
+            $block->addPrescribedExercise($prescribed);
+            $this->em->persist($prescribed);
+            $made[] = $prescribed;
+        }
+        // Développé couché + Rowing en superset A1/A2, Curl isolé.
+        $made[0]->setSupersetGroup(1);
+        $made[1]->setSupersetGroup(1);
+        $this->em->flush();
+        [$bench, $row, $curl] = array_map(static fn (PrescribedExercise $p): int => (int) $p->getId(), $made);
+
+        $this->client->loginUser($user);
+        $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        self::assertResponseIsSuccessful();
+
+        // « Enchaîner » visible entre deux exercices non liés, et seulement là : rien
+        // en tête de bloc, rien entre A1 et A2 déjà liés.
+        self::assertSelectorNotExists('[data-prescribed-id="'.$bench.'"] .kd-cexo__seam');
+        self::assertSelectorNotExists('[data-prescribed-id="'.$row.'"] .kd-cexo__seam');
+        self::assertSelectorExists('[data-prescribed-id="'.$curl.'"] form.kd-cexo__seam[action$="/exercises/'.$curl.'/link"]');
+
+        // A1 enchaîne sans repos : son champ repos est masqué (classe), et l'on dit
+        // que c'est celui de A2 qui compte.
+        self::assertSelectorExists('.kd-cexo--chained[data-prescribed-id="'.$bench.'"]');
+        self::assertSelectorNotExists('.kd-cexo--chained[data-prescribed-id="'.$row.'"]');
+        self::assertSelectorExists('[data-prescribed-id="'.$bench.'"] .kd-fieldrow__cell--rest');
+        self::assertSelectorTextContains('[data-prescribed-id="'.$bench.'"] .kd-cexo__restnote', 'Le repos se règle sur A2');
+        self::assertSelectorTextContains('[data-prescribed-id="'.$row.'"] .kd-cexo__restnote', 'avant de reprendre A1');
+        self::assertSelectorNotExists('[data-prescribed-id="'.$curl.'"] .kd-cexo__restnote');
+
+        // La pastille de A1 ne promet plus un repos qui ne se prend pas.
+        self::assertSelectorTextNotContains('#cexo-row-'.$bench, 'repos');
+        self::assertSelectorTextContains('#cexo-row-'.$row, 'repos 90 s');
+    }
+
     public function testQuickAddRejectsForeignExercise(): void
     {
         $owner = $this->createUser('owner@example.com');

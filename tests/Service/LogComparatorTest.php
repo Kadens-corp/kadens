@@ -32,7 +32,7 @@ final class LogComparatorTest extends TestCase
     {
         $flattener = new PlanFlattener(
             new UnitFormatter(),
-            new WorkoutMetrics(new WorkoutEstimator(), new SupersetGrouper(), new RegionBreakdown()),
+            new WorkoutMetrics(new WorkoutEstimator(new SupersetGrouper()), new SupersetGrouper(), new RegionBreakdown()),
             new SupersetGrouper(),
         );
 

@@ -37,7 +37,7 @@ final class ProgressionAggregatorTest extends TestCase
         $regions = new RegionBreakdown();
         $this->aggregator = new ProgressionAggregator(
             new UnitFormatter(),
-            new WorkoutMetrics(new WorkoutEstimator(), new SupersetGrouper(), $regions),
+            new WorkoutMetrics(new WorkoutEstimator(new SupersetGrouper()), new SupersetGrouper(), $regions),
             new LogMetrics($regions),
         );
     }

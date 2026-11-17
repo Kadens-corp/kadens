@@ -25,7 +25,7 @@ use App\Enum\SetType;
  *
  * @phpstan-type FlatSetGroup array{type: \App\Enum\SetType, typeLabel: string|null, count: int, detail: string, effort: string, firstIndex: int, lastIndex: int, weightKg: float|null}
  * @phpstan-type FlatSetLine array{type: \App\Enum\SetType, typeLabel: string|null, index: int, effort: string, weightKg: float|null, reps: int|null, durationSeconds: int|null}
- * @phpstan-type FlatPrescribed array{prescribed: PrescribedExercise, exercise: \App\Entity\Exercise|null, type: PrescriptionType|null, summary: string, values: string, sets: list<FlatSetGroup>|null, setLines: list<FlatSetLine>|null, rest: ?int, notes: ?string, topWeightKg: ?float, groupLabel: string|null}
+ * @phpstan-type FlatPrescribed array{prescribed: PrescribedExercise, exercise: \App\Entity\Exercise|null, type: PrescriptionType|null, summary: string, values: string, sets: list<FlatSetGroup>|null, setLines: list<FlatSetLine>|null, rest: ?int, chained: bool, notes: ?string, topWeightKg: ?float, groupLabel: string|null}
  * @phpstan-type FlatSegment array{label: string|null, kind: 'single'|'superset'|'circuit', exercises: list<FlatPrescribed>}
  * @phpstan-type FlatBlock array{block: Block, exercises: list<FlatPrescribed>, segments: list<FlatSegment>}
  * @phpstan-type FlatWorkout array{workout: Workout, blocks: list<FlatBlock>, activities: list<\App\Enum\ActivityType>, exerciseCount: int}
@@ -128,11 +128,14 @@ final class PlanFlattener
         $exercises = [];
         foreach ($this->supersets->segments($block) as $segment) {
             $flatExercises = [];
+            $last = count($segment['exercises']) - 1;
             foreach ($segment['exercises'] as $index => $prescribed) {
                 // Rang lisible dans le groupe : « A1 », « A2 »… La lettre vient du
                 // segment, le numéro du rang dans le segment.
                 $label = null !== $segment['label'] ? $segment['label'].($index + 1) : null;
-                $flat = $this->flattenPrescribed($prescribed, $label);
+                // Suivi d'un autre membre du groupe : enchaîné sans repos (#85).
+                $chained = null !== $segment['label'] && $index < $last;
+                $flat = $this->flattenPrescribed($prescribed, $label, $chained);
                 $flatExercises[] = $flat;
                 $exercises[] = $flat;
             }
@@ -154,7 +157,7 @@ final class PlanFlattener
     /**
      * @return FlatPrescribed
      */
-    private function flattenPrescribed(PrescribedExercise $prescribed, ?string $groupLabel = null): array
+    private function flattenPrescribed(PrescribedExercise $prescribed, ?string $groupLabel = null, bool $chained = false): array
     {
         return [
             'prescribed' => $prescribed,
@@ -172,7 +175,12 @@ final class PlanFlattener
             // Vue déroulée : une entrée par série, quel que soit le mode de saisie.
             // C'est ce que consomme la page de consultation.
             'setLines' => $this->setLines($prescribed),
-            'rest' => $prescribed->getRestSeconds(),
+            // Dans un superset, seul le dernier membre repose (#85, même règle que
+            // WorkoutEstimator). Les autres valent 0 et non null : pour l'app,
+            // null veut dire « repos par défaut des réglages », 0 veut dire
+            // « enchaîner ». La valeur saisie reste en base, intacte.
+            'rest' => $chained ? 0 : $prescribed->getRestSeconds(),
+            'chained' => $chained,
             'notes' => $prescribed->getNotes(),
             // Référence du « % du max » affiché par le tableau de séries.
             'topWeightKg' => $prescribed->getTopWeightKg(),

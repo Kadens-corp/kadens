@@ -24,6 +24,14 @@
             </button>
         </div>
 
+        {# Où part le prochain ajout (#85). Le « bloc actif » n'était dit nulle part
+           ailleurs que par une bordure, et l'aide qui l'expliquait vivait sous la
+           liste, hors écran. Rempli par le contrôleur `composer` (rôle et intitulé du
+           bloc actif) ; le texte serveur est celui d'une séance sans bloc. #}
+        <p class="kd-libpanel__target" aria-live="polite">
+            Ajout dans : <strong data-composer-target="target">un nouveau bloc</strong>
+        </p>
+
         <div class="kd-libsearch">
             {{ ux_icon('lucide:search') }}
             <input type="search" placeholder="Rechercher un exercice…"
@@ -86,6 +94,6 @@
     </div>
 
     <p class="kd-libpanel__hint">
-        Tape une carte pour l'ajouter au bloc actif, ou glisse-la dans un bloc.
+        Clique sur une carte pour l'ajouter au bloc indiqué en haut, ou glisse-la dans le bloc de ton choix. Pour changer de bloc, clique dedans.
     </p>
 </div>

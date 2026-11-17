@@ -28,7 +28,7 @@ final class PlanFlattenerTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->flattener = new PlanFlattener(new UnitFormatter(), new WorkoutMetrics(new WorkoutEstimator(), new SupersetGrouper(), new RegionBreakdown()), new SupersetGrouper());
+        $this->flattener = new PlanFlattener(new UnitFormatter(), new WorkoutMetrics(new WorkoutEstimator(new SupersetGrouper()), new SupersetGrouper(), new RegionBreakdown()), new SupersetGrouper());
     }
 
     #[DataProvider('summaryCases')]
@@ -208,6 +208,36 @@ final class PlanFlattenerTest extends TestCase
         self::assertCount(2, $flatBlock['segments'][0]['exercises']);
         self::assertSame('single', $flatBlock['segments'][1]['kind']);
         self::assertNull($flatBlock['segments'][1]['label']);
+    }
+
+    /**
+     * Dans un superset, seul le dernier membre repose (#85) : A1 sort à 0 (pour
+     * l'app, null voudrait dire « repos par défaut »), A2 et l'exercice isolé
+     * gardent le leur. Le repos de A1 reste en base.
+     */
+    public function testOnlyTheLastSupersetMemberKeepsItsRest(): void
+    {
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $made = [];
+        foreach ([[1, 90], [1, 120], [null, 60]] as $position => [$group, $rest]) {
+            $exercise = (new Exercise())->setName('Ex'.$position)->setActivity(ActivityType::GYM);
+            $made[] = $prescribed = (new PrescribedExercise())
+                ->setPrescriptionType(PrescriptionType::SETS_REPS)
+                ->setExercise($exercise)
+                ->setPosition($position)
+                ->setSupersetGroup($group)
+                ->setRestSeconds($rest);
+            $block->addPrescribedExercise($prescribed);
+        }
+
+        $workout = (new Workout())->setTitle('Séance')->setSlug('seance');
+        $workout->addBlock($block);
+
+        $exercises = $this->flattener->flattenWorkout($workout)['blocks'][0]['exercises'];
+
+        self::assertSame([0, 120, 60], array_column($exercises, 'rest'));
+        self::assertSame([true, false, false], array_column($exercises, 'chained'));
+        self::assertSame(90, $made[0]->getRestSeconds(), 'La valeur saisie reste en base.');
     }
 
     /**

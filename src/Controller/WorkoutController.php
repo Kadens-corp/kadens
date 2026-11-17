@@ -505,10 +505,12 @@ final class WorkoutController extends AbstractController
         $payload = $request->getPayload();
 
         if ($this->isCsrfTokenValid('prescribed_quick_add'.$workout->getId(), $payload->getString('_token'))) {
-            $block = $this->findBlock($workout, $payload->getInt('blockId'));
             $exercise = $this->findLibraryExercise($payload->getInt('exerciseId'), $workout);
 
             if (null !== $exercise) {
+                // Résolu APRÈS l'exercice : un ajout refusé ne doit pas laisser derrière
+                // lui un bloc vide créé pour rien.
+                $block = $this->quickAddTarget($workout, $payload->getInt('blockId'));
                 // Ajout express : type par défaut déduit de l'activité (distance ×
                 // allure pour course/vélo/natation, séries × répétitions sinon), à
                 // affiner ensuite via le panneau de paramètres. Aucune valeur n'est posée.
@@ -997,6 +999,34 @@ final class WorkoutController extends AbstractController
         throw $this->createNotFoundException('Bloc introuvable dans cette séance.');
     }
 
+    /**
+     * Bloc d'arrivée d'un ajout depuis la bibliothèque (#85). Un id fourni désigne
+     * un bloc de la séance. Sans id (0), c'est le premier ajout d'une séance vide :
+     * la notion de bloc n'a pas à être imposée avant le premier exercice, on en crée
+     * un (corps de séance, 1 tour) comme le ferait « Ajouter un bloc ». Si la séance
+     * a déjà des blocs (un autre onglet en a créé un entre-temps), on prend le
+     * premier plutôt que d'en empiler un second.
+     */
+    private function quickAddTarget(Workout $workout, int $blockId): Block
+    {
+        if ($blockId > 0) {
+            return $this->findBlock($workout, $blockId);
+        }
+
+        $blocks = $workout->getBlocks()->toArray();
+        if ([] !== $blocks) {
+            usort($blocks, static fn (Block $a, Block $b): int => $a->getPosition() <=> $b->getPosition());
+
+            return $blocks[0];
+        }
+
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $workout->addBlock($block);
+        $this->entityManager->persist($block);
+
+        return $block;
+    }
+
     private function findPrescribed(Workout $workout, int $prescribedId): PrescribedExercise
     {
         foreach ($workout->getBlocks() as $block) {
@@ -1478,9 +1508,10 @@ final class WorkoutController extends AbstractController
         foreach ($this->planFlattener->flattenWorkout($workout)['blocks'] as $flatBlock) {
             foreach ($flatBlock['exercises'] as $flat) {
                 // On expose aussi le repos dans la pastille de l'éditeur : sans ça
-                // il n'apparaissait nulle part pendant la composition.
+                // il n'apparaissait nulle part pendant la composition. Sauf sur un
+                // membre enchaîné : sa légende dit déjà « sans repos » (#85).
                 $summary = $flat['summary'];
-                if (null !== $flat['rest']) {
+                if (null !== $flat['rest'] && !$flat['chained']) {
                     $rest = 'repos '.$flat['rest'].' s';
                     $summary = '' !== $summary ? $summary.' · '.$rest : $rest;
                 }

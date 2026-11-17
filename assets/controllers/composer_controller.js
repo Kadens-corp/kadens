@@ -34,15 +34,17 @@ import { normalize, scoreElement, tokens } from 'search';
  * plus qu'une affordance. `filter` protège ce qui doit rester cliquable/saisissable
  * dans la carte (le menu, le panneau de paramètres ouvert).
  *
- *   - bloc actif : cible de l'ajout depuis la bibliothèque
- *   - taper une carte de bibliothèque -> l'ajouter au bloc actif (quick-add)
+ *   - bloc actif : cible de l'ajout depuis la bibliothèque, nommé en tête de la
+ *     colonne (« Ajout dans : … »). Un bloc qu'on vient de créer le devient.
+ *   - taper une carte de bibliothèque -> l'ajouter au bloc actif (quick-add) ; sans
+ *     aucun bloc, le serveur en crée un (blockId = 0)
  *   - glisser une carte de bibliothèque -> l'ajouter dans un bloc au point de dépôt
  *   - glisser une ligne d'exercice -> la réordonner / changer de bloc (reorder)
  *   - stepper de tours, dépliage des paramètres, filtre de bibliothèque (client)
  *   - sous 900px la bibliothèque est une feuille : `openLib` / `closeLib`
  */
 export default class extends Controller {
-    static targets = ['block', 'items', 'library', 'libcard', 'search', 'quickAddForm', 'reorderForm'];
+    static targets = ['block', 'items', 'library', 'libcard', 'search', 'target', 'quickAddForm', 'reorderForm'];
 
     // L'URL du bandeau de volume. Une value et non une target : le bandeau vit
     // HORS de cette section (il ne doit pas être emporté par un stream de blocs),
@@ -66,6 +68,10 @@ export default class extends Controller {
         this.libTerms = [];
         this.libActivity = 'all';
         this.activeBlockId = null;
+        // Blocs déjà vus, pour reconnaître un bloc NEUF parmi ceux que chaque stream
+        // reconnecte. `null` tant que connect() n'a pas tourné : au chargement, tous
+        // les blocs se connectent et aucun n'est « neuf ».
+        this.knownBlockIds = null;
         this.sortables = new WeakMap();
         this.volumePending = false;
     }
@@ -91,6 +97,8 @@ export default class extends Controller {
         this.element.addEventListener('submit', this.onSubmit);
         document.addEventListener('keydown', this.onKey);
         document.addEventListener('click', this.onOutside);
+        this.knownBlockIds = new Set(this.blockTargets.map((el) => el.dataset.blockId));
+        this.refreshActive();
         this.applyLibFilter();
         this.refreshVolume();
     }
@@ -144,7 +152,10 @@ export default class extends Controller {
             // Le flux réécrit des lignes dont le serveur ignore l'état déplié. rAF :
             // `renderStreamMessage` rend de façon asynchrone, le DOM n'est pas encore
             // à jour au retour de l'appel (même raison que dans restoreFocus).
-            requestAnimationFrame(() => this.syncExpanded());
+            requestAnimationFrame(() => {
+                this.syncExpanded();
+                this.settleActive();
+            });
             if (!isParamSave) this.restoreFocus(activeName, caret);
             // Toute mutation change ce que la séance charge : une série ajoutée, un
             // exercice déplacé dans un bloc à trois tours. Sans `await` — le bandeau
@@ -217,9 +228,31 @@ export default class extends Controller {
 
     // ---- Bloc actif --------------------------------------------------------
 
+    /**
+     * Chaque stream de blocs reconnecte TOUS les blocs : on ne peut donc pas lire
+     * « nouveau » dans la connexion elle-même. C'est l'id inconnu qui le dit. Un bloc
+     * neuf (bouton « Ajouter un bloc », ou bloc créé par le premier ajout) devient
+     * actif : on le crée pour le remplir, les exercices suivants doivent y aller.
+     */
     blockTargetConnected(el) {
-        if (this.activeBlockId === null) {
-            this.activeBlockId = el.dataset.blockId;
+        const id = el.dataset.blockId;
+        if (this.knownBlockIds !== null && !this.knownBlockIds.has(id)) {
+            this.knownBlockIds.add(id);
+            this.activeBlockId = id;
+        } else if (this.activeBlockId === null) {
+            this.activeBlockId = id;
+        }
+        this.refreshActive();
+    }
+
+    /**
+     * Après un stream : si le bloc actif a disparu (supprimé), on se rabat sur le
+     * premier. Pas dans blockTargetDisconnected : pendant un re-render, tous les blocs
+     * se déconnectent, y compris ceux qui reviennent.
+     */
+    settleActive() {
+        if (!this.blockTargets.some((el) => el.dataset.blockId === this.activeBlockId)) {
+            this.activeBlockId = this.blockTargets[0]?.dataset.blockId ?? null;
         }
         this.refreshActive();
     }
@@ -234,6 +267,28 @@ export default class extends Controller {
         this.blockTargets.forEach((el) => {
             el.classList.toggle('kd-cblock--active', el.dataset.blockId === this.activeBlockId);
         });
+        this.refreshTarget();
+    }
+
+    /** « Ajout dans : … » en tête de bibliothèque. Lu sur le bloc lui-même (son
+     *  rôle choisi, son intitulé libre), donc juste dès que le stream l'a re-rendu. */
+    refreshTarget() {
+        if (!this.hasTargetTarget) return;
+        const block = this.activeBlock();
+        this.targetTarget.textContent = block ? this.blockName(block) : 'un nouveau bloc';
+    }
+
+    /** Nom lisible d'un bloc : « Échauffement », « Corps de séance · Jambes ». Deux
+     *  blocs au même nom se distinguent par leur rang dans la séance. */
+    blockName(block) {
+        const name = (el) => {
+            const role = el.querySelector('.kd-cblock__role')?.selectedOptions?.[0]?.textContent.trim() || 'Bloc';
+            const label = el.querySelector('.kd-cblock__label')?.value.trim();
+            return label ? `${role} · ${label}` : role;
+        };
+        const mine = name(block);
+        const twins = this.blockTargets.filter((el) => name(el) === mine);
+        return twins.length > 1 ? `${mine} (bloc ${this.blockTargets.indexOf(block) + 1})` : mine;
     }
 
     activeBlock() {
@@ -245,12 +300,12 @@ export default class extends Controller {
     // ---- Ajout depuis la bibliothèque (tap sur une carte) ------------------
 
     /** La carte entière est le déclencheur : l'exercice part dans le bloc actif, et
-     *  la feuille se referme (sur écran large, la classe n'était pas posée). */
+     *  la feuille se referme (sur écran large, la classe n'était pas posée). Sans
+     *  bloc, `0` demande au serveur d'en créer un : le « + » ne reste plus muet. */
     quickAdd(event) {
         const block = this.activeBlock();
-        if (!block) return;
         this.closeLib();
-        this.submitQuickAdd(event.currentTarget.dataset.exerciseId, block.dataset.blockId);
+        this.submitQuickAdd(event.currentTarget.dataset.exerciseId, block ? block.dataset.blockId : '0');
     }
 
     submitQuickAdd(exerciseId, blockId, afterId) {
@@ -305,9 +360,10 @@ export default class extends Controller {
             group: { name: this.constructor.SORTABLE_GROUP, pull: true, put: true },
             draggable: '.kd-cexo',
             // Pas de `handle` : toute la carte est la prise (cf. en-tête de fichier).
-            // `filter` exclut ce qui ne doit jamais soulever la carte — le menu, et
-            // le panneau de paramètres déplié, où l'on saisit du texte.
-            filter: '.kd-kebab, .kd-cexo__params',
+            // `filter` exclut ce qui ne doit jamais soulever la carte — le menu, le
+            // bouton « Enchaîner » et le panneau de paramètres déplié, où l'on saisit
+            // du texte.
+            filter: '.kd-kebab, .kd-cexo__params, .kd-cexo__seam',
             preventOnFilter: false,
             delay: this.constructor.TOUCH_DRAG_DELAY,
             delayOnTouchOnly: true,
