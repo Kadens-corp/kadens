@@ -4,7 +4,8 @@ import { Controller } from '@hotwired/stimulus';
  * Modales de sélection du calendrier (remplacent les anciens dropdowns) :
  *  - « poser une séance » : ouverte par le « + » d'un jour (data-caladd-date-param),
  *    la date choisie alimente un champ caché ; chaque carte est un bouton submit
- *    (clic = pose immédiate, endpoint lean `app_scheduled_workout_place`) ;
+ *    (clic = pose immédiate, endpoint lean `app_scheduled_workout_place`), et
+ *    « Nouvelle séance pour ce jour » crée un brouillon posé à cette date (#92) ;
  *  - « placer un plan dans l'agenda » : ouverte par le bouton en tête, carte
  *    cliquée = sélection (alimente le <select> caché du PlanInstantiationType et
  *    émet `change`, que relit l'aperçu `plan-preview`), puis date + « Placer
@@ -50,7 +51,9 @@ export default class extends Controller {
     // ----------------------------------------------------------------- Séance
     openWorkout(event) {
         const date = event.params.date;
-        this.dateInputTarget.value = date;
+        // Deux champs portent la date : la pose d'une séance existante et
+        // « Nouvelle séance pour ce jour » (#92).
+        this.dateInputTargets.forEach((input) => { input.value = date; });
         if (this.hasDateLabelTarget) {
             this.dateLabelTarget.textContent = this.humanDate(date);
         }

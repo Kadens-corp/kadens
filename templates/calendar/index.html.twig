@@ -68,7 +68,7 @@
     <div data-controller="caladd"
          data-caladd-preselect-value="{{ preselectPlanId ?? 0 }}"
          data-caladd-focus-value="{{ focusDate ?? '' }}">
-        {{ include('calendar/_addbar.html.twig') }}
+        {{ include('calendar/_addbar.html.twig', {backFrom: back_token('cal-month', '%04d-%02d'|format(year, month))}) }}
 
         {{ include('calendar/_activity_legend.html.twig') }}
 

@@ -6,14 +6,17 @@ use App\Entity\Block;
 use App\Entity\Exercise;
 use App\Entity\PrescribedExercise;
 use App\Entity\PrescribedSet;
+use App\Entity\ScheduledWorkout;
 use App\Entity\User;
 use App\Entity\Workout;
 use App\Enum\ActivityType;
 use App\Enum\BlockRole;
 use App\Enum\PrescriptionType;
+use App\Enum\ScheduledStatus;
 use App\Form\BlockType;
 use App\Form\PrescribedExerciseType;
 use App\Form\PrescribedSetType;
+use App\Http\BackTarget;
 use App\Repository\CoachingRepository;
 use App\Repository\ExerciseRepository;
 use App\Repository\LoggedExerciseRepository;
@@ -140,6 +143,10 @@ final class WorkoutController extends AbstractController
      * (pas d'écran de formulaire intermédiaire : le titre s'édite en ligne, et
      * l'éditeur l'ouvre tout de suite grâce au paramètre `rename`). Même geste que
      * `CoachController::newWorkout`, qui procédait déjà ainsi.
+     *
+     * Avec `date` (Y-m-d), le brouillon est aussi posé ce jour-là dans l'agenda
+     * (« Nouvelle séance pour ce jour », #92) et `from` (jeton `BackTarget`) est
+     * reconduit au compositeur pour que son retour ramène au calendrier.
      */
     #[Route('/new', name: 'app_workout_new', methods: ['POST'])]
     public function new(Request $request, SlugGenerator $slugGenerator): Response
@@ -158,9 +165,29 @@ final class WorkoutController extends AbstractController
             ->setSlug($slugGenerator->generate($title, Workout::class));
 
         $this->entityManager->persist($workout);
+
+        // Depuis la modale d'un jour du calendrier (#92) : le brouillon est posé
+        // à ce jour dans le même geste, et le compositeur repart vers la vue
+        // quittée. Une date absente ou illisible garde le geste d'origine.
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $request->getPayload()->getString('date')) ?: null;
+        $back = [];
+
+        if (null !== $date) {
+            $this->entityManager->persist((new ScheduledWorkout())
+                ->setWorkout($workout)
+                ->setOwner($user)
+                ->setScheduledDate($date)
+                ->setStatus(ScheduledStatus::PLANNED));
+
+            $from = $request->getPayload()->getString('from');
+            $back = ['from' => null !== BackTarget::parse($from) ? $from : BackTarget::token(BackTarget::CAL_MONTH, $date->format('Y-m'))];
+
+            $this->addFlash('success', \sprintf('Séance planifiée le %s : compose-la ici, elle est déjà dans ton agenda.', $date->format('d/m/Y')));
+        }
+
         $this->entityManager->flush();
 
-        return $this->redirectToRoute('app_workout_edit', ['id' => $workout->getId(), 'rename' => 1]);
+        return $this->redirectToRoute('app_workout_edit', ['id' => $workout->getId(), 'rename' => 1] + $back);
     }
 
     /**

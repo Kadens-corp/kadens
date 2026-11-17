@@ -95,6 +95,90 @@ final class CalendarControllerTest extends WebTestCase
         self::assertResponseRedirects('/calendar/2026/3');
     }
 
+    /**
+     * « Nouvelle séance pour ce jour » (#92) : le même POST que la bibliothèque
+     * crée le brouillon, le pose au jour choisi et ouvre le compositeur, dont le
+     * retour ramène à la vue calendrier quittée.
+     */
+    public function testANewWorkoutCreatedFromADayIsPlacedThereAndLeadsBack(): void
+    {
+        $user = $this->createUser('owner@example.com');
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/calendar/week/2026-03-10');
+
+        $form = $crawler->filter('form[action$="/workout/new"]');
+        self::assertCount(1, $form);
+        self::assertSame('cal-week-2026-03-09', $form->filter('input[name="from"]')->attr('value'));
+        self::assertStringContainsString('Nouvelle séance pour ce jour', $form->text());
+
+        $this->client->request('POST', '/workout/new', [
+            '_token' => $form->filter('input[name="_token"]')->attr('value'),
+            'date' => '2026-03-12',
+            'from' => 'cal-week-2026-03-09',
+        ]);
+
+        $this->em->clear();
+        $scheduled = $this->em->getRepository(ScheduledWorkout::class)->findOneBy([]);
+        self::assertNotNull($scheduled);
+        self::assertSame('2026-03-12', $scheduled->getScheduledDate()->format('Y-m-d'));
+        self::assertSame(ScheduledStatus::PLANNED, $scheduled->getStatus());
+        self::assertSame($user->getId(), $scheduled->getOwner()?->getId());
+
+        $workout = $scheduled->getWorkout();
+        self::assertNotNull($workout);
+        self::assertFalse($workout->isPlanLocal());
+        self::assertResponseRedirects('/workout/'.$workout->getId().'/edit?rename=1&from=cal-week-2026-03-09');
+
+        $crawler = $this->client->followRedirect();
+        self::assertResponseIsSuccessful();
+        self::assertCount(1, $crawler->filter('a.kd-backlink[href="/calendar/week/2026-03-09"]'));
+        self::assertSelectorTextContains('.kd-flash', '12/03/2026');
+    }
+
+    /**
+     * Depuis la vue mois, le jeton est celui du mois affiché ; un jeton absent ou
+     * illisible retombe sur le mois de la date posée, jamais sur « Mes séances ».
+     */
+    public function testANewWorkoutFromTheMonthFallsBackToTheMonthOfItsDate(): void
+    {
+        $user = $this->createUser('owner@example.com');
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/calendar/2026/3');
+
+        $form = $crawler->filter('form[action$="/workout/new"]');
+        self::assertSame('cal-month-2026-03', $form->filter('input[name="from"]')->attr('value'));
+
+        $this->client->request('POST', '/workout/new', [
+            '_token' => $form->filter('input[name="_token"]')->attr('value'),
+            'date' => '2026-04-02',
+            'from' => 'https://evil.example',
+        ]);
+
+        $workout = $this->em->getRepository(Workout::class)->findOneBy(['owner' => $user]);
+        self::assertNotNull($workout);
+        self::assertResponseRedirects('/workout/'.$workout->getId().'/edit?rename=1&from=cal-month-2026-04');
+    }
+
+    /**
+     * Sans date, « Nouvelle séance » garde son geste d'origine : un brouillon de
+     * bibliothèque, rien dans l'agenda, pas de contexte de retour.
+     */
+    public function testANewWorkoutWithoutDateStaysOutOfTheCalendar(): void
+    {
+        $user = $this->createUser('owner@example.com');
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout');
+        $this->client->submit($crawler->filter('form[action$="/workout/new"]')->form());
+
+        $workout = $this->em->getRepository(Workout::class)->findOneBy(['owner' => $user]);
+        self::assertNotNull($workout);
+        self::assertResponseRedirects('/workout/'.$workout->getId().'/edit?rename=1');
+        self::assertSame(0, $this->em->getRepository(ScheduledWorkout::class)->count([]));
+    }
+
     public function testInstantiatePlanCreatesDatedWorkouts(): void
     {
         $user = $this->createUser('owner@example.com');

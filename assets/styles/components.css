@@ -9062,6 +9062,20 @@ textarea.kd-inlineedit__input {
     margin: 0;
 }
 
+/* « Nouvelle séance pour ce jour » (#92) : sortie de secours sous la liste,
+   toujours visible puisque seule la liste défile. */
+.kd-picker__new {
+    align-items: center;
+    justify-content: space-between;
+}
+
+.kd-picker__newlead {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
 /* Aperçu d'une pose de plan (#68) : la règle d'ancrage en petit, et la ligne
    vivante (dates, nombre de séances) en texte courant, filet rouge à gauche. */
 .kd-placement {

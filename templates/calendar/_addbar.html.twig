@@ -7,7 +7,9 @@
    data-controller="caladd" (posé par index/week, il englobe la grille et ses « + »).
 
    Attend : workoutCards, workoutActivities, planCards, instantiateForm,
-   instantiatedPlans, planPlacement, statuses, year, month. #}
+   instantiatedPlans, planPlacement, statuses, year, month, backFrom (jeton
+   `back_token` de la vue affichée, que reconduit « Nouvelle séance pour ce
+   jour » jusqu'au compositeur). #}
 {% import 'components/_activity.html.twig' as activity %}
 
 <div class="kd-calbar">
@@ -105,10 +107,24 @@
                         </span>
                     </button>
                 {% else %}
-                    <p class="kd-libpanel__empty">Aucune séance en bibliothèque. Crée-en une d'abord.</p>
+                    <p class="kd-libpanel__empty">Aucune séance en bibliothèque pour l'instant.</p>
                 {% endfor %}
                 <p class="kd-libpanel__empty" data-caladd-target="workoutEmpty" hidden>Aucune séance ne correspond.</p>
             </div>
+        </form>
+
+        {# Créer sur place (#92) : même POST que « Nouvelle séance » de la
+           bibliothèque, avec la date du jour ouvert. Le brouillon est posé à ce
+           jour et le compositeur s'ouvre, son retour ramené à cette vue. Formulaire
+           à part : les cartes ci-dessus postent ailleurs. #}
+        <form method="post" action="{{ path('app_workout_new') }}" class="kd-picker__foot kd-picker__new">
+            <input type="hidden" name="_token" value="{{ csrf_token('workout_new') }}">
+            <input type="hidden" name="date" data-caladd-target="dateInput">
+            <input type="hidden" name="from" value="{{ backFrom }}">
+            <p class="kd-picker__newlead">Rien qui convienne ? Compose-la directement.</p>
+            <button type="submit" class="kd-btn kd-btn--secondary">
+                {{ ux_icon('lucide:plus') }} Nouvelle séance pour ce jour
+            </button>
         </form>
     </div>
 </dialog>
