@@ -88,7 +88,7 @@
         <div class="kd-grid kd-grid--4 kd-section__block">
             {% set headline = [
                 {icon: 'lucide:calendar-check', value: reg.sessions, label: 'séance' ~ (reg.sessions > 1 ? 's') ~ ' faite' ~ (reg.sessions > 1 ? 's')},
-                {icon: 'lucide:target', value: stats.adherence.adherence is null ? '—' : (stats.adherence.adherence * 100)|round ~ ' %', label: 'observance'},
+                {icon: 'lucide:target', value: stats.adherence.adherence is null ? '—' : (stats.adherence.adherence * 100)|round ~ ' %', label: 'assiduité'},
                 {icon: 'lucide:dumbbell', value: vol.gym.tonnageLabel, label: 'tonnage soulevé'},
                 {icon: 'lucide:layers', value: vol.gym.workingSets, label: 'série' ~ (vol.gym.workingSets > 1 ? 's') ~ ' de travail'},
             ] %}
@@ -143,7 +143,7 @@
 
             <div class="kd-grid kd-grid--2 kd-section__block">
                 <section class="kd-card">
-                    <h3 class="kd-card__title kd-profile__grouphead">{{ ux_icon('lucide:target') }} Observance</h3>
+                    <h3 class="kd-card__title kd-profile__grouphead">{{ ux_icon('lucide:target') }} Assiduité</h3>
                     {{ include('components/_status_stats.html.twig', {stats: stats.adherence, hero: true}) }}
                 </section>
 
@@ -164,18 +164,19 @@
                             {% endif %}
                             <dt>Jours actifs</dt>
                             <dd>{{ reg.activeDays }} jour{{ reg.activeDays > 1 ? 's' }}</dd>
-                            {# Deux séries, deux choses différentes : le record de la
-                               période, et celle qui court encore. #}
-                            <dt>Série en cours</dt>
+                            {# Deux suites de semaines, deux choses différentes : le
+                               record de la période, et celle qui court encore. Le
+                               mot « série » reste aux séries d'exercice (#84). #}
+                            <dt>Semaines d'affilée</dt>
                             <dd>
                                 {% if reg.currentStreak > 0 %}
-                                    <strong>{{ reg.currentStreak }}</strong> semaine{{ reg.currentStreak > 1 ? 's' }} d'affilée
+                                    <strong>{{ reg.currentStreak }}</strong> en cours
                                 {% else %}
-                                    Interrompue
+                                    Aucune en cours
                                 {% endif %}
                             </dd>
-                            <dt>Meilleure série</dt>
-                            <dd>{{ reg.bestStreak }} semaine{{ reg.bestStreak > 1 ? 's' }} d'affilée</dd>
+                            <dt>Record d'affilée</dt>
+                            <dd>{{ reg.bestStreak }} semaine{{ reg.bestStreak > 1 ? 's' }}</dd>
                             {% if reg.bestWeek %}
                                 <dt>Meilleure semaine</dt>
                                 <dd>{{ reg.bestWeek.sessions }} séance{{ reg.bestWeek.sessions > 1 ? 's' }} <span class="kd-deflist__note">({{ reg.bestWeek.label }})</span></dd>
@@ -290,8 +291,8 @@
                     {% if vol.gym.sessions == 0 %}
                         <div class="kd-empty">
                             {{ ux_icon('lucide:dumbbell') }}
-                            <div>Aucune série loguée sur cette période.</div>
-                            <p class="kd-empty__hint">Le tonnage se lit sur le réalisé : une séance cochée « faite » sans séries loguées compte en assiduité, pas en volume.</p>
+                            <div>Aucune série saisie sur cette période.</div>
+                            <p class="kd-empty__hint">Le tonnage se lit sur les séries saisies : une séance cochée « faite » sans détail saisi compte en assiduité, pas en volume.</p>
                         </div>
                     {% else %}
                         <div class="kd-profile__tiles">
@@ -303,7 +304,7 @@
                             <div class="kd-profile__tile">
                                 <span class="kd-profile__tileicon">{{ ux_icon('lucide:repeat') }}</span>
                                 <div class="kd-stat__value">{{ vol.gym.sessions }}</div>
-                                <div class="kd-stat__label">Séance{{ vol.gym.sessions > 1 ? 's' }} loguée{{ vol.gym.sessions > 1 ? 's' }}</div>
+                                <div class="kd-stat__label">Séance{{ vol.gym.sessions > 1 ? 's' }} détaillée{{ vol.gym.sessions > 1 ? 's' }}</div>
                             </div>
                             {% if vol.gym.perSessionSets is not null %}
                                 <div class="kd-profile__tile">
@@ -367,7 +368,7 @@
                     {% if not prog.hasVolume %}
                         <div class="kd-empty">
                             {{ ux_icon('lucide:trending-up') }}
-                            <div>Rien à tracer : aucune série loguée sur cette période.</div>
+                            <div>Rien à tracer : aucune série saisie sur cette période.</div>
                         </div>
                     {% else %}
                         <p class="kd-card__note">
@@ -490,7 +491,7 @@
             {% if cov.sessions > 0 or cov.unattached > 0 %}
                 <p class="kd-card__note kd-endu__coverage">
                     {% if cov.sessions > 0 %}
-                        <strong>{{ cov.withActivity }}</strong> sortie{{ cov.withActivity > 1 ? 's' }} sur {{ cov.sessions }} lue{{ cov.withActivity > 1 ? 's' }} sur la montre, le reste sur le prescrit.
+                        <strong>{{ cov.withActivity }}</strong> sortie{{ cov.withActivity > 1 ? 's' }} sur {{ cov.sessions }} lue{{ cov.withActivity > 1 ? 's' }} sur la montre, le reste sur ce qui était prévu.
                     {% endif %}
                     {% if cov.unattached > 0 %}
                         {{ cov.unattached }} activité{{ cov.unattached > 1 ? 's' }} importée{{ cov.unattached > 1 ? 's' }} sans séance, donc hors des chiffres{% if not subject %} : rattache-l{{ cov.unattached > 1 ? 'es' : 'a' }} depuis la page de la séance du même jour{% endif %}.
@@ -533,9 +534,9 @@
                             {% endfor %}
                         </div>
                         <p class="kd-card__note">
-                            Lu sur l'activité importée quand elle est rattachée à la séance faite, sur son prescrit sinon.
+                            Lu sur la sortie importée quand elle est reliée à la séance faite, sur ce qui était prévu sinon.
                             {% if present|filter(e => vol[e.key].derivedMeters > 0 or vol[e.key].derivedSeconds > 0) is not empty %}
-                                ≈ : en partie déduit de l'allure prescrite.
+                                ≈ : en partie déduit de l'allure prévue.
                             {% endif %}
                         </p>
                     {% endif %}
@@ -623,7 +624,7 @@
             <div class="kd-pagehead kd-pagehead--sub">
                 <div>
                     <p class="kd-eyebrow kd-eyebrow--accent">Intensité</p>
-                    <h2 class="kd-title kd-title--sm">À quelle allure cardiaque</h2>
+                    <h2 class="kd-title kd-title--sm">À quelle fréquence cardiaque</h2>
                 </div>
             </div>
 
@@ -682,10 +683,10 @@
                     {% if endu.comparison is empty %}
                         <div class="kd-empty">
                             {{ ux_icon('lucide:git-compare') }}
-                            <div>Aucune séance prescrite avec une activité rattachée sur cette période.</div>
+                            <div>Aucune séance prévue reliée à une sortie sur cette période.</div>
                         </div>
                     {% else %}
-                        <p class="kd-card__note">Sur les seules séances qui portent un prescrit chiffré et une activité rattachée. La distance se compare là où elle était prescrite, la durée de même.</p>
+                        <p class="kd-card__note">Sur les seules séances prévues avec des chiffres et reliées à une sortie. La distance se compare là où elle était prévue, la durée de même.</p>
                         {% for c in endu.comparison %}
                             <h4 class="kd-endu__sport">{{ activity.badge(c.activity) }} <span class="kd-deflist__note">{{ c.sessions }} séance{{ c.sessions > 1 ? 's' }}</span></h4>
                             <dl class="kd-deflist">

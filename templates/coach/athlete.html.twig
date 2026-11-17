@@ -364,9 +364,9 @@
     <section class="kd-section" id="dernieres-seances">
         <div class="kd-pagehead kd-pagehead--sub">
             <div>
-                <p class="kd-eyebrow kd-eyebrow--accent">Réalisé</p>
+                <p class="kd-eyebrow kd-eyebrow--accent">Suivi</p>
                 <h2 class="kd-title kd-title--sm">Ses dernières séances</h2>
-                <p class="kd-lead">Ses {{ recentWeeks }} dernières semaines : faites, manquées ou pas encore cochées. Lecture seule : consigner appartient à l'athlète.</p>
+                <p class="kd-lead">Ses {{ recentWeeks }} dernières semaines : faites, manquées ou pas encore cochées. Lecture seule : seul l'athlète saisit ses charges.</p>
             </div>
             {% if loggedTotal > 0 %}
                 <a href="{{ path('app_coach_athlete_log', {id: athlete.id}) }}" class="kd-btn kd-btn--ghost">

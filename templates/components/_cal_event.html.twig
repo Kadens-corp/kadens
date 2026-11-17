@@ -162,7 +162,7 @@
                     <input type="hidden" name="detailed" value="{{ detailed ? 1 : 0 }}">
                     {% if backFrom %}<input type="hidden" name="from" value="{{ backFrom }}">{% endif %}
                     <div class="kd-field">
-                        <textarea name="completionNotes" rows="2" class="kd-input kd-input--area" placeholder="Écart / ressenti (optionnel)">{{ scheduled.completionNotes }}</textarea>
+                        <textarea name="completionNotes" rows="2" class="kd-input kd-input--area" placeholder="Commentaire (optionnel)">{{ scheduled.completionNotes }}</textarea>
                     </div>
                     {# Séance de force : le texte libre n'est pas l'endroit des
                        charges, et la modale doit dire lequel (#63). « De force »
@@ -208,9 +208,9 @@
             </div>
 
             <div class="kd-modal__section">
-                <form method="post" action="{{ path('app_scheduled_workout_delete', {id: scheduled.id}) }}" onsubmit="return confirm('Retirer cette séance du planning ?');">
+                <form method="post" action="{{ path('app_scheduled_workout_delete', {id: scheduled.id}) }}" onsubmit="return confirm('Retirer cette séance de l\'agenda ?');">
                     <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ scheduled.id) }}">
-                    <button type="submit" class="kd-btn kd-btn--danger">{{ ux_icon('lucide:trash-2') }} Retirer du planning</button>
+                    <button type="submit" class="kd-btn kd-btn--danger">{{ ux_icon('lucide:trash-2') }} Retirer de l'agenda</button>
                 </form>
             </div>
         </div>

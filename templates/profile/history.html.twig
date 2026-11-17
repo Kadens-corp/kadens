@@ -141,7 +141,7 @@
                 {% endfor %}
                 <li class="kd-legend__item">
                     <span class="kd-legend__key kd-histdot--bare" aria-hidden="true"></span>
-                    Sans réalisé
+                    Sans détail saisi
                 </li>
                 <li class="kd-legend__item kd-legend__item--icon">
                     {{ ux_icon('lucide:footprints') }}{{ ux_icon('lucide:bike') }}{{ ux_icon('lucide:waves') }}
@@ -196,7 +196,7 @@
                                                         ? ' — ' ~ session.groups|map(g => g.label)|join(', ')
                                                         : (session.endurance
                                                             ? ' — ' ~ session.activity.label
-                                                            : ' — sans réalisé'))
+                                                            : ' — sans détail saisi'))
                                                     ~ (session.rating.feeling ? ' — forme : ' ~ session.rating.feelingLabel|lower)
                                                     ~ (session.rating.sessionRpe ? ' — difficulté ' ~ session.rating.sessionRpe ~ '/10') %}
 

@@ -22,7 +22,7 @@
     <div class="kd-home">
         <div class="kd-home__head">
             <h1 class="kd-home__title">Salut {{ u.displayName }}</h1>
-            <p class="kd-eyebrow">{{ dayNames[today|date('N')] }} {{ today|date('j') }} {{ monthName }} · S{{ today|date('W') }}</p>
+            <p class="kd-eyebrow">{{ dayNames[today|date('N')] }} {{ today|date('j') }} {{ monthName }} · semaine {{ today|date('W')|number_format }}</p>
         </div>
 
         {# ============================== COACHING ============================ #}
@@ -258,7 +258,7 @@
         {% set actMax = acts|reduce((m, r) => max(m, r.sessions), 0) %}
         <div class="kd-grid kd-grid--2">
             <a href="{{ monthStats }}" class="kd-home__card">
-                <p class="kd-eyebrow">{{ monthName|capitalize }} · observance</p>
+                <p class="kd-eyebrow">{{ monthName|capitalize }} · assiduité</p>
                 {{ include('components/_status_stats.html.twig', {stats: month.adherence, hero: true}) }}
             </a>
             <a href="{{ monthStats }}" class="kd-home__card">

@@ -448,7 +448,7 @@ final class PlanTemplateControllerTest extends WebTestCase
         $this->client->request('GET', '/plan-template/'.$template->getId());
 
         self::assertResponseIsSuccessful();
-        self::assertSelectorTextContains('body', 'Aucune donnée de réalisé');
+        self::assertSelectorTextContains('body', 'Aucun détail saisi');
         self::assertSelectorNotExists('.kd-prog__adherence');
         self::assertSelectorNotExists('.kd-prog__runpick');
     }

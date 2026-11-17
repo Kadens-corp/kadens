@@ -39,11 +39,11 @@
     <div class="kd-pagehead">
         <div>
             <p class="kd-eyebrow kd-eyebrow--accent">Journal</p>
-            <h1 class="kd-title">{{ subject ? 'Ce qui a été consigné' : 'Ce que tu as consigné' }}</h1>
+            <h1 class="kd-title">{{ subject ? 'Ses séances détaillées' : 'Tes séances détaillées' }}</h1>
             <p class="kd-pagehead__lead">
                 {%- if subject %}{{ subject.displayName }} · {% endif -%}
                 {{ period.label }} ·
-                {{ sessions }} séance{{ sessions > 1 ? 's' }} consignée{{ sessions > 1 ? 's' }}
+                {{ sessions }} séance{{ sessions > 1 ? 's' }} détaillée{{ sessions > 1 ? 's' }}
                 {%- if total > sessions %} · {{ total }} au total{% endif -%}
             </p>
             {# Ce que la page montre ET ce qu'elle ne montre pas (#73) : à côté,
@@ -89,9 +89,9 @@
     {% if groups is empty %}
         <div class="kd-empty kd-section__block">
             {{ ux_icon('lucide:history') }}
-            <div>Aucune séance consignée sur cette fenêtre.</div>
+            <div>Aucune séance détaillée sur cette fenêtre.</div>
             {% if total > 0 %}
-                <p class="kd-empty__hint">Élargis la fenêtre : il y a {{ total }} séance{{ total > 1 ? 's' }} consignée{{ total > 1 ? 's' }} au total.</p>
+                <p class="kd-empty__hint">Élargis la fenêtre : il y a {{ total }} séance{{ total > 1 ? 's' }} détaillée{{ total > 1 ? 's' }} au total.</p>
             {% elseif unloggedStrength == 0 %}
                 {{ include('components/_log_in_app.html.twig', {third: subject is not null}, with_context = false) }}
             {% endif %}

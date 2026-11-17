@@ -563,7 +563,7 @@ final class ScheduledWorkoutController extends AbstractController
             $scheduled->setEndedAt(null);
             $this->entityManager->flush();
 
-            $this->addFlash('success', 'Réalisé supprimé. La séance reste au planning.');
+            $this->addFlash('success', 'Détail saisi supprimé. La séance reste au planning.');
         }
 
         return $this->redirectToRoute('app_scheduled_workout_show', ['id' => $scheduled->getId()]);
@@ -581,7 +581,7 @@ final class ScheduledWorkoutController extends AbstractController
             $this->entityManager->remove($scheduled);
             $this->entityManager->flush();
 
-            $this->addFlash('success', 'Séance retirée du planning.');
+            $this->addFlash('success', 'Séance retirée de l\'agenda.');
         }
 
         return $this->redirectToCalendarOf($owner, $date);

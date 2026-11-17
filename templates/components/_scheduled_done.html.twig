@@ -1,4 +1,4 @@
-{# ========================== BOUCLER LA SÉANCE ==========================
+{# ======================== TERMINER ET COMMENTER ========================
    En bas de séance, à l'endroit où on arrive après avoir lu le programme.
    Le bouton bascule entre « prévue » et « faite » ; « manquée » reste au
    cycle rapide du calendrier, qui boucle sur les trois états.
@@ -15,7 +15,7 @@
    qui dépend du statut (libellé du bouton, statut posté, note) vit ici. #}
 {% set isDone = scheduled.status.value == 'done' %}
 <section id="schedule-done" class="kd-done" aria-labelledby="done-title">
-    <h2 class="kd-done__title" id="done-title">Boucler la séance</h2>
+    <h2 class="kd-done__title" id="done-title">Terminer et commenter</h2>
 
     <form method="post" action="{{ path('app_scheduled_workout_status', {id: scheduled.id}) }}" class="kd-done__form">
         <input type="hidden" name="_token" value="{{ csrf_token('status' ~ scheduled.id) }}">
@@ -25,7 +25,7 @@
         <input type="hidden" name="status" value="{{ isDone ? 'planned' : 'done' }}">
 
         <div class="kd-field">
-            <label class="kd-label" for="completion-notes">Écart / ressenti (optionnel)</label>
+            <label class="kd-label" for="completion-notes">Commentaire (optionnel)</label>
             <textarea id="completion-notes" name="completionNotes" rows="3"
                       class="kd-input kd-input--area"
                       placeholder="Charge revue à la baisse, dos raide…">{{ scheduled.completionNotes }}</textarea>
@@ -69,10 +69,10 @@
         </form>
 
         <form method="post" action="{{ path('app_scheduled_workout_delete', {id: scheduled.id}) }}"
-              onsubmit="return confirm('Retirer cette séance du planning ?');">
+              onsubmit="return confirm('Retirer cette séance de l\'agenda ?');">
             <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ scheduled.id) }}">
             <button type="submit" class="kd-btn kd-btn--ghost kd-btn--danger">
-                {{ ux_icon('lucide:trash-2') }} Retirer du planning
+                {{ ux_icon('lucide:trash-2') }} Retirer de l'agenda
             </button>
         </form>
     </div>

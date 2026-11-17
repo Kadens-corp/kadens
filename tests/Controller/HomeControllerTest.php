@@ -81,6 +81,11 @@ final class HomeControllerTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         self::assertSelectorTextContains('.kd-observance__pct', '100%');
+        // Des mots de sportif, pas de médecin ni de code (#84).
+        self::assertSelectorTextContains('.kd-home__card .kd-eyebrow', 'assiduité');
+        self::assertSelectorTextContains('.kd-observance__sub', '1 faite sur 1 passée');
+        self::assertSelectorTextContains('.kd-eyebrow', 'semaine '.(int) $today->format('W'));
+        self::assertStringNotContainsString('Observance', $crawler->filter('body')->text());
         // La séance faite est vide : elle compte quand même, sous « Sans
         // contenu », pour que la carte par activité dise le même total que
         // l'observance d'à côté (#62).

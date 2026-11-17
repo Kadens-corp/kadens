@@ -19,8 +19,8 @@
         <div class="kd-observance__figure">
             <span class="kd-observance__pct">{{ stats.adherence is null ? '—' : (stats.adherence * 100)|round ~ '%' }}</span>
             <span class="kd-observance__cap">
-                Observance
-                <span class="kd-observance__sub">{{ stats.done }}/{{ settled }} séance{{ settled > 1 ? 's' : '' }} échue{{ settled > 1 ? 's' : '' }}</span>
+                Assiduité
+                <span class="kd-observance__sub">{{ stats.done }} faite{{ stats.done > 1 ? 's' }} sur {{ settled }} passée{{ settled > 1 ? 's' }}</span>
             </span>
         </div>
 

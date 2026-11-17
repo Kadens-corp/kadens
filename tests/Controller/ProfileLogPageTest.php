@@ -163,7 +163,7 @@ final class ProfileLogPageTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         self::assertSelectorNotExists('a[href^="/schedule/'.$old->getId().'"]');
-        self::assertStringContainsString('1 séance consignée au total', $crawler->filter('.kd-empty')->text());
+        self::assertStringContainsString('1 séance détaillée au total', $crawler->filter('.kd-empty')->text());
         // Le sélecteur vise le journal, pas les statistiques.
         self::assertSelectorExists('a[href="/profile/log?range=all"]');
 
