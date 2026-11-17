@@ -370,7 +370,7 @@ final class CoachController extends AbstractController
         $copy = $copier->copyFor($source, $athlete)->workout;
         $this->entityManager->flush();
 
-        $this->addFlash('success', sprintf('« %s » ajoutée à la bibliothèque de %s. Ajuste-la à son niveau si besoin.', $copy->getTitle(), $athlete->getDisplayName()));
+        $this->addFlash('success', sprintf('Copie de « %s » donnée à %s. Ajuste-la à son niveau si besoin.', $copy->getTitle(), $athlete->getDisplayName()));
 
         return $this->redirectToRoute('app_workout_edit', [
             'id' => $copy->getId(),

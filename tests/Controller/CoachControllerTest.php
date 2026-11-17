@@ -126,7 +126,7 @@ final class CoachControllerTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         $html = $crawler->html();
-        self::assertStringContainsString('Fiche athlète', $html);
+        self::assertStringContainsString('Mesures et records', $html);
         self::assertStringContainsString('Statistiques', $html);
         self::assertStringContainsString('140', $html);
         // La fiche appartient à l'athlète : aucun lien d'édition côté coach.

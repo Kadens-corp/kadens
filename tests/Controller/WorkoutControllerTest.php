@@ -905,7 +905,7 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertSame($athlete->getId(), $copy->getOwner()?->getId());
         self::assertResponseRedirects('/workout/'.$copy->getId().'/edit');
         $this->client->followRedirect();
-        self::assertSelectorTextContains('body', 'Copie créée dans la bibliothèque de Trailer38.');
+        self::assertSelectorTextContains('body', 'Copie créée dans les séances de Trailer38.');
     }
 
     /**

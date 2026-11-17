@@ -396,7 +396,7 @@ final class WorkoutController extends AbstractController
         $this->entityManager->flush();
 
         $this->addFlash('success', $foreign
-            ? sprintf('Copie créée dans la bibliothèque de %s. Compose-la maintenant.', $owner->getDisplayName())
+            ? sprintf('Copie créée dans les séances de %s. Compose-la maintenant.', $owner->getDisplayName())
             : 'Séance dupliquée. Compose-la maintenant.');
 
         return $this->redirectToRoute('app_workout_edit', ['id' => $copy->getId()]);
