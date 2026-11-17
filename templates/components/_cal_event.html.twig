@@ -162,7 +162,8 @@
         {{ ux_icon('lucide:eye') }}
     </a>
 
-    <dialog class="kd-modal" data-dialog-target="dialog" data-action="click->dialog#backdrop">
+    <dialog class="kd-modal" data-dialog-target="dialog"
+            data-action="click->dialog#backdrop cancel->dialog#cancel close->dialog#closed">
         <div class="kd-modal__card">
             <div class="kd-modal__head">
                 <div>
@@ -172,6 +173,24 @@
                 <button type="button" class="kd-modal__close" data-action="dialog#close" aria-label="Fermer">
                     {{ ux_icon('lucide:x') }}
                 </button>
+            </div>
+
+            {# Fermer avec une saisie non enregistrée (#90) : la modale reste
+               ouverte et pose la question ici, jamais par `window.confirm`.
+               Caché tant que le contrôleur `dialog` ne l'affiche pas, donc
+               absent sans JS, où rien ne se perd en silence : il n'y a pas de
+               modale, seulement la page. « Enregistrer » soumet le formulaire de
+               la modale par son id, sans passer par le JS. #}
+            <div class="kd-modal__unsaved" role="alert" hidden data-dialog-target="unsaved">
+                <p class="kd-modal__unsaved-msg">{{ ux_icon('lucide:circle-alert', {'aria-hidden': 'true'}) }} Tes modifications ne sont pas enregistrées.</p>
+                <div class="kd-modal__unsaved-actions">
+                    <button type="submit" form="cal-save-{{ scheduled.id }}" class="kd-btn kd-btn--primary kd-btn--sm">
+                        {{ ux_icon('lucide:save') }} Enregistrer
+                    </button>
+                    <button type="button" class="kd-btn kd-btn--ghost kd-btn--sm" data-action="dialog#discard">
+                        Ne pas enregistrer
+                    </button>
+                </div>
             </div>
 
             <div class="kd-modal__meta">
@@ -187,15 +206,39 @@
                 {% endif %}
             </div>
 
-            {# Prévu vs réalisé : marquer fait/manqué en un clic + noter un écart léger. #}
+            {# Prévu vs réalisé : statut, commentaire et ressenti, enregistrés
+               ensemble par un bouton « Enregistrer » explicite (#90).
+
+               Les trois statuts sont des **radios**, plus des boutons d'envoi :
+               c'était le clic sur « Faite » qui enregistrait le texte, et rien ne
+               le disait — on fermait la modale sans avoir sauvé, ou on cherchait
+               à sauver avec « Déplacer », seul bouton plein de la modale. Le
+               statut en un clic reste le geste du menu de la pastille (#89).
+               Radios natives : la case retenue se dessine par `:has(:checked)`,
+               sans JS, et au clavier les flèches passent d'un statut à l'autre. #}
             <div class="kd-modal__section">
-                <p class="kd-modal__section-title">Statut</p>
-                <form method="post" action="{{ path('app_scheduled_workout_status', {id: scheduled.id}) }}" class="kd-modal__form">
+                <form id="cal-save-{{ scheduled.id }}" method="post" action="{{ path('app_scheduled_workout_status', {id: scheduled.id}) }}"
+                      class="kd-modal__form" data-dialog-target="guarded">
                     <input type="hidden" name="_token" value="{{ csrf_token('status' ~ scheduled.id) }}">
                     <input type="hidden" name="detailed" value="{{ detailed ? 1 : 0 }}">
                     {% if backFrom %}<input type="hidden" name="from" value="{{ backFrom }}">{% endif %}
+                    <div>
+                        <p class="kd-modal__section-title" id="cal-status-lbl-{{ scheduled.id }}">Statut</p>
+                        <div class="kd-segmented" role="radiogroup" aria-labelledby="cal-status-lbl-{{ scheduled.id }}">
+                            {% for status in statuses %}
+                                <label class="kd-segbtn kd-segbtn--{{ status.value }}">
+                                    <input type="radio" name="status" value="{{ status.value }}"{{ status == scheduled.status ? ' checked' }}>
+                                    {{ ux_icon(statusIcons[status.value], {'aria-hidden': 'true'}) }}
+                                    {{ status.label }}
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </div>
                     <div class="kd-field">
-                        <textarea name="completionNotes" rows="2" class="kd-input kd-input--area" placeholder="Commentaire (optionnel)">{{ scheduled.completionNotes }}</textarea>
+                        <label class="kd-label" for="cal-notes-{{ scheduled.id }}">Commentaire (optionnel)</label>
+                        <textarea id="cal-notes-{{ scheduled.id }}" name="completionNotes" rows="2"
+                                  class="kd-input kd-input--area"
+                                  placeholder="Charge revue à la baisse, dos raide…">{{ scheduled.completionNotes }}</textarea>
                     </div>
                     {# Séance de force : le texte libre n'est pas l'endroit des
                        charges, et la modale doit dire lequel (#63). « De force »
@@ -207,7 +250,8 @@
                         {{ include('components/_log_in_app.html.twig', {}, with_context = false) }}
                     {% endif %}
                     {# Le ressenti se consigne (LOG) : propriétaire seul. Il part
-                       avec le statut, et ne compte que si la séance est faite. #}
+                       avec le reste du formulaire, et ne compte que si la séance
+                       est faite. #}
                     {% if is_granted('SCHEDULED_WORKOUT_LOG', scheduled) %}
                         <details class="kd-modal__rating"{{ scheduled.feeling or scheduled.sessionRpe ? ' open' }}>
                             <summary class="kd-label">Ressenti</summary>
@@ -215,33 +259,33 @@
                             {{ ratings.picker('sessionRpe', scheduled.sessionRpe, 'cal-' ~ scheduled.id) }}
                         </details>
                     {% endif %}
-                    <div class="kd-segmented" role="group" aria-label="Marquer le statut">
-                        {% for status in statuses %}
-                            <button type="submit" name="status" value="{{ status.value }}"
-                                    class="kd-segbtn kd-segbtn--{{ status.value }}{{ status == scheduled.status ? ' is-active' }}">
-                                {{ ux_icon(statusIcons[status.value]) }}
-                                {{ status.label }}
-                            </button>
-                        {% endfor %}
-                    </div>
+                    {# Le seul bouton plein de la modale : c'est lui qu'on cherche
+                       après avoir écrit. #}
+                    <button type="submit" class="kd-btn kd-btn--primary kd-btn--block">
+                        {{ ux_icon('lucide:save') }} Enregistrer
+                    </button>
                 </form>
             </div>
 
+            {# Gestes secondaires, en retrait : « Déplacer » restait le seul bouton
+               cerné de noir, et se lisait comme l'enregistrement (#90). #}
             <div class="kd-modal__section">
                 <p class="kd-modal__section-title">Déplacer</p>
-                <form method="post" action="{{ path('app_scheduled_workout_move', {id: scheduled.id}) }}" class="kd-modal__inline">
+                {# Déplacer recharge la vue : une saisie en cours partirait avec. #}
+                <form method="post" action="{{ path('app_scheduled_workout_move', {id: scheduled.id}) }}" class="kd-modal__inline"
+                      data-action="submit->dialog#guardSubmit">
                     <input type="hidden" name="_token" value="{{ csrf_token('move' ~ scheduled.id) }}">
                     <div class="kd-field">
-                        <input type="date" name="scheduledDate" value="{{ scheduled.scheduledDate|date('Y-m-d') }}" class="kd-input" required>
+                        <input type="date" name="scheduledDate" value="{{ scheduled.scheduledDate|date('Y-m-d') }}" class="kd-input" required aria-label="Nouvelle date">
                     </div>
-                    <button type="submit" class="kd-btn kd-btn--secondary">{{ ux_icon('lucide:calendar-clock') }} Déplacer</button>
+                    <button type="submit" class="kd-btn kd-btn--ghost">{{ ux_icon('lucide:calendar-clock') }} Déplacer</button>
                 </form>
             </div>
 
             <div class="kd-modal__section">
                 <form method="post" action="{{ path('app_scheduled_workout_delete', {id: scheduled.id}) }}" onsubmit="return confirm('Retirer cette séance de l\'agenda ?');">
                     <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ scheduled.id) }}">
-                    <button type="submit" class="kd-btn kd-btn--danger">{{ ux_icon('lucide:trash-2') }} Retirer de l'agenda</button>
+                    <button type="submit" class="kd-btn kd-btn--ghost kd-btn--danger">{{ ux_icon('lucide:trash-2') }} Retirer de l'agenda</button>
                 </form>
             </div>
         </div>
