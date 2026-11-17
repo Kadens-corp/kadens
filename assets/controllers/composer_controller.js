@@ -2,6 +2,7 @@ import { Controller } from '@hotwired/stimulus';
 import { renderStreamMessage } from '@hotwired/turbo';
 import Sortable from 'sortablejs';
 import { normalize, scoreElement, tokens } from 'search';
+import { ensureSaved, trackSave } from 'save-status';
 
 /*
  * Compositeur de séance (éditeur). La persistance reste 100 % côté serveur :
@@ -128,8 +129,15 @@ export default class extends Controller {
      * champ suivant que l'utilisateur est en train de remplir). Pour les AUTRES
      * mutations (bloc, ajout, réordonnancement…), #workout-blocks est reconstruit :
      * on mémorise le champ actif pour le lui rendre après le re-render.
+     *
+     * Chaque soumission passe par `trackSave` : c'est l'indicateur « Enregistré »
+     * qui dit que la saisie est prise (#86), le compositeur n'ayant aucun bouton.
+     * Ce qui part est figé au premier essai (méthode, URL, FormData) : « Réessayer »
+     * renvoie exactement la même chose, même si le formulaire a été re-rendu entre
+     * temps. Un échec ne recharge plus la page — ça effaçait la saisie en cours — il
+     * se lit dans la pastille et se rejoue d'un clic.
      */
-    async onSubmit(event) {
+    onSubmit(event) {
         const form = event.target;
         if (!(form instanceof HTMLFormElement)) return;
 
@@ -141,13 +149,22 @@ export default class extends Controller {
         const activeName = !isParamSave && active && active.name ? active.name : null;
         const caret = active && typeof active.selectionStart === 'number' ? active.selectionStart : null;
 
-        try {
-            const response = await fetch(form.action, {
-                method: (form.getAttribute('method') || 'post').toUpperCase(),
-                body: new FormData(form),
+        const method = (form.getAttribute('method') || 'post').toUpperCase();
+        const { action } = form;
+        const body = new FormData(form);
+        // Clé de l'échec : un réglage de paramètres décrit un ÉTAT, sa tentative
+        // suivante remplace la précédente. Un ajout, un déplacement ou une
+        // suppression est un GESTE distinct, même quand il repasse par le même
+        // formulaire caché : chacun garde son propre échec.
+        const key = isParamSave ? form : Symbol('composer-mutation');
+
+        trackSave(form, async () => {
+            const response = await ensureSaved(await fetch(action, {
+                method,
+                body,
                 headers: { Accept: 'text/vnd.turbo-stream.html' },
                 credentials: 'same-origin',
-            });
+            }));
             renderStreamMessage(await response.text());
             // Le flux réécrit des lignes dont le serveur ignore l'état déplié. rAF :
             // `renderStreamMessage` rend de façon asynchrone, le DOM n'est pas encore
@@ -161,12 +178,7 @@ export default class extends Controller {
             // exercice déplacé dans un bloc à trois tours. Sans `await` — le bandeau
             // n'est pas sur le chemin critique de l'enregistrement.
             this.refreshVolume();
-        } catch (error) {
-            console.error('Composer submit failed:', error);
-            // Sur un save de paramètre, ne PAS recharger : ça effacerait la saisie
-            // en cours. On recharge seulement pour les mutations structurelles.
-            if (!isParamSave) window.location.reload();
-        }
+        }, key);
     }
 
     /**

@@ -561,30 +561,7 @@ final class WorkoutController extends AbstractController
     {
         $this->denyAccessUnlessGranted(WorkoutVoter::EDIT, $workout);
         $prescribed = $this->findPrescribed($workout, $prescribedId);
-        $detailedBefore = $prescribed->hasDetailedSets();
-        $countBefore = $prescribed->getWorkingSetCount();
-
-        $form = $this->createPrescribedForm($prescribed);
-        $form->handleRequest($request);
-
-        $listChanged = false;
-        if ($form->isSubmitted() && $form->isValid()) {
-            // En mode détaillé, le compteur `sets` pilote la liste : le monter ou le
-            // descendre ajoute/retire des séries de travail en fin (l'échauffement
-            // n'est jamais touché). C'est l'autre sens de la synchro.
-            if ($detailedBefore && $prescribed->getSets() !== $countBefore) {
-                foreach ($this->setSynchronizer->applyScalarToDetailed($prescribed, (int) $prescribed->getSets()) as $created) {
-                    $this->entityManager->persist($created);
-                }
-                $this->setSynchronizer->syncScalarFromDetailed($prescribed);
-                $listChanged = true;
-            }
-
-            $this->clearIrrelevantFields($prescribed);
-            // La durée estimée dérive du contenu : on la recalcule à chaque save.
-            $workout->setEstimatedDurationMinutes($this->estimator->estimateMinutes($workout));
-            $this->entityManager->flush();
-        }
+        $listChanged = $this->savePrescribed($request, $workout, $prescribed, 'app_workout_prescribed_edit');
 
         // La liste de séries a changé : le panneau entier doit être re-rendu, sinon
         // les lignes ajoutées/retirées n'apparaissent qu'au rechargement.
@@ -892,9 +869,9 @@ final class WorkoutController extends AbstractController
 
     /**
      * Enregistre les paramètres d'un exercice depuis la mini-modale. Même
-     * traitement que editPrescribed, mais renvoie le stream du panneau rapide
-     * (#quick-panel) et non celui du compositeur (#workout-blocks). Sans JS, repli
-     * par redirection vers le compositeur.
+     * traitement que editPrescribed (`savePrescribed`), mais renvoie la ligne de
+     * résumé du panneau rapide et non celle du compositeur. Sans JS, repli par
+     * redirection vers le compositeur.
      */
     #[Route('/{id}/exercises/{prescribedId}/quick-edit', name: 'app_workout_prescribed_quick_edit', methods: ['POST'], requirements: ['id' => '\d+', 'prescribedId' => '\d+'])]
     public function quickEditPrescribed(Request $request, Workout $workout, int $prescribedId): Response
@@ -902,21 +879,20 @@ final class WorkoutController extends AbstractController
         $this->denyAccessUnlessGranted(WorkoutVoter::EDIT, $workout);
         $prescribed = $this->findPrescribed($workout, $prescribedId);
 
-        $form = $this->createPrescribedForm($prescribed, 'app_workout_prescribed_quick_edit');
-        $form->handleRequest($request);
+        $this->savePrescribed($request, $workout, $prescribed, 'app_workout_prescribed_quick_edit');
 
-        if ($form->isSubmitted() && $form->isValid()) {
-            $this->clearIrrelevantFields($prescribed);
-            // La durée estimée dérive du contenu : on la recalcule (elle s'affiche
-            // sur la case du plan, rafraîchie à la fermeture de la modale).
-            $workout->setEstimatedDurationMinutes($this->estimator->estimateMinutes($workout));
-            $this->entityManager->flush();
-        }
-
+        // Enregistrement automatique (#86) : seule la ligne de résumé de l'exercice
+        // est re-rendue, le formulaire reste ouvert sous le curseur. La liste de
+        // séries détaillées n'est pas affichée dans la modale : même quand le
+        // compteur l'a fait bouger, le résumé suffit à le refléter.
         if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
             $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
 
-            return $this->render('workout/stream/quick_panel.stream.html.twig', $this->quickPanelContext($workout));
+            return $this->render('workout/stream/quick_exo_summary.stream.html.twig', [
+                'prescribed' => $prescribed,
+                'rank' => $this->supersetLabels($workout)[(int) $prescribed->getId()] ?? null,
+                'summary' => $this->prescribedSummaries($workout)[(int) $prescribed->getId()] ?? '',
+            ]);
         }
 
         return $this->redirectToRoute('app_workout_edit', ['id' => $workout->getId()]);
@@ -1256,6 +1232,47 @@ final class WorkoutController extends AbstractController
         ]);
     }
 
+    /**
+     * Traitement commun du formulaire d'un exercice prescrit, au compositeur comme
+     * dans l'édition rapide d'une case : deux écrans, un seul enregistrement.
+     *
+     * En mode détaillé, le compteur `sets` pilote la liste : le monter ou le
+     * descendre ajoute/retire des séries de travail en fin (l'échauffement n'est
+     * jamais touché). C'est l'autre sens de la synchro. L'édition rapide le
+     * sautait : un compteur changé là laissait la liste à son ancien nombre.
+     *
+     * @return bool vrai si la liste de séries détaillées a changé
+     */
+    private function savePrescribed(Request $request, Workout $workout, PrescribedExercise $prescribed, string $route): bool
+    {
+        $detailedBefore = $prescribed->hasDetailedSets();
+        $countBefore = $prescribed->getWorkingSetCount();
+
+        $form = $this->createPrescribedForm($prescribed, $route);
+        $form->handleRequest($request);
+
+        if (!$form->isSubmitted() || !$form->isValid()) {
+            return false;
+        }
+
+        $listChanged = false;
+        if ($detailedBefore && $prescribed->getSets() !== $countBefore) {
+            foreach ($this->setSynchronizer->applyScalarToDetailed($prescribed, (int) $prescribed->getSets()) as $created) {
+                $this->entityManager->persist($created);
+            }
+            $this->setSynchronizer->syncScalarFromDetailed($prescribed);
+            $listChanged = true;
+        }
+
+        $this->clearIrrelevantFields($prescribed);
+        // La durée estimée dérive du contenu : on la recalcule à chaque save (elle
+        // s'affiche aussi sur la case du plan, rafraîchie à la fermeture de la modale).
+        $workout->setEstimatedDurationMinutes($this->estimator->estimateMinutes($workout));
+        $this->entityManager->flush();
+
+        return $listChanged;
+    }
+
     /** @return FormInterface<PrescribedExercise> */
     private function createPrescribedForm(PrescribedExercise $prescribed, string $route = 'app_workout_prescribed_edit'): FormInterface
     {
@@ -1359,24 +1376,34 @@ final class WorkoutController extends AbstractController
             }
         }
 
-        // Rangs de superset : la mini-modale n'édite que des valeurs, mais il faut
-        // voir qu'un exercice est enchaîné avant de toucher à ses reps.
-        $supersetLabels = [];
-        foreach ($this->planFlattener->flattenWorkout($workout)['blocks'] as $flatBlock) {
-            foreach ($flatBlock['exercises'] as $flat) {
-                if (null !== $flat['groupLabel']) {
-                    $supersetLabels[(int) $flat['prescribed']->getId()] = $flat['groupLabel'];
-                }
-            }
-        }
-
         return [
             'workout' => $workout,
             'prescribedForms' => $prescribedForms,
             'summaries' => $this->prescribedSummaries($workout),
-            'supersetLabels' => $supersetLabels,
+            'supersetLabels' => $this->supersetLabels($workout),
             'offProgram' => $this->offProgramRecap->forWorkout($workout),
         ];
+    }
+
+    /**
+     * Rangs de superset (« A1 ») par id d'exercice prescrit, pour les seuls
+     * exercices enchaînés. La mini-modale n'édite que des valeurs, mais il faut
+     * voir qu'un exercice est enchaîné avant de toucher à ses reps.
+     *
+     * @return array<int, string>
+     */
+    private function supersetLabels(Workout $workout): array
+    {
+        $labels = [];
+        foreach ($this->planFlattener->flattenWorkout($workout)['blocks'] as $flatBlock) {
+            foreach ($flatBlock['exercises'] as $flat) {
+                if (null !== $flat['groupLabel']) {
+                    $labels[(int) $flat['prescribed']->getId()] = $flat['groupLabel'];
+                }
+            }
+        }
+
+        return $labels;
     }
 
     /**

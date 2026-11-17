@@ -159,15 +159,20 @@
         </div>
 
         {# Mini-modale d'édition rapide : le panneau des exercices de la copie locale
-           est chargé en fetch dans #quick-panel, puis re-rendu par Turbo Stream à
-           chaque enregistrement. data-turbo="false" : Turbo n'intercepte aucun
-           formulaire de la modale, le contrôleur applique lui-même les streams. #}
+           est chargé en fetch dans #quick-panel ; chaque champ s'y enregistre seul,
+           comme au compositeur (#86). data-turbo="false" : Turbo n'intercepte aucun
+           formulaire de la modale, le contrôleur applique lui-même les streams.
+           `save-status` : la modale a son propre indicateur d'enregistrement,
+           celui de la page est sous le voile. Il reste affiché après « Enregistré »
+           (`hide-after` à 0) : c'est lui qu'on regarde avant de fermer. #}
         <dialog class="kd-modal kd-modal--quick" data-plangrid-target="dialog" data-turbo="false"
+                data-controller="save-status" data-save-status-hide-after-value="0"
                 data-action="click->plangrid#backdrop">
             <div class="kd-modal__card kd-modal__card--quick">
                 <header class="kd-modal__head">
                     <span class="kd-modal__title">{{ ux_icon('lucide:sliders-horizontal') }} Modifier cette case seulement</span>
                     <div class="kd-modal__headactions">
+                        {{ include('components/_save_status.html.twig', {inline: true}, with_context = false) }}
                         <a data-plangrid-target="fullLink" href="#" class="kd-btn kd-btn--secondary kd-btn--sm">
                             {{ ux_icon('lucide:square-pen') }} Ouvrir dans l'éditeur de séance
                         </a>

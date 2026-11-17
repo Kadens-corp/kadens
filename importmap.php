@@ -29,6 +29,9 @@ return [
     'search' => ['path' => './assets/search.js'],
     // L'aperçu au survol d'une séance, partagé par `preview` et `plangrid` (#69).
     'hover-preview' => ['path' => './assets/hover_preview.js'],
+    // Le suivi des enregistrements automatiques, partagé par `composer`,
+    // `plangrid`, `inline-edit` et l'indicateur `save-status` (#86).
+    'save-status' => ['path' => './assets/save_status.js'],
     '@hotwired/stimulus' => ['version' => '3.2.2'],
     '@symfony/stimulus-bundle' => ['path' => './vendor/symfony/stimulus-bundle/assets/dist/loader.js'],
     '@hotwired/turbo' => ['version' => '8.0.23'],

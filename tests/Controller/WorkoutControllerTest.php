@@ -1092,6 +1092,81 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertSame(6, $reloaded->getSets());
     }
 
+    /**
+     * #86 : l'édition rapide d'une case enregistre seule, comme le compositeur.
+     * Plus de bouton par exercice, et la réponse ne remplace que la ligne de
+     * résumé : re-rendre tout le panneau refermait l'exercice sous le curseur.
+     */
+    public function testQuickEditAutosavesAndAnswersWithTheSummaryOnly(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Haut du corps');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $prescribed = $this->makePrescribed($this->createExercise($user, 'Développé couché'), 0)->setSets(3)->setReps(10);
+        $block->addPrescribedExercise($prescribed);
+        $workout->addBlock($block);
+        $this->em->persist($block);
+        $this->em->flush();
+        $workoutId = $workout->getId();
+        $prescribedId = $prescribed->getId();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workoutId.'/quick-panel');
+        self::assertResponseIsSuccessful();
+        $form = $crawler->filter('form[name="prescribed_'.$prescribedId.'"]');
+        self::assertCount(0, $form->filter('button[type="submit"]'), 'Pas de bouton : tout s\'enregistre seul.');
+        self::assertStringContainsString('change->plangrid#submitForm', (string) $form->filter('input[name="prescribed_'.$prescribedId.'[reps]"]')->attr('data-action'));
+        self::assertCount(1, $crawler->filter('#quickexo-sum-'.$prescribedId));
+
+        $values = $form->form()->getPhpValues();
+        $values['prescribed_'.$prescribedId]['reps'] = '8';
+        $this->client->request('POST', (string) $form->attr('action'), $values, [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']);
+
+        self::assertResponseIsSuccessful();
+        $content = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('<turbo-stream action="replace" target="quickexo-sum-'.$prescribedId.'">', $content);
+        self::assertStringNotContainsString('target="quick-panel"', $content);
+        self::assertStringContainsString('Développé couché', $content);
+
+        $this->em->clear();
+        self::assertSame(8, $this->mustFind(PrescribedExercise::class, $prescribedId)->getReps());
+    }
+
+    /**
+     * L'édition rapide partage le traitement du compositeur : en séries détaillées,
+     * changer le compteur ajoute ou retire des séries de travail. Elle le sautait,
+     * et la liste restait à son ancien nombre.
+     */
+    public function testQuickEditSyncsTheDetailedSetsLikeTheComposer(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Jambes');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $prescribed = $this->makePrescribed($this->createExercise($user, 'Squat'), 0)->setSets(3);
+        foreach ([0, 1, 2] as $position) {
+            $prescribed->addDetailedSet((new PrescribedSet())->setSetType(SetType::NORMAL)->setPosition($position)->setReps(5)->setWeightKg(100.0));
+        }
+        $block->addPrescribedExercise($prescribed);
+        $workout->addBlock($block);
+        $this->em->persist($block);
+        $this->em->flush();
+        $workoutId = $workout->getId();
+        $prescribedId = $prescribed->getId();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workoutId.'/quick-panel');
+        $form = $crawler->filter('form[name="prescribed_'.$prescribedId.'"]');
+        $values = $form->form()->getPhpValues();
+        $values['prescribed_'.$prescribedId]['sets'] = '5';
+        $this->client->request('POST', (string) $form->attr('action'), $values, [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']);
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        $reloaded = $this->mustFind(PrescribedExercise::class, $prescribedId);
+        self::assertCount(5, $reloaded->getDetailedSets());
+        self::assertSame(5, $reloaded->getSets());
+    }
+
     private function createExercise(User $owner, string $name, ?string $nameEn = null): Exercise
     {
         $exercise = (new Exercise())

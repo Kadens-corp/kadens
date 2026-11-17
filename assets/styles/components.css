@@ -13922,3 +13922,116 @@ a.kd-coachitem__date:hover {
     margin-top: var(--kd-space-5);
     font-size: 15px;
 }
+
+/* ============================================================================
+   Indicateur d'enregistrement automatique (#86) — `components/_save_status`
+   Deux formes : pastille fixe en bas de l'écran pour la page (invisible au
+   repos, s'efface après « Enregistré »), pastille en ligne dans l'en-tête de la
+   modale d'édition rapide (toujours là). Un seul libellé visible à la fois,
+   choisi par `data-state` sur le conteneur.
+   ========================================================================== */
+.kd-savestatus {
+    position: fixed;
+    right: var(--kd-space-7);
+    bottom: calc(var(--kd-navbar-h, 0px) + var(--kd-space-7));
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    padding: var(--kd-space-2) var(--kd-space-5);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface-raised);
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    pointer-events: none;
+}
+
+.kd-savestatus[data-state="idle"]:not(.kd-savestatus--inline) {
+    display: none;
+}
+
+/* La pastille ne bloque aucun clic, sauf quand elle porte « Réessayer ». */
+.kd-savestatus[data-state="error"] {
+    pointer-events: auto;
+}
+
+.kd-savestatus--inline {
+    position: static;
+    padding: 0;
+    border: 0;
+    background: none;
+    pointer-events: auto;
+}
+
+.kd-savestatus__state {
+    display: none;
+    align-items: center;
+    gap: var(--kd-space-2);
+    white-space: nowrap;
+}
+
+.kd-savestatus__state svg {
+    width: 14px;
+    height: 14px;
+    flex: none;
+}
+
+.kd-savestatus[data-state="idle"] .kd-savestatus__state--idle,
+.kd-savestatus[data-state="pending"] .kd-savestatus__state--pending,
+.kd-savestatus[data-state="saved"] .kd-savestatus__state--saved,
+.kd-savestatus[data-state="error"] .kd-savestatus__state--error,
+.kd-savestatus[data-state="refused"] .kd-savestatus__state--refused {
+    display: inline-flex;
+}
+
+.kd-savestatus__state--idle {
+    color: var(--color-text-faint);
+}
+
+.kd-savestatus__state--pending svg {
+    animation: kd-savestatus-spin 900ms linear infinite;
+}
+
+.kd-savestatus__state--saved svg {
+    color: var(--color-status-done);
+}
+
+.kd-savestatus[data-state="error"],
+.kd-savestatus[data-state="refused"] {
+    border-color: var(--color-status-missed);
+    color: var(--color-status-missed);
+}
+
+.kd-savestatus__retry {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+    margin-left: var(--kd-space-3);
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-weight: var(--kd-weight-semibold);
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+@keyframes kd-savestatus-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Téléphone : l'en-tête de la modale n'a pas la place d'une phrase à côté de ses
+   deux boutons ; au repos, l'icône suffit. Les autres états gardent leur texte. */
+@media (max-width: 560px) {
+    .kd-savestatus:not(.kd-savestatus--inline) {
+        left: var(--kd-space-7);
+        right: auto;
+    }
+
+    .kd-savestatus--inline .kd-savestatus__state--idle {
+        font-size: 0;
+    }
+}

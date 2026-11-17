@@ -33,7 +33,10 @@
             <style data-turbo-track="dynamic">{{ activity_palette }}</style>
         {% endif %}
     </head>
-    <body>
+    {# `save-status` : l'indicateur d'enregistrement automatique de la page (#86),
+       que le compositeur, l'éditeur de plan et l'édition en ligne alimentent. Sur
+       <body> parce que la source peut être n'importe où dans <main>. #}
+    <body data-controller="save-status">
         {# Évitement du chrome : le header est collant et porte 5 ou 6 entrées
            + un menu, qu'un utilisateur clavier retabulerait à chaque navigation.
            Visible seulement une fois focalisé (.kd-skip). #}
@@ -45,6 +48,9 @@
         <main id="main" class="{% block main_class %}kd-page{% endblock %}">
             {% block body %}{% endblock %}
         </main>
+        {% if app.user %}
+            {{ include('components/_save_status.html.twig', {}, with_context = false) }}
+        {% endif %}
 
         {# Un message programmé à lire aujourd'hui, sur la page où l'on arrive.
            Une modale à la fois : s'il y en a un, l'invitation à choisir un pseudo

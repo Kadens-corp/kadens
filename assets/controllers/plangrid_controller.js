@@ -2,6 +2,7 @@ import { Controller } from '@hotwired/stimulus';
 import { renderStreamMessage } from '@hotwired/turbo';
 import Sortable from 'sortablejs';
 import HoverPreview from 'hover-preview';
+import { ensureSaved, resetSaveStatus, trackSave } from 'save-status';
 
 /*
  * Éditeur de trame de plan. Deux responsabilités, toutes deux en amélioration
@@ -29,8 +30,11 @@ import HoverPreview from 'hover-preview';
  *
  * 2. Édition rapide : cliquer une séance ouvre une mini-modale. On charge en `fetch`
  *    le panneau de ses exercices (`app_workout_quick_panel`) dans #quick-panel, où
- *    chaque paramètre (reps/séries/repos…) est éditable. Enregistrer un exercice
- *    poste en `fetch` (format stream) et met à jour #quick-panel, sans recharger.
+ *    chaque paramètre (reps/séries/repos…) est éditable. Chaque champ s'enregistre
+ *    seul au changement, comme au compositeur (#86) : un seul mode d'enregistrement
+ *    dans toute l'app, plus de bouton par exercice qu'on oublie avant de fermer.
+ *    Le serveur ne renvoie que la ligne de résumé de l'exercice, le formulaire
+ *    reste ouvert. L'indicateur `save-status` de la modale dit où on en est.
  *    La modale porte `data-turbo="false"` : Turbo n'intercepte rien, on applique
  *    nous-mêmes les streams (comme le compositeur). Le lien « Édition complète »
  *    renvoie au compositeur pour la structure (blocs, ordre). À la fermeture, si un
@@ -55,6 +59,9 @@ export default class extends Controller {
     initialize() {
         this.sortables = new WeakMap();
         this.dirty = false;
+        // Enregistrements de la modale encore en vol : la trame ne se rafraîchit
+        // qu'une fois tous revenus, sinon elle relirait l'état d'avant.
+        this.saving = new Set();
         // Palette : filtre client + mode tampon (une séance « armée » se pose au clic
         // sur les cases). L'état survit aux re-render de #plan-grid (porté ici).
         this.libQuery = '';
@@ -183,12 +190,20 @@ export default class extends Controller {
     // ---- Mini-modale d'édition rapide -------------------------------------
 
     dialogTargetConnected(el) {
+        // Échap ferme le <dialog> sans forcément faire quitter le champ en cours :
+        // on le quitte nous-mêmes, pour que son `change` parte (et s'enregistre)
+        // avant la fermeture. Le bouton et le voile, eux, prennent le focus au clic.
+        el.addEventListener('cancel', () => {
+            if (el.contains(document.activeElement)) document.activeElement.blur();
+        });
         // ESC / bouton / backdrop ferment le <dialog> et déclenchent l'event `close`.
         // Un enregistrement change la durée estimée affichée sur la case et les
         // volumes de la semaine : on re-rend la trame seule, sans toucher au reste
         // de la page (donc sans perdre la position de défilement).
-        el.addEventListener('close', () => {
-            if (this.dirty) this.refreshGrid();
+        el.addEventListener('close', async () => {
+            if (!this.dirty) return;
+            await Promise.all([...this.saving]);
+            this.refreshGrid();
         });
     }
 
@@ -215,6 +230,7 @@ export default class extends Controller {
         if (!panelUrl || !this.hasPanelTarget || !this.hasDialogTarget) return;
 
         this.dirty = false;
+        resetSaveStatus(this.dialogTarget);
         if (this.hasFullLinkTarget && fullUrl) this.fullLinkTarget.href = fullUrl;
         this.panelTarget.innerHTML = '<p class="kd-quickedit__loading">Chargement…</p>';
         this.dialogTarget.showModal();
@@ -228,8 +244,18 @@ export default class extends Controller {
         }
     }
 
-    /** Enregistrement d'un exercice depuis le panneau : fetch + Turbo Stream appliqué. */
-    async onPanelSubmit(event) {
+    /** Un champ du panneau a changé : on enregistre son exercice (cf. onPanelSubmit). */
+    submitForm(event) {
+        event.target.closest('form')?.requestSubmit();
+    }
+
+    /**
+     * Enregistrement depuis le panneau : fetch + Turbo Stream appliqué, suivi par
+     * l'indicateur de la modale. Ce qui part est figé au premier essai, pour que
+     * « Réessayer » renvoie la même chose. Un échec ne recharge plus la page : ça
+     * fermait la modale et emportait la saisie.
+     */
+    onPanelSubmit(event) {
         const form = event.target;
         if (!(form instanceof HTMLFormElement)) return;
         if (!this.hasPanelTarget || !this.panelTarget.contains(form)) return;
@@ -237,18 +263,28 @@ export default class extends Controller {
         event.preventDefault();
         this.dirty = true;
 
-        try {
-            const response = await fetch(form.action, {
-                method: (form.getAttribute('method') || 'post').toUpperCase(),
-                body: new FormData(form),
-                headers: { Accept: 'text/vnd.turbo-stream.html' },
-                credentials: 'same-origin',
-            });
-            renderStreamMessage(await response.text());
-        } catch (error) {
-            console.error('Quick edit failed:', error);
-            window.location.reload();
-        }
+        const method = (form.getAttribute('method') || 'post').toUpperCase();
+        const { action } = form;
+        const body = new FormData(form);
+
+        const run = () => {
+            const request = (async () => {
+                const response = await ensureSaved(await fetch(action, {
+                    method,
+                    body,
+                    headers: { Accept: 'text/vnd.turbo-stream.html' },
+                    credentials: 'same-origin',
+                }));
+                renderStreamMessage(await response.text());
+            })();
+            const settled = request.catch(() => {});
+            this.saving.add(settled);
+            settled.then(() => this.saving.delete(settled));
+
+            return request;
+        };
+
+        trackSave(form, run);
     }
 
     close() {

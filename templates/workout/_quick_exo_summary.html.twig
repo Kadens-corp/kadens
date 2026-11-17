@@ -1,0 +1,22 @@
+{# Ligne de résumé d'un exercice dans l'édition rapide d'une case : rang de
+   superset, code, nom, pastille des paramètres. Le <summary> du <details>.
+
+   Sorti de `_quick_panel` pour être re-rendu SEUL après un enregistrement
+   automatique (#86), comme `_cexo_row` au compositeur : le formulaire reste
+   ouvert, le curseur dans le champ suivant. L'état déplié est porté par le
+   <details>, qui n'est pas remplacé.
+   Contexte : prescribed, rank (« A1 » ou null), summary. #}
+{% import 'components/_activity.html.twig' as activity %}
+{% set ex = prescribed.exercise %}
+{% set mod = ex ? activity.modifier(ex.activity) : '' %}
+<summary class="kd-quickexo__sum" id="quickexo-sum-{{ prescribed.id }}">
+    {% if rank %}
+        <span class="kd-cexo__rank" title="Enchaîné sans repos">{{ rank }}</span>
+    {% endif %}
+    <span class="kd-cexo__code{{ mod ? ' kd-cexo__code--act kd-act--' ~ mod }}">{{ ex ? exercise_name(ex)|slice(0, 2)|upper : '??' }}</span>
+    <span class="kd-quickexo__name">{{ ex ? exercise_name(ex) : 'Exercice supprimé' }}</span>
+    {% if summary is not empty %}
+        <span class="kd-cexo__pill">{{ summary }}</span>
+    {% endif %}
+    <span class="kd-quickexo__chevron">{{ ux_icon('lucide:chevron-down') }}</span>
+</summary>
