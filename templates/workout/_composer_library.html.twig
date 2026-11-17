@@ -15,11 +15,11 @@
 <div class="kd-libpanel">
     <div class="kd-libpanel__head">
         <div class="kd-libpanel__title">
-            <span>Bibliothèque</span>
+            <span>Exercices</span>
             <span class="kd-libpanel__count">{{ libraryCount }} exos</span>
             {# Visible uniquement en feuille (sous 900px) : sur écran large, le
                panneau n'est pas un calque, il n'y a rien à fermer. #}
-            <button type="button" class="kd-libpanel__close" data-action="composer#closeLib" aria-label="Fermer la bibliothèque">
+            <button type="button" class="kd-libpanel__close" data-action="composer#closeLib" aria-label="Fermer la liste des exercices">
                 {{ ux_icon('lucide:x') }}
             </button>
         </div>
@@ -89,7 +89,7 @@
                 <span class="kd-libx__add" aria-hidden="true">{{ ux_icon('lucide:plus') }}</span>
             </button>
         {% else %}
-            <p class="kd-libpanel__empty">Ta bibliothèque est vide. Crée un exercice d'abord.</p>
+            <p class="kd-libpanel__empty">Aucun exercice pour l'instant. Crée-en un d'abord.</p>
         {% endfor %}
     </div>
 

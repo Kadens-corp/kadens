@@ -60,7 +60,7 @@
         </div>
 
         {% if paletteOwners %}
-            <div class="kd-libfilters" aria-label="Bibliothèque">
+            <div class="kd-libfilters" aria-label="À qui">
                 <button type="button" class="kd-libfilter kd-libfilter--on"
                         data-owner-pill data-owner="all"
                         data-action="plangrid#pickOwner">Toutes · {{ paletteCount }}</button>
@@ -87,7 +87,7 @@
                 <span class="kd-libx__body">
                     <span class="kd-libx__name">{{ w.title }}</span>
                     {% if card.mine %}
-                        <span class="kd-scope" title="Ajoutée au plan, elle sera copiée dans sa bibliothèque">
+                        <span class="kd-scope" title="Ajoutée au plan, elle sera copiée dans ses séances">
                             {{ ux_icon('lucide:user') }} À moi
                         </span>
                     {% endif %}
@@ -139,7 +139,7 @@
                 </span>
             </button>
         {% else %}
-            <p class="kd-libpanel__empty">Aucune séance en bibliothèque. Crée-en une d'abord.</p>
+            <p class="kd-libpanel__empty">Tu n'as pas encore de séance. Crée-en une d'abord.</p>
         {% endfor %}
     </div>
 

@@ -94,7 +94,7 @@ final class ExcelExporterTest extends TestCase
         self::assertSame('Dips', $this->plain($sheet, 'A'.($bench + 2)));
         self::assertSame('Lent en descente', $this->plain($sheet, 'E'.($bench + 2)));
 
-        self::assertSame('02  RETOUR AU CALME · × 2 TOURS', $this->plain($sheet, 'A'.($bench + 3)));
+        self::assertSame('02  RETOUR AU CALME · RÉPÉTÉ 2 FOIS', $this->plain($sheet, 'A'.($bench + 3)));
     }
 
     /** Le libellé d'un exercice passe par ExerciseNaming : langue du lecteur, repli français. */

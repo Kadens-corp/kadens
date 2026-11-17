@@ -17,7 +17,7 @@
         </a>
     {% else %}
         <a href="{{ path('app_exercise_index') }}" class="kd-backlink">
-            {{ ux_icon('lucide:arrow-left') }} Bibliothèque
+            {{ ux_icon('lucide:arrow-left') }} Exercices
         </a>
     {% endif %}
 
@@ -33,9 +33,9 @@
                 {{ activity.badge(exercise.activity) }}
                 <span class="kd-scope">
                     {% if exercise.owner is null %}
-                        {{ ux_icon('lucide:library') }} Bibliothèque
+                        {{ ux_icon('lucide:library') }} Du site
                     {% else %}
-                        {{ ux_icon('lucide:user') }} Perso
+                        {{ ux_icon('lucide:user') }} À moi
                     {% endif %}
                 </span>
             </div>

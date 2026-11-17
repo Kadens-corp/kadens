@@ -1,6 +1,6 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Composer — {{ workout.title }}{% endblock %}
+{% block title %}Modifier la séance — {{ workout.title }}{% endblock %}
 
 {% block main_class %}kd-page kd-page--wide{% endblock %}
 
@@ -43,7 +43,7 @@
        `rename` (posé par la création en un clic) ouvre le titre d'emblée. #}
     <div class="kd-pagehead">
         <div>
-            <p class="kd-eyebrow kd-eyebrow--accent">Compositeur de séance</p>
+            <p class="kd-eyebrow kd-eyebrow--accent">Éditeur de séance</p>
             <h1 class="kd-title kd-inlineedit"
                 data-controller="inline-edit"
                 data-inline-edit-autofocus-value="{{ app.request.query.get('rename') ? 'true' : 'false' }}"

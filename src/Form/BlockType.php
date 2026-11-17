@@ -25,11 +25,11 @@ class BlockType extends AbstractType
                 'choice_label' => fn (BlockRole $role) => $role->getLabel(),
             ])
             ->add('rounds', IntegerType::class, [
-                'label' => 'Tours',
+                'label' => 'Répéter le bloc',
                 'attr' => ['min' => 1],
             ])
             ->add('label', TextType::class, [
-                'label' => 'Libellé',
+                'label' => 'Nom (facultatif)',
                 'required' => false,
             ])
         ;

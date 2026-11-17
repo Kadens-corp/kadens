@@ -191,7 +191,7 @@ final class CoachOriginTest extends WebTestCase
         $this->client->loginUser($athlete);
         $this->client->request('GET', '/');
 
-        self::assertSelectorTextContains('.kd-home__coachadded', 'coach@example.com a ajouté ces 7 derniers jours : 3 séances à ton agenda, 1 séance à ta bibliothèque et 1 plan.');
+        self::assertSelectorTextContains('.kd-home__coachadded', 'coach@example.com a ajouté ces 7 derniers jours : 3 séances à ton agenda, 1 séance dans « Mes séances » et 1 plan.');
         self::assertSelectorExists('.kd-home__coachadded a[href="/calendar"]');
     }
 

@@ -91,7 +91,7 @@
                 {% set parts = parts|merge([{n: added.scheduled, label: (added.scheduled > 1 ? 'séances' : 'séance') ~ ' à ton agenda', href: path('app_calendar_index')}]) %}
             {% endif %}
             {% if added.workouts %}
-                {% set parts = parts|merge([{n: added.workouts, label: (added.workouts > 1 ? 'séances' : 'séance') ~ ' à ta bibliothèque', href: path('app_workout_index')}]) %}
+                {% set parts = parts|merge([{n: added.workouts, label: (added.workouts > 1 ? 'séances' : 'séance') ~ ' dans « Mes séances »', href: path('app_workout_index')}]) %}
             {% endif %}
             {% if added.plans %}
                 {% set parts = parts|merge([{n: added.plans, label: added.plans > 1 ? 'plans' : 'plan', href: path('app_plan_template_index')}]) %}

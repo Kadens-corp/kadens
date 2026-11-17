@@ -53,7 +53,7 @@
                 {%- if summary.supersets %}{{ summary.supersets }} superset{{ summary.supersets > 1 ? 's' }}{% endif -%}
                 {%- if summary.supersets and summary.circuits %} · {% endif -%}
                 {%- if summary.circuits %}{{ summary.circuits }} circuit{{ summary.circuits > 1 ? 's' }}{% endif -%}
-                {%- if not summary.supersets and not summary.circuits %}Séance à plat{% endif -%}
+                {%- if not summary.supersets and not summary.circuits %}Sans enchaînement{% endif -%}
             </p>
         </div>
     {% endif %}

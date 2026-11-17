@@ -18,19 +18,21 @@
             } }) }}
             {{ form_widget(blockForm.label, { attr: {
                 class: 'kd-cblock__label',
-                placeholder: 'intitulé libre',
+                placeholder: 'Nom (facultatif)',
+                'aria-label': 'Nom du bloc (facultatif)',
                 'data-action': 'change->composer#submitForm',
             } }) }}
-            <div class="kd-cblock__rounds">
-                <button type="button" class="kd-cblock__step" data-action="composer#roundsDec" aria-label="Moins de tours">−</button>
+            <div class="kd-cblock__rounds" title="Répéter le bloc">
+                <span class="kd-cblock__roundslabel">Répéter</span>
+                <button type="button" class="kd-cblock__step" data-action="composer#roundsDec" aria-label="Répéter une fois de moins">−</button>
                 {{ ux_icon('lucide:repeat') }}
                 {{ form_widget(blockForm.rounds, { attr: {
                     class: 'kd-cblock__roundsval',
                     'data-action': 'change->composer#submitForm',
-                    'aria-label': 'Nombre de tours',
+                    'aria-label': 'Répéter le bloc : nombre de fois',
                 } }) }}
-                <span class="kd-cblock__roundslabel">tours</span>
-                <button type="button" class="kd-cblock__step" data-action="composer#roundsInc" aria-label="Plus de tours">+</button>
+                <span class="kd-cblock__roundslabel">fois</span>
+                <button type="button" class="kd-cblock__step" data-action="composer#roundsInc" aria-label="Répéter une fois de plus">+</button>
             </div>
         {{ form_end(blockForm) }}
 
