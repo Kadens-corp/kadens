@@ -65,7 +65,7 @@ final class ApiExceptionListener
         Response::HTTP_CONFLICT => 'Conflit avec l\'état actuel de la ressource.',
         Response::HTTP_UNSUPPORTED_MEDIA_TYPE => 'Corps de requête JSON attendu.',
         Response::HTTP_UNPROCESSABLE_ENTITY => 'Les données envoyées sont invalides.',
-        Response::HTTP_TOO_MANY_REQUESTS => 'Trop de requêtes. Réessayez dans un instant.',
+        Response::HTTP_TOO_MANY_REQUESTS => 'Trop de requêtes. Réessaie dans un instant.',
         Response::HTTP_SERVICE_UNAVAILABLE => 'Service temporairement indisponible.',
     ];
 
