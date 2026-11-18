@@ -3380,6 +3380,14 @@ a.kd-scope--link:hover {
     font-size: 11px;
 }
 
+/* « % de la série la plus lourde » (#106) : l'intitulé entier prendrait plus de
+   largeur que tout le reste du tableau, sur une colonne de « 50 % ». Il passe sur
+   plusieurs lignes, borné à la largeur d'une colonne de chiffres. */
+.kd-settable thead .kd-settable__c-pct {
+    width: 7rem;
+    white-space: normal;
+}
+
 /* ----------------------------------------------------------------------------
    Séance datée — le RÉALISÉ à côté du PRÉVU (KL-07)
 

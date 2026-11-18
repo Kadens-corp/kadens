@@ -467,10 +467,10 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertCount(4, $crawler->filter('.kd-settable tbody tr'));
         self::assertStringContainsString('8 reps', $crawler->filter('.kd-settable')->text());
         self::assertStringContainsString('60 kg', $crawler->filter('.kd-settable')->text());
-        // Deux colonnes sans rien à dire disparaissent : le « % du max » n'aurait
+        // Deux colonnes sans rien à dire disparaissent : le pourcentage n'aurait
         // que des 100 % à charge constante, et « Type » que des cases vides.
         self::assertCount(3, $crawler->filter('.kd-settable thead th'));
-        self::assertStringNotContainsString('% du max', $crawler->filter('.kd-settable')->text());
+        self::assertStringNotContainsString('%', $crawler->filter('.kd-settable thead')->text());
         self::assertStringNotContainsString('Type', $crawler->filter('.kd-settable')->text());
 
         // Bandeau de synthèse : 4 séries × 8 reps × 60 kg = 1 920 kg.
@@ -547,8 +547,11 @@ final class WorkoutControllerTest extends WebTestCase
         // Une série est qualifiée (échauffement) : la colonne « Type » a un sens.
         self::assertCount(5, $crawler->filter('.kd-settable thead th'));
         self::assertStringContainsString('03', $crawler->filter('.kd-settable tbody tr:last-child')->text());
-        // % de la charge la plus lourde : l'échauffement à 70/140.
+        // % de la charge la plus lourde : l'échauffement à 70/140. L'en-tête dit
+        // à quoi il se rapporte, « % du max » se lisait comme un % du 1RM (#106).
         self::assertStringContainsString('50 %', $crawler->filter('.kd-settable')->text());
+        self::assertStringContainsString('% de la série la plus lourde', $crawler->filter('.kd-settable thead')->text());
+        self::assertStringNotContainsString('du max', $crawler->filter('.kd-settable thead')->text());
     }
 
     public function testShowDeniedToNonOwner(): void

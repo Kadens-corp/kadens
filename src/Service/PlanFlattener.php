@@ -226,7 +226,7 @@ final class PlanFlattener
             'rest' => $chained ? 0 : $prescribed->getRestSeconds(),
             'chained' => $chained,
             'notes' => $prescribed->getNotes(),
-            // Référence du « % du max » affiché par le tableau de séries.
+            // Référence du « % de la série la plus lourde » du tableau de séries.
             'topWeightKg' => $prescribed->getTopWeightKg(),
             // Rang dans le superset (« A1 », « A2 »…), null hors liaison.
             'groupLabel' => $groupLabel,

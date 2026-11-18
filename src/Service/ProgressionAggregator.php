@@ -449,7 +449,7 @@ final class ProgressionAggregator
         foreach ($weeks as $occurrences) {
             foreach ($occurrences as $occurrence) {
                 $pe = $occurrence['pe'];
-                // Charge/séries détaillé-aware : top set et décompte dérivent des
+                // Charge/séries détaillé-aware : série la plus lourde et décompte dérivent des
                 // lignes en mode détaillé, du scalaire sinon.
                 $has['weight'] = $has['weight'] || null !== $pe->getTopWeightKg();
                 $has['pace'] = $has['pace'] || null !== $pe->getPaceSecondsPerKm();
@@ -460,7 +460,7 @@ final class ProgressionAggregator
         }
 
         [$metric, $metricLabel, $lowerIsBetter] = match (true) {
-            $has['weight'] => ['weight', 'Charge (top set)', false],
+            $has['weight'] => ['weight', 'Série la plus lourde', false],
             $has['pace'] => ['pace', 'Allure', true],
             $has['distance'] => ['distance', 'Distance', false],
             $has['duration'] => ['duration', 'Durée', false],
@@ -513,20 +513,24 @@ final class ProgressionAggregator
 
         $min ??= 0.0;
         $max ??= 0.0;
-        $span = $max - $min;
+        // Axe à zéro (#106) : une barre deux fois plus haute veut dire une valeur
+        // deux fois plus grande. L'ancienne échelle entre min et max faisait de
+        // 30 kg une barre minuscule face à 37,5 kg, alors que c'est 80 %. Une
+        // progression de plan est faite de petits écarts : c'est la vérité à
+        // montrer, et les valeurs écrites au-dessus des barres donnent le détail.
+        // Même règle que le volume hebdomadaire (heightPct).
+        // Allure : plus bas = plus rapide. La barre porte alors la vitesse,
+        // rapportée à la semaine la plus rapide (min / allure), toujours depuis
+        // zéro : 270 s/km en haut, 300 s/km à 90 %.
         foreach ($points as $i => $point) {
             foreach (['value' => 'heightPct', 'realValue' => 'realHeightPct'] as $source => $target) {
-                if (null === $point[$source]) {
+                $value = $point[$source];
+                if (null === $value) {
                     continue;
                 }
-                if ($span <= 0.0) {
-                    $points[$i][$target] = 60; // plan « plat » sur cet exo : hauteur neutre
-                    continue;
-                }
-                // Échelle entre min et max (plancher 15 %) pour faire ressortir la rampe.
-                // Allure : plus bas = plus rapide, donc barre inversée (haute = mieux).
-                $ratio = $lowerIsBetter ? ($max - $point[$source]) / $span : ($point[$source] - $min) / $span;
-                $points[$i][$target] = (int) round(15 + $ratio * 85);
+                $points[$i][$target] = $lowerIsBetter
+                    ? $this->heightPct($min, $value)
+                    : $this->heightPct($value, $max);
             }
         }
 
@@ -595,7 +599,7 @@ final class ProgressionAggregator
      * Mêmes règles que partout ailleurs : un exercice sauté n'apporte rien,
      * l'échauffement et la série cochée sans valeur n'entrent ni dans la charge
      * ni dans le décompte (LoggedSet::countsAsWorking). La charge
-     * retenue est la plus lourde de la semaine (top set, comme le prescrit) ;
+     * retenue est la plus lourde de la semaine (comme le prescrit) ;
      * séries et durée se cumulent.
      *
      * @param array<int, array<int, RealizedExerciseWeek>> $exercises accumulateur, modifié en place

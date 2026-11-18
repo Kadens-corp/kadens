@@ -53,7 +53,7 @@
                 <dd>{{ trajectory.last.workingSets }}<span class="kd-wk__unit"> série{{ trajectory.last.workingSets > 1 ? 's' }}</span></dd>
                 <p class="kd-wk__kpimeta">
                     {{ trajectory.last.date|date('d/m/Y') }}
-                    {%- if trajectory.last.topWeightKg is not null %} · top {{ trajectory.last.topWeightKg|round|number_format(0, ',', ' ') }} kg{% endif %}
+                    {%- if trajectory.last.topWeightKg is not null %} · jusqu'à {{ trajectory.last.topWeightKg|weight }}{% endif %}
                 </p>
             </div>
 

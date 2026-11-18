@@ -57,13 +57,14 @@ final class ProgressionAggregatorTest extends TestCase
         self::assertCount(1, $trajectories);
         $traj = $trajectories[0];
         self::assertSame('weight', $traj['metric']);
+        // En français, et ce que c'est : « top set » ne parlait pas (#106).
+        self::assertSame('Série la plus lourde', $traj['metricLabel']);
         self::assertFalse($traj['lowerIsBetter']);
         self::assertSame(3, $traj['weeksPresent']);
         self::assertSame('up', $traj['direction']);
         self::assertSame([60.0, 65.0, 70.0], array_map(static fn (array $p): ?float => $p['value'], $traj['points']));
-        // Barres échelonnées entre min et max : plancher 15 % pour la 1re, 100 % pour la 3e.
-        self::assertSame(15, $traj['points'][0]['heightPct']);
-        self::assertSame(100, $traj['points'][2]['heightPct']);
+        // Axe à zéro (#106) : 60 kg est à 86 % de 70 kg, pas une barre minuscule.
+        self::assertSame([86, 93, 100], array_map(static fn (array $p): int => $p['heightPct'], $traj['points']));
     }
 
     public function testPaceTrajectoryIsLowerIsBetterAndImprovesWhenFaster(): void
@@ -81,8 +82,10 @@ final class ProgressionAggregatorTest extends TestCase
         self::assertTrue($traj['lowerIsBetter']);
         // Plus rapide = progression, malgré une valeur numérique qui baisse.
         self::assertSame('up', $traj['direction']);
-        // Barre inversée : la semaine la plus rapide (min) est la plus haute.
+        // La barre porte la vitesse : la semaine la plus rapide (min) est la plus
+        // haute, l'autre à 270/300 = 90 %, depuis zéro comme la charge.
         self::assertSame(100, $traj['points'][1]['heightPct']);
+        self::assertSame(90, $traj['points'][0]['heightPct']);
     }
 
     public function testExercisePresentOnlyOnceIsNotATrajectory(): void

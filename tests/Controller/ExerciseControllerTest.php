@@ -189,14 +189,18 @@ final class ExerciseControllerTest extends WebTestCase
         $this->em->persist($exercise);
         $this->em->flush();
 
-        $this->log($mine, $exercise, '2026-03-08', [[SetType::NORMAL, 5, 90.0]]);
+        $this->log($mine, $exercise, '2026-03-08', [[SetType::NORMAL, 5, 92.5]]);
         $theirs = $this->log($other, $exercise, '2026-03-09', [[SetType::NORMAL, 5, 180.0]]);
 
         $this->client->loginUser($mine);
         $this->client->request('GET', '/exercise/'.$exercise->getId());
 
         self::assertResponseIsSuccessful();
-        self::assertSelectorTextContains('.kd-wk__kpi--accent dd', '90');
+        self::assertSelectorTextContains('.kd-wk__kpi--accent dd', '93');
+        // « Dernière fois » dit la charge la plus lourde en français, au demi-kilo
+        // près : ni « top », ni 92,5 arrondi à 93 (#106).
+        self::assertSelectorTextContains('.kd-wk__kpis', "jusqu'à 92,5 kg");
+        self::assertSelectorTextNotContains('.kd-wk__kpis', 'top');
         self::assertSelectorTextNotContains('.kd-extraj', '180');
         // Et surtout : aucun lien vers la séance datée de l'autre.
         self::assertSelectorNotExists('a[href="/schedule/'.$theirs->getId().'"]');

@@ -526,7 +526,8 @@ décomposé en `_workout_program`, `_workout_sets_table`, `_workout_analysis`.
   série**, y compris quand la saisie est scalaire (`PlanFlattener::setLines`
   déroule « 3 × 15 » en trois lignes) : la répétition est le prix d'une lecture
   identique quel que soit le mode de saisie. Deux colonnes ne s'affichent que si
-  elles ont quelque chose à dire : « % du max » seulement si les charges varient,
+  elles ont quelque chose à dire : « % de la série la plus lourde » seulement si
+  les charges varient (jamais « % du max », lu comme un % du 1RM),
   « Type » seulement si une série est qualifiée. **Largeur plafonnée à 34rem** —
   étiré sur un grand écran, le tableau éloignait les reps de la charge de
   plusieurs centaines de pixels. Sous 560px il se comprime au lieu de défiler :
@@ -535,7 +536,7 @@ décomposé en `_workout_program`, `_workout_sets_table`, `_workout_analysis`.
 - **Tableau de séries en comparaison** (`.kd-settable--compared`) : le **même**
   composant, un paramètre de plus. Trois colonnes — Série / Prévu / Réalisé — et
   la charge rejoint sa cellule d'effort (« 8 × 80 kg » se lit d'un bloc, et c'est
-  ce qu'on compare) ; le « % du max » cède sa largeur. La colonne « Prévu » tombe
+  ce qu'on compare) ; le pourcentage cède sa largeur. La colonne « Prévu » tombe
   quand rien n'était prescrit en face (séance libre, exercice hors programme) :
   une colonne de tirets ne dit rien. Plafond porté à **42rem**, deux des trois
   colonnes portant une valeur composée.
