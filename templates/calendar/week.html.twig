@@ -29,7 +29,7 @@
         <div data-turbo-temporary class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:calendar-x') }}{{ message }}</div>
     {% endfor %}
 
-    <div class="kd-pagehead">
+    <div class="kd-pagehead kd-pagehead--cal">
         <div>
             <p class="kd-eyebrow">{{ subject ? 'Son agenda' : 'Planning' }} · Semaine {{ isoWeek }}</p>
             <h1 class="kd-title">{{ weekLabel }}</h1>
@@ -69,10 +69,10 @@
                     {# L'historique (calendrier annuel du fait) est rangé sous le profil ;
                        le jeton `from` y ramène à la vue quittée au lieu du profil. #}
                     <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_profile_history', back_to('cal-week', monday|date('Y-m-d'))) }}">
-                        {{ ux_icon('lucide:history') }} Historique
+                        {{ ux_icon('lucide:history') }} <span class="kd-calhead__label">Historique</span>
                     </a>
                     <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_export_schedule', {year: monthPivot.year, month: monthPivot.month}) }}">
-                        {{ ux_icon('lucide:file-down') }} Exporter en Excel
+                        {{ ux_icon('lucide:file-down') }} <span class="kd-calhead__label">Exporter en Excel</span>
                     </a>
                     {{ include('calendar/_subscribe.html.twig') }}
                     {{ include('components/_help.html.twig', {topic: 'calendar', title: 'Comment marche le calendrier'}, with_context = false) }}
@@ -81,32 +81,49 @@
         </div>
     </div>
 
-    {# Bandeau de synthèse de la semaine : charge + observance en un coup d'œil. #}
+    {# Bandeau de synthèse de la semaine : charge + observance en un coup d'œil.
+
+       Avec la légende, il se replie sous 560px (#107) : à 390px, en-tête, bilan,
+       bandeau d'objectif et légende faisaient ~520px avant la première séance.
+       Même motif que la barre de filtres des index : `<details>` rendu ouvert
+       (sans JS rien n'est caché), refermé par `collapse` sur téléphone, summary
+       masqué au-dessus. Le summary n'est pas un simple « Afficher » : fermé, il
+       garde les trois chiffres, seuls les puces et la légende disparaissent. #}
     {% set done = counts.done %}
     {% set missed = counts.missed %}
     {% set planned = counts.planned %}
     {% set rated = done + missed %}
-    <div class="kd-weekbar">
-        <div class="kd-weekstat">
-            <span class="kd-weekstat__val">{{ sessionCount }}</span>
-            <span class="kd-weekstat__lbl">séance{{ sessionCount > 1 ? 's' }}</span>
+    {% set volume = totalMinutes >= 60
+        ? (totalMinutes // 60) ~ 'h' ~ '%02d'|format(totalMinutes % 60)
+        : totalMinutes ~ '′' %}
+    {% set attendance = rated ? (done / rated * 100)|round ~ '%' : '—' %}
+    <details class="kd-calfold" open data-controller="collapse" data-collapse-media-value="(max-width: 560px)">
+        <summary class="kd-calfold__toggle">
+            <span>{{ sessionCount }} séance{{ sessionCount > 1 ? 's' }} · {{ volume }} · assiduité {{ attendance }}</span>
+            {{ ux_icon('lucide:chevron-down') }}
+        </summary>
+        <div class="kd-weekbar">
+            <div class="kd-weekstat">
+                <span class="kd-weekstat__val">{{ sessionCount }}</span>
+                <span class="kd-weekstat__lbl">séance{{ sessionCount > 1 ? 's' }}</span>
+            </div>
+            <div class="kd-weekstat">
+                <span class="kd-weekstat__val">{{ volume }}</span>
+                <span class="kd-weekstat__lbl">volume estimé</span>
+            </div>
+            <div class="kd-weekstat kd-weekstat--sep">
+                <span class="kd-weekstat__val">{{ attendance }}</span>
+                <span class="kd-weekstat__lbl">assiduité</span>
+            </div>
+            <div class="kd-weekchips">
+                <span class="kd-weekchip kd-weekchip--done">{{ ux_icon('lucide:check') }} {{ done }} faite{{ done > 1 ? 's' }}</span>
+                <span class="kd-weekchip kd-weekchip--planned">{{ ux_icon('lucide:circle-dot') }} {{ planned }} prévue{{ planned > 1 ? 's' }}</span>
+                <span class="kd-weekchip kd-weekchip--missed">{{ ux_icon('lucide:x') }} {{ missed }} manquée{{ missed > 1 ? 's' }}</span>
+            </div>
         </div>
-        <div class="kd-weekstat">
-            <span class="kd-weekstat__val">
-                {% if totalMinutes >= 60 %}{{ (totalMinutes // 60) }}h{{ '%02d'|format(totalMinutes % 60) }}{% else %}{{ totalMinutes }}′{% endif %}
-            </span>
-            <span class="kd-weekstat__lbl">volume estimé</span>
-        </div>
-        <div class="kd-weekstat kd-weekstat--sep">
-            <span class="kd-weekstat__val">{% if rated %}{{ (done / rated * 100)|round }}%{% else %}—{% endif %}</span>
-            <span class="kd-weekstat__lbl">assiduité</span>
-        </div>
-        <div class="kd-weekchips">
-            <span class="kd-weekchip kd-weekchip--done">{{ ux_icon('lucide:check') }} {{ done }} faite{{ done > 1 ? 's' }}</span>
-            <span class="kd-weekchip kd-weekchip--planned">{{ ux_icon('lucide:circle-dot') }} {{ planned }} prévue{{ planned > 1 ? 's' }}</span>
-            <span class="kd-weekchip kd-weekchip--missed">{{ ux_icon('lucide:x') }} {{ missed }} manquée{{ missed > 1 ? 's' }}</span>
-        </div>
-    </div>
+
+        {{ include('calendar/_activity_legend.html.twig') }}
+    </details>
 
     {% if nextGoal %}{{ include('calendar/_goal_banner.html.twig', {goal: nextGoal}) }}{% endif %}
 
@@ -123,8 +140,6 @@
         {% else %}
             {{ include('calendar/_addbar.html.twig', {year: monthPivot.year, month: monthPivot.month}) }}
         {% endif %}
-
-        {{ include('calendar/_activity_legend.html.twig') }}
 
         <div class="kd-week">
             {% for day in days %}

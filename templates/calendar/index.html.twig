@@ -23,7 +23,7 @@
         <div data-turbo-temporary class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:calendar-x') }}{{ message }}</div>
     {% endfor %}
 
-    <div class="kd-pagehead">
+    <div class="kd-pagehead kd-pagehead--cal">
         <div>
             <p class="kd-eyebrow">Planning</p>
             <h1 class="kd-title">{{ monthLabel }}</h1>
@@ -52,10 +52,10 @@
                 {# L'historique (calendrier annuel du fait) est rangé sous le profil ;
                    le jeton `from` y ramène à la vue quittée au lieu du profil. #}
                 <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_profile_history', back_to('cal-month', '%04d-%02d'|format(year, month))) }}">
-                    {{ ux_icon('lucide:history') }} Historique
+                    {{ ux_icon('lucide:history') }} <span class="kd-calhead__label">Historique</span>
                 </a>
                 <a class="kd-btn kd-btn--secondary kd-btn--sm" href="{{ path('app_export_schedule', {year: year, month: month}) }}">
-                    {{ ux_icon('lucide:file-down') }} Exporter en Excel
+                    {{ ux_icon('lucide:file-down') }} <span class="kd-calhead__label">Exporter en Excel</span>
                 </a>
                 {{ include('calendar/_subscribe.html.twig') }}
                 {{ include('components/_help.html.twig', {topic: 'calendar', title: 'Comment marche le calendrier'}, with_context = false) }}
@@ -70,9 +70,39 @@
          data-caladd-focus-value="{{ focusDate ?? '' }}">
         {{ include('calendar/_addbar.html.twig', {backFrom: back_token('cal-month', '%04d-%02d'|format(year, month))}) }}
 
-        {{ include('calendar/_activity_legend.html.twig') }}
+        {# Légende repliée sous 560px (#107), comme dans la vue semaine. #}
+        <details class="kd-calfold" open data-controller="collapse" data-collapse-media-value="(max-width: 560px)">
+            <summary class="kd-calfold__toggle">
+                <span>Couleurs des activités</span>
+                {{ ux_icon('lucide:chevron-down') }}
+            </summary>
+            {{ include('calendar/_activity_legend.html.twig') }}
+        </details>
+
+        {# Jours sans séance (#107) : en agenda vertical, un mois devenait une
+           liste de 30 lignes « vides » à faire défiler pour trouver ses séances.
+           Sous 560px, ils sont masqués tant que la case n'est pas cochée. Une case
+           et `:has()` plutôt qu'un contrôleur : rien à charger, la page reste
+           lisible hors ligne, et un navigateur sans `:has()` ignore la règle et
+           montre tout. Aujourd'hui reste toujours visible, comme repère. La case
+           sert aussi à poser une séance un jour libre : le « + » vit dans la case
+           du jour, masquer sans retour possible l'aurait fait disparaître. #}
+        {% set freeDays = 0 %}
+        {% for week in weeks %}
+            {% for cell in week %}
+                {% if cell.inMonth and not cell.isToday and cell.scheduled is empty and (goalsByDate[cell.date|date('Y-m-d')] ?? []) is empty %}
+                    {% set freeDays = freeDays + 1 %}
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
 
         <div class="kd-cal">
+            {% if freeDays %}
+                <label class="kd-calfree">
+                    <input type="checkbox" class="kd-calfree__toggle">
+                    Afficher {{ freeDays > 1 ? 'les ' ~ freeDays ~ ' jours' : 'le jour' }} sans séance
+                </label>
+            {% endif %}
             <div class="kd-cal__grid">
                 {% for iso, label in dayNames %}
                     <div class="kd-cal__dow">{{ label }}</div>
@@ -82,7 +112,8 @@
                     {% for cell in week %}
                         {% set weekend = cell.date|date('N') in ['6', '7'] %}
                         {% set cellGoals = goalsByDate[cell.date|date('Y-m-d')] ?? [] %}
-                        <div data-day="{{ cell.date|date('Y-m-d') }}" class="kd-calday{{ not cell.inMonth ? ' kd-calday--out' }}{{ cell.isToday ? ' kd-calday--today' }}{{ weekend ? ' kd-calday--weekend' }}{{ cellGoals is not empty ? ' kd-calday--goal' }}">
+                        {% set free = cell.inMonth and not cell.isToday and cell.scheduled is empty and cellGoals is empty %}
+                        <div data-day="{{ cell.date|date('Y-m-d') }}" class="kd-calday{{ not cell.inMonth ? ' kd-calday--out' }}{{ cell.isToday ? ' kd-calday--today' }}{{ weekend ? ' kd-calday--weekend' }}{{ cellGoals is not empty ? ' kd-calday--goal' }}{{ free ? ' kd-calday--free' }}">
                             {# Le jour de la semaine n'est porté que par l'en-tête
                                de colonne : en agenda vertical (téléphone) il n'y
                                a plus de colonne, chaque jour doit se nommer. #}

@@ -381,7 +381,7 @@ sont publiés pour l'app mobile, comme `design-tokens.json` (cf. §9).
 
 | Palier | Cible | Ce qui bascule |
 |---|---|---|
-| `560px` | téléphone | une colonne, nav en barre basse, calendrier en agenda vertical, filtres d'index repliés |
+| `560px` | téléphone | une colonne, nav en barre basse, calendrier en agenda vertical (bilan et légende repliés, actions secondaires réduites à l'icône, jours sans séance du mois masqués), filtres d'index repliés |
 | `900px` | tablette | bibliothèque/palette des éditeurs en **feuille** (`kd-libsheet`), nav condensée, repères de hero sous le titre |
 | `1200px` | petit portable | palette de l'éditeur de trame sous la grille |
 

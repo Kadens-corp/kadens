@@ -68,6 +68,30 @@ final class CalendarControllerTest extends WebTestCase
         self::assertStringContainsString('Sortie longue', $crawler->html());
     }
 
+    /**
+     * #107 : sur téléphone, la vue mois masque les jours sans séance (CSS,
+     * `.kd-calday--free`) derrière une case qui les compte. Le marquage, lui, est
+     * serveur : un jour posé ou hors du mois n'est jamais « libre ».
+     */
+    public function testMonthMarksTheDaysWithoutSessionAndCountsThem(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Sortie longue');
+        $this->createScheduled($user, $workout, new \DateTimeImmutable('2026-03-15'));
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/calendar/2026/3');
+
+        self::assertResponseIsSuccessful();
+        self::assertStringNotContainsString('kd-calday--free', (string) $crawler->filter('[data-day="2026-03-15"]')->attr('class'));
+        self::assertStringContainsString('kd-calday--free', (string) $crawler->filter('[data-day="2026-03-16"]')->attr('class'));
+        // Le 23 février complète la grille, il n'est pas du mois.
+        self::assertStringNotContainsString('kd-calday--free', (string) $crawler->filter('[data-day="2026-02-23"]')->attr('class'));
+        // Mars 2026 : 31 jours, un posé, aujourd'hui (novembre) hors du mois.
+        self::assertCount(30, $crawler->filter('.kd-calday--free'));
+        self::assertSelectorTextContains('.kd-calfree', 'Afficher les 30 jours sans séance');
+    }
+
     public function testAddPlacesIsolatedWorkoutOnDate(): void
     {
         $user = $this->createUser('owner@example.com');
