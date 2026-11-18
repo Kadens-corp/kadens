@@ -9434,6 +9434,13 @@ textarea.kd-inlineedit__input {
     color: inherit;
 }
 
+/* Dans les modales du calendrier, la carte se clique, elle ne se glisse pas :
+   la main de .kd-palettecard y promettait un glisser-déposer qui n'existe pas
+   (#108). La palette de la trame, elle, garde la main : on y glisse vraiment. */
+.kd-picker .kd-palettecard--btn {
+    cursor: pointer;
+}
+
 .kd-palettecard--btn:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;

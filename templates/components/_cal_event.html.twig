@@ -25,6 +25,11 @@
    c'est le chemin vers la séance entière, y compris sur ordinateur. Le lien reste
    le comportement de base : sans JS, tout mène à la page.
 
+   **Pas de glisser-déposer** entre deux jours (#108) : changer de jour passe par
+   le champ « Déplacer » de la modale. Les deux liens portent donc
+   `draggable="false"` : sinon le navigateur laisse saisir la pastille et en
+   traîne un fantôme, ce qui promet un geste que rien ne reçoit au lâcher.
+
    Aperçu du contenu au survol via le composant `_plan_preview` (Popover API),
    souris uniquement, refermé au clic qui ouvre la modale (cf.
    `assets/hover_preview.js`).
@@ -80,7 +85,7 @@
      data-action="mouseenter->preview#show mouseleave->preview#hide">
     {# La séance datée. Modale au pointeur fin, navigation au doigt. #}
     <a href="{{ path('app_scheduled_workout_show', {id: scheduled.id}|merge(back)) }}"
-       class="kd-calevent__open" data-action="dialog#openFine" title="{{ title }}">
+       class="kd-calevent__open" data-action="dialog#openFine" title="{{ title }}" draggable="false">
         {# Faite : une coche devant le titre, plus un titre barré, qui se lisait
            « annulé » (#89). Le nom accessible le dit en toutes lettres. #}
         <span class="kd-calevent__title">
@@ -162,7 +167,7 @@
 
     <a href="{{ path('app_scheduled_workout_show', {id: scheduled.id}|merge(back)) }}"
        class="kd-calevent__eye" aria-label="Voir « {{ title }} » en entier"
-       title="Voir la séance en entier">
+       title="Voir la séance en entier" draggable="false">
         {{ ux_icon('lucide:eye') }}
     </a>
 
