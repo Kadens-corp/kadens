@@ -6783,9 +6783,10 @@ a.kd-summplan__title:hover {
 
 /* Rappel de la case visée quand la palette est ouverte depuis le « + » d'un jour.
    En feuille, la palette masque la trame : sans ce rappel, on ne sait plus où le
-   prochain tap va poser. Rempli par le contrôleur, `hidden` sinon. */
-.kd-libpanel__target {
-    margin: var(--kd-space-3) 0 0;
+   prochain tap va poser. Rempli par le contrôleur, `hidden` sinon. Modificateur
+   de la cible simple du compositeur : les deux partageaient le même nom, et cette
+   règle, déclarée plus bas, encadrait aussi « Ajout dans : … ». */
+.kd-libpanel__target--cell {
     padding: var(--kd-space-2) var(--kd-space-3);
     border-left: 2px solid var(--color-primary);
     background: var(--color-primary-tint);
