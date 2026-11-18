@@ -83,7 +83,9 @@ final class ExerciseController extends AbstractController
 
             $this->addFlash('success', 'Exercice créé.');
 
-            return $this->redirectToRoute('app_exercise_index');
+            // Vers sa fiche, pas vers la liste : rangée de A à Z, elle montrait
+            // « Exercice créé. » au-dessus des « A », l'exercice étant à « R ».
+            return $this->redirectToRoute('app_exercise_show', ['id' => $exercise->getId()]);
         }
 
         return $this->render('exercise/new.html.twig', [

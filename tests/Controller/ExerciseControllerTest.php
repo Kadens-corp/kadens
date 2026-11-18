@@ -99,10 +99,35 @@ final class ExerciseControllerTest extends WebTestCase
             'exercise[activity]' => ActivityType::GYM->value,
         ]);
 
-        self::assertResponseRedirects('/exercise');
         $created = $this->em->getRepository(Exercise::class)->findOneBy(['name' => 'Fentes']);
         self::assertNotNull($created);
         self::assertSame($user->getId(), $created->getOwner()?->getId());
+
+        // Vers la fiche de l'exercice créé, pas vers la liste rangée de A à Z,
+        // où il n'était pas visible (#114) ; le message y suit.
+        self::assertResponseRedirects('/exercise/'.$created->getId());
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-flash', 'Exercice créé.');
+        self::assertSelectorTextContains('h1', 'Fentes');
+    }
+
+    /**
+     * L'erreur d'un champ porte de quoi s'effacer côté client dès que le champ
+     * est corrigé (#114) ; un champ sans erreur n'embarque rien.
+     */
+    public function testFieldErrorIsWiredToClearItself(): void
+    {
+        $this->client->loginUser($this->createUser('owner@example.com'));
+
+        $this->client->request('GET', '/exercise/new');
+        $crawler = $this->client->submitForm('Créer', ['exercise[name]' => 'Fentes']);
+
+        self::assertResponseStatusCodeSame(422);
+        $row = $crawler->filter('#exercise_activity')->closest('.kd-field');
+        self::assertNotNull($row);
+        self::assertSame('field-errors', $row->attr('data-controller'));
+        self::assertStringContainsString('Choisis une activité.', $row->filter('[data-field-errors-target="list"]')->text());
+        self::assertNull($crawler->filter('#exercise_name')->closest('.kd-field')?->attr('data-controller'));
     }
 
     /**

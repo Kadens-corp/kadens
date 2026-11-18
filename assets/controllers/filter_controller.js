@@ -14,10 +14,20 @@ import { normalize, scoreElement, tokens } from 'search';
  *   2. Facettes — des puces (activité, portée…) restreignent la liste. Chaque
  *      groupe de facette est indépendant ; « Tous » réinitialise le groupe.
  *      L'effectif d'une puce se RECALCULE selon les puces actives des AUTRES
- *      groupes (pas selon la recherche) : sur la portée « Moi » d'un coach,
+ *      groupes et selon la recherche : il dit combien d'items la liste
+ *      montrerait si on cliquait la puce. Sur la portée « Moi » d'un coach,
  *      « Toutes activités · 4 » annonçait les séances de ses athlètes alors que
- *      la liste n'en montrait aucune (#75).
+ *      la liste n'en montrait aucune (#75) ; « Salle de sport · 240 » restait
+ *      figé pendant qu'on cherchait « tirage » (#114).
  *   3. Tri — un <select> réordonne les items (nom, récence, durée, volume…).
+ *
+ * L'état (recherche, puces, tri) est CONSERVÉ pour la page, le temps de la
+ * session du navigateur (`sessionStorage`, clé = chemin) : ouvrir une fiche et
+ * revenir par « ← Exercices » retrouve la liste telle qu'on l'a laissée (#114).
+ * Le retour arrière du navigateur, lui, rend l'instantané Turbo, champ rempli
+ * compris : `connect()` relit donc d'abord ce que le DOM affiche, et ne puise
+ * dans le stockage que si la page arrive vierge. Stockage indisponible (navigation
+ * privée, refus) : la page marche comme avant, elle oublie seulement.
  *
  * Quand une recherche est active, la pertinence prime, l'USAGE RÉEL départage
  * (`data-sort-usage`, quand l'item en porte un), et le tri choisi tranche en
@@ -70,8 +80,8 @@ export default class extends Controller {
     static targets = ['input', 'list', 'item', 'facet', 'sort', 'empty', 'jump', 'count', 'noun'];
 
     connect() {
-        this.query = '';
-        this.terms = [];
+        this.restore();
+        this.readQuery(this.hasInputTarget ? this.inputTarget.value : '');
         this.readFacets();
         this.readSort();
         this.apply();
@@ -79,9 +89,9 @@ export default class extends Controller {
 
     // --------------------------------------------------------------- Événements
     search(event) {
-        this.query = normalize(event.target.value);
-        this.terms = tokens(event.target.value);
+        this.readQuery(event.target.value);
         this.apply();
+        this.save();
     }
 
     pickFacet(event) {
@@ -109,14 +119,71 @@ export default class extends Controller {
             .filter((b) => b.dataset.facetGroup === group)
             .forEach((b) => b.classList.toggle('kd-libfilter--on', b === btn));
         this.apply();
+        this.save();
     }
 
     sort() {
         this.readSort();
         this.apply();
+        this.save();
+    }
+
+    // ---------------------------------------------------------------- Mémoire
+    get storageKey() {
+        return `kadens:filter:${window.location.pathname}`;
+    }
+
+    /*
+     * Remet dans le DOM l'état mémorisé, AVANT toute lecture : la suite du
+     * `connect()` lit alors un seul état, qu'il vienne du serveur, de
+     * l'instantané Turbo ou d'ici. Un champ déjà rempli (instantané) ou une puce
+     * qui n'existe plus (l'athlète est parti, l'activité n'a plus d'exercice)
+     * gardent ce que la page affiche.
+     */
+    restore() {
+        if (this.hasInputTarget && this.inputTarget.value !== '') return;
+        let state = null;
+        try {
+            state = JSON.parse(window.sessionStorage.getItem(this.storageKey) || 'null');
+        } catch {
+            return;
+        }
+        if (!state || typeof state !== 'object') return;
+
+        if (this.hasInputTarget && typeof state.q === 'string') this.inputTarget.value = state.q;
+
+        Object.entries(state.facets || {}).forEach(([group, value]) => {
+            const buttons = this.facetTargets.filter((b) => b.dataset.facetGroup === group);
+            if (!buttons.some((b) => b.dataset.facetValue === value)) return;
+            buttons.forEach((b) => b.classList.toggle('kd-libfilter--on', b.dataset.facetValue === value));
+        });
+
+        if (this.hasSortTarget && state.sort) {
+            const opt = [...this.sortTarget.options].find((o) => o.value === state.sort.key
+                && (o.dataset.dir || 'asc') === state.sort.dir);
+            if (opt) opt.selected = true;
+        }
+    }
+
+    save() {
+        const state = {
+            q: this.hasInputTarget ? this.inputTarget.value : '',
+            facets: this.facets,
+            sort: { key: this.sortKey, dir: this.sortDir },
+        };
+        try {
+            window.sessionStorage.setItem(this.storageKey, JSON.stringify(state));
+        } catch {
+            // Stockage plein ou refusé : rien à faire, la liste marche sans.
+        }
     }
 
     // ------------------------------------------------------------------ Logique
+    readQuery(value) {
+        this.query = normalize(value);
+        this.terms = tokens(value);
+    }
+
     /*
      * État initial des facettes, lu dans le HTML rendu : la puce active d'un
      * groupe porte déjà `kd-libfilter--on` (cf. `_filterbar.html.twig`). Sans
@@ -150,6 +217,10 @@ export default class extends Controller {
             const score = searching ? scoreElement(el, this.terms, this.query) : 0;
             return { el, score, visible: this.facetMatch(el) && (!searching || score > 0) };
         });
+
+        // Ce que la recherche laisse passer, puces mises à part : base des
+        // effectifs, qui en dépendent sans dépendre des puces de leur groupe.
+        this.hits = new Set(entries.filter((e) => !searching || e.score > 0).map((e) => e.el));
 
         let visible = 0;
         entries.forEach((e) => {
@@ -185,9 +256,9 @@ export default class extends Controller {
 
     // ---------------------------------------------------------------- Effectifs
     /*
-     * Effectif de chaque puce = items qui passent les puces actives des autres
-     * groupes et portent cette valeur. « Tous » d'un groupe compte donc ce que
-     * les autres groupes laissent passer.
+     * Effectif de chaque puce = items qui passent la recherche ET les puces
+     * actives des autres groupes, et portent cette valeur. « Tous » d'un groupe
+     * compte donc ce que la recherche et les autres groupes laissent passer.
      */
     recount() {
         this.facetTargets.forEach((btn) => {
@@ -201,7 +272,8 @@ export default class extends Controller {
     }
 
     countFor(group, value) {
-        return this.itemTargets.filter((el) => this.facetMatch(el, group)
+        return this.itemTargets.filter((el) => this.hits.has(el)
+            && this.facetMatch(el, group)
             && (!value || value === 'all' || this.facetValues(el, group).includes(value))).length;
     }
 

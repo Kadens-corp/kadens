@@ -1090,7 +1090,7 @@
         "nameEn": "Machine hip adduction",
         "description": "Assis à la machine, resserrer les cuisses vers l'intérieur pour cibler les muscles adducteurs.",
         "activity": "gym",
-        "targetAreas": ["glutes"],
+        "targetAreas": ["adductors"],
         "mediaUrl": null
     },
     {

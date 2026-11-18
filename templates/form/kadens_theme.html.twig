@@ -11,7 +11,10 @@
     {%- if help is not empty -%}
         {%- set widget_attr = {attr: {'aria-describedby': id ~ '_help'}} -%}
     {%- endif -%}
-    <div class="kd-field">
+    {#- Une erreur serveur s'efface dès que le champ ne la mérite plus (#114),
+        cf. `field_errors_controller.js`. Sans erreur, rien n'est branché. -#}
+    <div class="kd-field"
+         {%- if errors|length > 0 %} data-controller="field-errors" data-action="input->field-errors#check change->field-errors#check"{% endif %}>
         {#- `term` (option de rendu, #102) : l'infobulle d'un sigle À CÔTÉ du libellé,
             jamais dedans — toucher un <label> donne le focus au champ et
             refermerait l'infobulle aussitôt. -#}
@@ -81,7 +84,7 @@
 
 {%- block form_errors -%}
     {%- if errors|length > 0 -%}
-        <ul class="kd-errors">
+        <ul class="kd-errors" data-field-errors-target="list">
             {%- for error in errors -%}
                 <li>{{ error.message }}</li>
             {%- endfor -%}

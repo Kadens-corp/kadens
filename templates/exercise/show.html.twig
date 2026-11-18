@@ -11,6 +11,10 @@
 {% block body %}
     {% set subject = subject|default(null) %}
 
+    {% for message in app.flashes('success') %}
+        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
+    {% endfor %}
+
     {% if subject %}
         <a href="{{ path('app_coach_athlete', {id: subject.id}) }}" class="kd-backlink">
             {{ ux_icon('lucide:arrow-left') }} {{ subject.displayName }}

@@ -13,8 +13,10 @@
                                default?(valeur active au chargement, 'all' sinon) }
 
    Les effectifs sont ceux de la liste entière (vrais sans JS, où rien ne se
-   filtre) ; le contrôleur les recalcule dès sa connexion selon les puces actives
-   des autres groupes, d'où le `<span data-facet-count>`.
+   filtre) ; le contrôleur les recalcule dès sa connexion selon la recherche et
+   les puces actives des autres groupes, d'où le `<span data-facet-count>`.
+   Recherche, puces et tri sont mémorisés pour la page le temps de la session
+   (cf. `filter_controller.js`) : le retour depuis une fiche les retrouve.
 
    `default` sert au groupe « propriétaire » d'un coach : la page s'ouvre sur ses
    propres entrées, les athlètes sont à une puce. Le contrôleur Stimulus lit cet
