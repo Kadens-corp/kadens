@@ -9384,6 +9384,26 @@ textarea.kd-inlineedit__input {
     text-transform: uppercase;
 }
 
+/* Statut d'une séance posée un jour passé (#109) : le segmenté de la modale
+   de séance, sous une question. Le fieldset perd son cadre natif. */
+.kd-picker__past {
+    display: grid;
+    gap: var(--kd-space-2);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+
+.kd-picker__past[hidden] {
+    display: none;
+}
+
+.kd-picker__past legend {
+    padding: 0;
+    margin-bottom: var(--kd-space-2);
+}
+
 /* Ligne d'outils : recherche extensible + tri compact. */
 .kd-picker__tools {
     display: flex;

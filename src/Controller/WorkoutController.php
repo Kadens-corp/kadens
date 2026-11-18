@@ -184,7 +184,12 @@ final class WorkoutController extends AbstractController
             $from = $request->getPayload()->getString('from');
             $back = ['from' => null !== BackTarget::parse($from) ? $from : BackTarget::token(BackTarget::CAL_MONTH, $date->format('Y-m'))];
 
-            $this->addFlash('success', \sprintf('Séance planifiée le %s : compose-la ici, elle est déjà dans ton agenda.', $date->format('d/m/Y')));
+            // Un jour passé, rien ne se planifie plus (#109) : elle y est ajoutée.
+            $this->addFlash('success', \sprintf(
+                '%s %s : compose-la ici, elle est déjà dans ton agenda.',
+                $date < new \DateTimeImmutable('today') ? 'Séance ajoutée au' : 'Séance planifiée le',
+                $date->format('d/m/Y'),
+            ));
         }
 
         $this->entityManager->flush();

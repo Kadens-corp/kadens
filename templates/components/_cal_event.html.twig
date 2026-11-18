@@ -79,6 +79,11 @@
 {% set detailed = detailed|default(false) %}
 {% set overdue = overdue|default(false) %}
 {% set colored = fw and fw.activities|length > 0 %}
+{# Marquer faite une séance à venir (#109) : c'est l'avoir faite en avance, et le
+   serveur la ramène à aujourd'hui. Le geste le demande avant, au menu comme
+   dans la modale ; une séance déjà faite ne redemande rien. #}
+{% set future = scheduled.scheduledDate|date('Y-m-d') > 'today'|date('Y-m-d') and st != 'done' %}
+{% set futureConfirm = 'Cette séance est prévue le ' ~ scheduled.scheduledDate|date('d/m') ~ ', elle n\'a pas encore eu lieu. La marquer faite la ramène à aujourd\'hui. Continuer ?' %}
 
 <div id="cal-event-{{ scheduled.id }}" class="kd-calevent kd-calevent--{{ st }}{{ colored ? ' kd-calevent--act ' ~ activity.surface(fw.activities) }}{{ detailed ? ' kd-calevent--detailed' }}{{ overdue ? ' is-overdue' }}"
      data-controller="dialog preview"
@@ -157,7 +162,8 @@
                 {% set current = status == scheduled.status %}
                 <button type="submit" name="status" value="{{ status.value }}"
                         class="kd-statusmenu__item kd-statusmenu__item--{{ status.value }}{{ current ? ' is-active' }}"
-                        aria-pressed="{{ current ? 'true' : 'false' }}">
+                        aria-pressed="{{ current ? 'true' : 'false' }}"
+                        {%- if future and status.value == 'done' %} onclick="return confirm({{ futureConfirm|json_encode(constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES'))|e('html_attr') }});"{% endif %}>
                     {{ ux_icon(statusIcons[status.value]) }}
                     {{ status.label }}
                 </button>
@@ -232,7 +238,8 @@
                sans JS, et au clavier les flèches passent d'un statut à l'autre. #}
             <div class="kd-modal__section">
                 <form id="cal-save-{{ scheduled.id }}" method="post" action="{{ path('app_scheduled_workout_status', {id: scheduled.id}) }}"
-                      class="kd-modal__form" data-dialog-target="guarded">
+                      class="kd-modal__form" data-dialog-target="guarded"
+                      {%- if future %} onsubmit="return this.elements.status.value !== 'done' || confirm({{ futureConfirm|json_encode(constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES'))|e('html_attr') }});"{% endif %}>
                     <input type="hidden" name="_token" value="{{ csrf_token('status' ~ scheduled.id) }}">
                     <input type="hidden" name="detailed" value="{{ detailed ? 1 : 0 }}">
                     {% if backFrom %}<input type="hidden" name="from" value="{{ backFrom }}">{% endif %}

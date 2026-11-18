@@ -129,7 +129,8 @@
 
     <div data-controller="caladd"
          data-caladd-preselect-value="{{ preselectPlanId ?? 0 }}"
-         data-caladd-focus-value="{{ focusDate ?? '' }}">
+         data-caladd-focus-value="{{ focusDate ?? '' }}"
+         data-caladd-today-value="{{ 'today'|date('Y-m-d') }}">
         {% if subject %}
             {# Poser pour l'athlète part de SA bibliothèque : c'est sa fiche qui le
                fait, la barre d'ajout d'ici puise dans celle du lecteur. #}

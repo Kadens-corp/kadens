@@ -11,11 +11,13 @@ import { Controller } from '@hotwired/stimulus';
  *    émet `change`, que relit l'aperçu `plan-preview`), puis date + « Placer
  *    dans l'agenda ».
  *
- * Deux valeurs posées par le serveur depuis la query (#68) :
+ * Trois valeurs posées par le serveur, les deux premières depuis la query (#68) :
  *  - `preselect` : id d'un plan venu de « Placer dans mon agenda » (page du
  *    plan) : la modale s'ouvre au chargement, ce plan déjà choisi ;
  *  - `focus` : date (Y-m-d) d'un jour à amener à l'écran, posée après une pose
- *    de plan pour montrer la première séance.
+ *    de plan pour montrer la première séance ;
+ *  - `today` : date (Y-m-d) du jour côté serveur. Un jour antérieur ouvre la
+ *    modale avec le choix du statut (faite, manquée, encore à faire, #109).
  *
  * Recherche / filtre d'activité / tri sont 100 % client (offline-safe). Les outils
  * (recherche, tri, filtres) vivent HORS du <form> pour qu'un Entrée n'y déclenche
@@ -23,13 +25,13 @@ import { Controller } from '@hotwired/stimulus';
  */
 export default class extends Controller {
     static targets = [
-        'workoutDialog', 'dateInput', 'dateLabel',
+        'workoutDialog', 'dateInput', 'dateLabel', 'pastStatus',
         'workoutList', 'workoutCard', 'workoutEmpty',
         'planDialog', 'planList', 'planCard', 'planEmpty',
         'planSelectWrap', 'planSubmit', 'planDate',
     ];
 
-    static values = { preselect: Number, focus: String };
+    static values = { preselect: Number, focus: String, today: String };
 
     connect() {
         if (this.focusValue) {
@@ -56,6 +58,18 @@ export default class extends Controller {
         this.dateInputTargets.forEach((input) => { input.value = date; });
         if (this.hasDateLabelTarget) {
             this.dateLabelTarget.textContent = this.humanDate(date);
+        }
+        // Jour passé (#109) : le statut se choisit à la pose. `today` vient du
+        // serveur, qui tranche de toute façon : un statut posté pour aujourd'hui
+        // ou le futur y est ignoré. Dates ISO, la comparaison de chaînes suffit.
+        if (this.hasPastStatusTarget) {
+            const past = Boolean(this.todayValue) && date < this.todayValue;
+            this.pastStatusTarget.hidden = !past;
+            this.pastStatusTarget.disabled = !past;
+            if (past) {
+                const done = this.pastStatusTarget.querySelector('input[value="done"]');
+                if (done) done.checked = true;
+            }
         }
         this.resetWorkoutFilters();
         this.workoutDialogTarget.showModal();

@@ -81,19 +81,73 @@ final class ScheduledWorkoutController extends AbstractController
 
         $this->denyAccessUnlessGranted(WorkoutVoter::VIEW, $workout);
 
+        // Un jour passé, on ne planifie plus : on consigne ce qui a eu lieu
+        // (#109). La modale y propose donc le statut tout de suite, Faite par
+        // défaut. Un statut posté pour aujourd'hui ou le futur est ignoré : à
+        // venir, une séance ne peut être que prévue.
+        $past = $date < new \DateTimeImmutable('today');
+        $status = $past ? ScheduledStatus::tryFrom($payload->getString('status')) : null;
+
         $scheduled = new ScheduledWorkout();
         $scheduled->setWorkout($workout);
         $scheduled->setScheduledDate($date);
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
         $scheduled->setOwner($user);
-        $scheduled->setStatus(ScheduledStatus::PLANNED);
+        $scheduled->setStatus($status ?? ScheduledStatus::PLANNED);
         $this->entityManager->persist($scheduled);
         $this->entityManager->flush();
 
-        $this->addFlash('success', 'Séance planifiée.');
+        $this->addFlash('success', $this->placedMessage($date, $past, $status));
 
         return $this->redirectToMonth($date);
+    }
+
+    /**
+     * « Séance planifiée » ne se dit que d'un jour à venir. Un jour passé, le
+     * message dit où la séance est tombée et ce qu'elle est devenue (#109).
+     */
+    private function placedMessage(\DateTimeImmutable $date, bool $past, ?ScheduledStatus $status): string
+    {
+        $day = $date->format('d/m');
+
+        if (!$past) {
+            return sprintf('Séance planifiée le %s.', $day);
+        }
+
+        return match ($status) {
+            ScheduledStatus::DONE => sprintf('Séance ajoutée au %s, marquée faite.', $day),
+            ScheduledStatus::MISSED => sprintf('Séance ajoutée au %s, marquée manquée.', $day),
+            default => sprintf('Séance ajoutée au %s. Dis si elle est faite ou manquée : elle compte en retard tant qu\'elle reste prévue.', $day),
+        };
+    }
+
+    /**
+     * Une séance faite porte le jour où elle a été faite (#109). La marquer
+     * faite alors qu'elle est prévue plus tard, c'est l'avoir faite en avance
+     * (le geste passe par une confirmation qui le dit) : elle revient à
+     * aujourd'hui. Sinon elle compterait dans l'observance d'une semaine qui n'a
+     * pas encore eu lieu, et dans la régularité d'un jour à venir.
+     *
+     * Rend la date d'origine quand la séance a été ramenée, null sinon.
+     */
+    private function bringDoneToToday(ScheduledWorkout $scheduled): ?\DateTimeImmutable
+    {
+        $today = new \DateTimeImmutable('today');
+        $planned = $scheduled->getScheduledDate();
+
+        if (ScheduledStatus::DONE !== $scheduled->getStatus() || $planned <= $today) {
+            return null;
+        }
+
+        $scheduled->setScheduledDate($today);
+
+        return $planned;
+    }
+
+    private function broughtToTodayMessage(\DateTimeImmutable $planned): string
+    {
+        return sprintf('Séance marquée faite et ramenée à aujourd\'hui : elle était prévue le %s.', $planned->format('d/m'));
     }
 
     /**
@@ -333,8 +387,17 @@ final class ScheduledWorkoutController extends AbstractController
                 $notes = trim($payload->getString('completionNotes'));
                 $scheduled->setCompletionNotes('' === $notes ? null : $notes);
                 $this->applyRating($payload, $scheduled);
+                $planned = $this->bringDoneToToday($scheduled);
 
                 $this->entityManager->flush();
+
+                // Ramenée à aujourd'hui : la pastille change de jour, et la date
+                // de la page change aussi. Le flux remplace le fragment puis
+                // demande un refresh par morphing (cf. les gabarits de flux).
+                $refresh = null !== $planned;
+                if (null !== $planned) {
+                    $this->addFlash('success', $this->broughtToTodayMessage($planned));
+                }
 
                 // Réponse asynchrone : on re-rend le seul fragment concerné, la
                 // page n'est pas rechargée. Repli sans JS = redirection classique.
@@ -343,11 +406,13 @@ final class ScheduledWorkoutController extends AbstractController
                 // n'existe pas sur la page de la séance datée.
                 if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
                     return 'schedule' === $payload->getString('return')
-                        ? $this->streamScheduleStatus($request, $scheduled)
-                        : $this->streamCalEvent($request, $scheduled, $planFlattener);
+                        ? $this->streamScheduleStatus($request, $scheduled, $refresh)
+                        : $this->streamCalEvent($request, $scheduled, $planFlattener, $refresh);
                 }
 
-                $this->addFlash('success', 'Statut mis à jour.');
+                if (!$refresh) {
+                    $this->addFlash('success', 'Statut mis à jour.');
+                }
             } else {
                 $this->addFlash('error', 'Statut invalide.');
             }
@@ -432,12 +497,19 @@ final class ScheduledWorkoutController extends AbstractController
 
         if (null !== $status && $this->isCsrfTokenValid('quick-status'.$scheduled->getId(), $payload->getString('_token'))) {
             $scheduled->setStatus($status);
+            $planned = $this->bringDoneToToday($scheduled);
             $this->entityManager->flush();
+
+            // Ramenée à aujourd'hui : la pastille quitte son jour, le flux
+            // demande un refresh par morphing (cf. updateStatus).
+            if (null !== $planned) {
+                $this->addFlash('success', $this->broughtToTodayMessage($planned));
+            }
 
             // Geste express : on re-rend la pastille en place (pas de rechargement,
             // la vue mois/semaine est préservée). Repli sans JS = redirection.
             if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
-                return $this->streamCalEvent($request, $scheduled, $planFlattener);
+                return $this->streamCalEvent($request, $scheduled, $planFlattener, null !== $planned);
             }
         }
 
@@ -449,13 +521,14 @@ final class ScheduledWorkoutController extends AbstractController
      * statut : la pastille du hero, le bilan et le formulaire du bas. Pendant de
      * streamCalEvent() pour l'autre page appelante.
      */
-    private function streamScheduleStatus(Request $request, ScheduledWorkout $scheduled): Response
+    private function streamScheduleStatus(Request $request, ScheduledWorkout $scheduled, bool $refresh = false): Response
     {
         $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
 
         return $this->render('scheduled_workout/stream/status.stream.html.twig', [
             'summaryContext' => $this->summaryContext($scheduled),
             'statuses' => ScheduledStatus::cases(),
+            'refresh' => $refresh,
         ]);
     }
 
@@ -464,7 +537,7 @@ final class ScheduledWorkoutController extends AbstractController
      * sur `#cal-event-{id}`), à l'identique de son rendu d'origine. `detailed`
      * (vue semaine) est reporté par le formulaire ; `overdue` est recalculé.
      */
-    private function streamCalEvent(Request $request, ScheduledWorkout $scheduled, PlanFlattener $planFlattener): Response
+    private function streamCalEvent(Request $request, ScheduledWorkout $scheduled, PlanFlattener $planFlattener, bool $refresh = false): Response
     {
         $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
 
@@ -488,6 +561,8 @@ final class ScheduledWorkoutController extends AbstractController
             // Non validée ici — c'est `BackTarget::parse()` qui tranche, à la
             // lecture, et un jeton illisible s'y lit comme une absence.
             'backFrom' => $request->getPayload()->getString('from') ?: null,
+            // Séance ramenée à aujourd'hui : la page entière se morphe ensuite.
+            'refresh' => $refresh,
         ]);
     }
 

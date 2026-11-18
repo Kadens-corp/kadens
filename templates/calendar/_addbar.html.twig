@@ -80,6 +80,24 @@
             <input type="hidden" name="_token" value="{{ csrf_token('schedule_place') }}">
             <input type="hidden" name="date" data-caladd-target="dateInput">
 
+            {# Un jour passé (#109) : on n'y planifie plus, on dit ce qui a eu
+               lieu. Le statut se choisit avant la carte, Faite par défaut. Le
+               `disabled` compte autant que le `hidden` : un champ seulement
+               caché partirait avec le formulaire. Sans JS il reste désactivé, la
+               séance est posée prévue et le message de retour demande le statut. #}
+            <fieldset class="kd-picker__past" data-caladd-target="pastStatus" hidden disabled>
+                <legend class="kd-label">Ce jour est passé. Tu l'as faite ?</legend>
+                <div class="kd-segmented">
+                    {% for status, label in {done: 'Faite', missed: 'Manquée', planned: 'Encore à faire'} %}
+                        <label class="kd-segbtn kd-segbtn--{{ status }}">
+                            <input type="radio" name="status" value="{{ status }}"{{ status == 'done' ? ' checked' }}>
+                            {{ ux_icon({done: 'lucide:check', missed: 'lucide:x', planned: 'lucide:circle-dot'}[status], {'aria-hidden': 'true'}) }}
+                            {{ label }}
+                        </label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+
             <div class="kd-picker__list" data-caladd-target="workoutList">
                 {% for card in workoutCards %}
                     {% set w = card.workout %}

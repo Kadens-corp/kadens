@@ -38,7 +38,7 @@
 
 {% macro calendar() %}
     <p>Le « + » d'un jour y pose une de tes séances, ou en crée une nouvelle pour ce jour. « Placer un plan dans l'agenda » pose d'un coup toutes les séances d'un plan, à partir d'une date.</p>
-    <p>Le bouton de statut, sous une séance, ouvre un petit menu : choisis prévue, faite ou manquée. Une séance faite porte une coche devant son titre.</p>
+    <p>Le bouton de statut, sous une séance, ouvre un petit menu : choisis prévue, faite ou manquée. Une séance faite porte une coche devant son titre. Ajoutée sur un jour passé, une séance te demande tout de suite si tu l'as faite. Et marquer faite une séance à venir te demande confirmation : elle revient alors à aujourd'hui, le jour où tu l'as faite.</p>
     <p>Clique sur une séance pour choisir son statut, écrire un commentaire ou noter ta forme : rien n'est gardé tant que tu n'as pas cliqué « Enregistrer », et la fenêtre te le rappelle si tu la fermes avant. Tu peux aussi la retirer, ou la changer de jour : choisis la nouvelle date sous « Déplacer », la séance ne se glisse pas d'un jour à l'autre. L'œil, comme « Voir la séance », ouvre ta séance du jour : son bilan (statut, commentaire, ressenti, réalisé), son programme et un lien vers la séance type.</p>
     <p>En muscu, tu saisis tes séries pendant la séance, dans <a href="{{ path('app_install') }}">l'app Kadens</a> sur ton téléphone. Une sortie course, vélo ou natation ne se saisit pas : elle arrive de ta montre, une fois Intervals.icu relié dans tes paramètres.</p>
 {% endmacro %}

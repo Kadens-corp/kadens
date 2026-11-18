@@ -22,10 +22,14 @@
 {% import 'components/_rating.html.twig' as ratings %}
 {% set statusIcons = {planned: 'lucide:circle-dot', done: 'lucide:check', missed: 'lucide:x'} %}
 {% set canLog = is_granted('SCHEDULED_WORKOUT_LOG', scheduled) %}
+{# Même garde-fou que la modale du calendrier (#109) : faite avant son jour, la
+   séance revient à aujourd'hui, et on le demande d'abord. #}
+{% set future = scheduled.scheduledDate|date('Y-m-d') > 'today'|date('Y-m-d') and scheduled.status.value != 'done' %}
 <section id="schedule-done" class="kd-done" aria-labelledby="done-title">
     <h2 class="kd-done__title" id="done-title">Statut, commentaire et ressenti</h2>
 
-    <form method="post" action="{{ path('app_scheduled_workout_status', {id: scheduled.id}) }}" class="kd-done__form">
+    <form method="post" action="{{ path('app_scheduled_workout_status', {id: scheduled.id}) }}" class="kd-done__form"
+          {%- if future %} onsubmit="return this.elements.status.value !== 'done' || confirm({{ ('Cette séance est prévue le ' ~ scheduled.scheduledDate|date('d/m') ~ ', elle n\'a pas encore eu lieu. La marquer faite la ramène à aujourd\'hui. Continuer ?')|json_encode(constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES'))|e('html_attr') }});"{% endif %}>
         <input type="hidden" name="_token" value="{{ csrf_token('status' ~ scheduled.id) }}">
         {# Sans ça, l'endpoint renvoie au calendrier : on quitterait la page
            à chaque enregistrement. #}

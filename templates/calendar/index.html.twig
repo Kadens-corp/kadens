@@ -67,7 +67,8 @@
 
     <div data-controller="caladd"
          data-caladd-preselect-value="{{ preselectPlanId ?? 0 }}"
-         data-caladd-focus-value="{{ focusDate ?? '' }}">
+         data-caladd-focus-value="{{ focusDate ?? '' }}"
+         data-caladd-today-value="{{ 'today'|date('Y-m-d') }}">
         {{ include('calendar/_addbar.html.twig', {backFrom: back_token('cal-month', '%04d-%02d'|format(year, month))}) }}
 
         {# Légende repliée sous 560px (#107), comme dans la vue semaine. #}
@@ -99,7 +100,8 @@
         <div class="kd-cal">
             {% if freeDays %}
                 <label class="kd-calfree">
-                    <input type="checkbox" class="kd-calfree__toggle">
+                    {# Choix d'affichage : un refresh par morphing le garde (morph_state.js). #}
+                    <input type="checkbox" class="kd-calfree__toggle" data-morph-keep>
                     Afficher {{ freeDays > 1 ? 'les ' ~ freeDays ~ ' jours' : 'le jour' }} sans séance
                 </label>
             {% endif %}

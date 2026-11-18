@@ -25,3 +25,12 @@
         }, with_context = false) }}
     </template>
 </turbo-stream>
+{# Séance ramenée à aujourd'hui (#109) : elle change de jour, et tout ce qui
+   dépend de sa date bouge avec elle (résumé de la semaine, « Repos », jours
+   libres). Remplacer d'abord le fragment ferme la modale ou le menu ouverts ;
+   le refresh relit ensuite la page en arrière-plan et la morphe, scroll gardé,
+   sans rechargement visible. Le message part en session et s'affiche au
+   refresh. Ce que le morphing ne reprend pas au serveur : assets/morph_state.js. #}
+{% if refresh|default(false) %}
+    <turbo-stream action="refresh" method="morph" scroll="preserve"></turbo-stream>
+{% endif %}
