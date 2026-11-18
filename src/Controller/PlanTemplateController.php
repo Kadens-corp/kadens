@@ -2,13 +2,16 @@
 
 namespace App\Controller;
 
+use App\Entity\Exercise;
 use App\Entity\PlanItem;
 use App\Entity\PlanTemplate;
 use App\Entity\ScheduledWorkout;
 use App\Entity\User;
 use App\Entity\Workout;
 use App\Enum\ActivityType;
+use App\Enum\ProgressionField;
 use App\Enum\ScheduledStatus;
+use App\Http\ProgressionInput;
 use App\Repository\CoachingRepository;
 use App\Repository\GoalRepository;
 use App\Repository\ImportedActivityRepository;
@@ -19,9 +22,11 @@ use App\Repository\WorkoutRepository;
 use App\Security\Voter\PlanTemplateVoter;
 use App\Service\CoachedLibrary;
 use App\Service\CoachingResolver;
+use App\Service\ExerciseNaming;
 use App\Service\LineageDivergence;
 use App\Service\LineageSeed;
 use App\Service\OffProgramRecap;
+use App\Service\PlanProgression;
 use App\Service\PlanFlattener;
 use App\Service\PlanScheduler;
 use App\Service\PlanTransfer;
@@ -32,12 +37,14 @@ use App\Service\SharedPlanCopier;
 use App\Service\SharedWorkoutCopier;
 use App\Service\ShareLink;
 use App\Service\SlugGenerator;
+use App\Service\UnitFormatter;
 use App\Service\WorkoutCloner;
 use App\Service\WorkoutMetrics;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Doctrine\Attribute\MapEntity;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\Form\FormInterface;
+use Symfony\Component\HttpFoundation\InputBag;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -70,6 +77,8 @@ final class PlanTemplateController extends AbstractController
         private readonly CoachedLibrary $coachedLibrary,
         private readonly OffProgramRecap $offProgramRecap,
         private readonly LineageDivergence $lineageDivergence,
+        private readonly ExerciseNaming $exerciseNaming,
+        private readonly UnitFormatter $unitFormatter,
     ) {
     }
 
@@ -933,6 +942,107 @@ final class PlanTemplateController extends AbstractController
         }
 
         return $this->gridResponse($request, $template);
+    }
+
+    /**
+     * Outil de progression (#110) : faire progresser la charge ou les répétitions
+     * d'un exercice sur une plage de semaines, dans toutes les cases de sa séance.
+     *
+     * Une page à part plutôt qu'une modale : l'aperçu est un tableau de toutes les
+     * cases concernées, rendu par le serveur, qui marche sans JS. GET = choisir et
+     * voir l'aperçu (le formulaire se recharge sur lui-même), POST = appliquer ce
+     * même aperçu, puis retour à l'éditeur. Les deux passent par
+     * `ProgressionInput::parse()` et `PlanProgression::preview()` : on applique
+     * exactement ce qu'on a vu.
+     */
+    #[Route('/{id}/progression', name: 'app_plan_template_progression', methods: ['GET', 'POST'], requirements: ['id' => '\d+'])]
+    public function progression(Request $request, PlanTemplate $template, PlanProgression $progression): Response
+    {
+        $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
+
+        $targets = $progression->targets($template);
+        $weeks = (int) $template->getDurationWeeks();
+        $isPost = $request->isMethod('POST');
+        $bag = $isPost ? $request->request : $request->query;
+
+        // Première visite : l'exercice le plus haut de la liste, sur les semaines où
+        // il apparaît, à +2,5 kg (ou +1 rép.) par semaine. L'aperçu se montre
+        // d'emblée : on voit ce que l'outil fait avant d'avoir rien réglé.
+        if (!$isPost && !$bag->has('target') && [] !== $targets) {
+            $first = $targets[0]['exercises'][0];
+            $bag = new InputBag([
+                'target' => $first['key'],
+                'field' => $first['defaultField']->value,
+                'from' => (string) $first['firstWeek'],
+                'to' => (string) max($first['lastWeek'], $first['firstWeek']),
+                'step' => ProgressionField::REPS === $first['defaultField'] ? '1' : '2,5',
+                'start' => '',
+            ]);
+        }
+
+        $preview = null;
+        $error = null;
+        if ([] !== $targets) {
+            try {
+                $input = ProgressionInput::parse($bag, $weeks);
+
+                if ($isPost) {
+                    if (!$this->isCsrfTokenValid('plan_progression'.$template->getId(), $request->getPayload()->getString('_token'))) {
+                        throw new \InvalidArgumentException('La page a expiré : vérifie l\'aperçu et applique à nouveau.');
+                    }
+                    $result = $progression->apply($template, $input);
+                    $this->entityManager->flush();
+
+                    $this->addFlash('success', $this->progressionMessage($result, $input));
+
+                    return $this->redirectToRoute('app_plan_template_edit', ['id' => $template->getId()]);
+                }
+
+                $preview = $progression->preview($template, $input);
+            } catch (\InvalidArgumentException $e) {
+                $error = $e->getMessage();
+            }
+        }
+
+        return $this->render('plan_template/progression.html.twig', [
+            'template' => $template,
+            'targets' => $targets,
+            'values' => $bag->all(),
+            'preview' => $preview,
+            'error' => $error,
+            'fields' => ProgressionField::cases(),
+        ], new Response(null, null !== $error && $isPost ? Response::HTTP_UNPROCESSABLE_ENTITY : Response::HTTP_OK));
+    }
+
+    /**
+     * « Développé militaire (Upper A) : 3 cases mises à jour, de 60 kg en S1 à
+     * 67,5 kg en S4. » Rien à changer se dit aussi : sinon on croit à un échec.
+     *
+     * @param array{root: Workout, exercise: Exercise, start: float, changes: int} $result
+     */
+    private function progressionMessage(array $result, ProgressionInput $input): string
+    {
+        $what = \sprintf('%s (%s)', $this->exerciseNaming->label($result['exercise']), $result['root']->getTitle());
+        if (0 === $result['changes']) {
+            return $what.' : aucune case à changer, le plan prescrivait déjà ces valeurs.';
+        }
+
+        $end = $result['start'] + ($input->toWeek - $input->fromWeek) * $input->step;
+        $format = fn (float $v): string => ProgressionField::WEIGHT === $input->field
+            ? $this->unitFormatter->weight(max(0.0, $v))
+            : \sprintf('%d %s', max(1, (int) round($v)), $input->field->unit());
+
+        return \sprintf(
+            '%s : %d case%s mise%s à jour, de %s en S%d à %s en S%d.',
+            $what,
+            $result['changes'],
+            $result['changes'] > 1 ? 's' : '',
+            $result['changes'] > 1 ? 's' : '',
+            $format($result['start']),
+            $input->fromWeek,
+            $format($end),
+            $input->toWeek,
+        );
     }
 
     // ---- Helpers -----------------------------------------------------------

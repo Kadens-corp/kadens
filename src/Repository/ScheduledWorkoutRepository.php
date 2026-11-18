@@ -1004,6 +1004,41 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
     }
 
     /**
+     * Date de la dernière séance FAITE de chacune de ces séances (copies locales de
+     * plan, en pratique), en une requête. L'outil de progression du plan (#110)
+     * laisse ces cases telles quelles : leur prescrit est celui qu'on a suivi, et
+     * `LogComparator` compare le réalisé à lui.
+     *
+     * @param list<int> $workoutIds
+     *
+     * @return array<int, \DateTimeImmutable> id de séance → date de la dernière faite
+     */
+    public function lastDoneDateByWorkout(array $workoutIds): array
+    {
+        if ([] === $workoutIds) {
+            return [];
+        }
+
+        /** @var list<array{workoutId: int|string, last: string}> $rows */
+        $rows = $this->createQueryBuilder('s')
+            ->select('IDENTITY(s.workout) AS workoutId', 'MAX(s.scheduledDate) AS last')
+            ->andWhere('s.workout IN (:ids)')
+            ->andWhere('s.status = :done')
+            ->setParameter('ids', $workoutIds)
+            ->setParameter('done', ScheduledStatus::DONE)
+            ->groupBy('s.workout')
+            ->getQuery()
+            ->getArrayResult();
+
+        $dates = [];
+        foreach ($rows as $row) {
+            $dates[(int) $row['workoutId']] = new \DateTimeImmutable($row['last']);
+        }
+
+        return $dates;
+    }
+
+    /**
      * Séances **faites** de la lignée d'une séance de bibliothèque, la plus
      * récente d'abord : celles qui pointent une de ses copies de plan
      * (`w.origin`) et celles qui la pointent directement (pose au calendrier,

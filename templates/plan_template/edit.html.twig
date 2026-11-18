@@ -137,6 +137,17 @@
             <li>Clique sur les jours où tu veux la faire. Le « + » d'un jour y ajoute une séance directement.</li>
             <li>Clique sur une case pour l'ajuster. Ça ne change que cette case. Son menu permet de la déplacer, la copier ou la retirer.</li>
         </ol>
+        {# La progression d'un exercice sur toutes ses semaines en un geste (#110),
+           au lieu d'une édition par case. Lien toujours là : la trame se remplit
+           par streams sans recharger cette partie de la page, la page de l'outil
+           dit elle-même quand il n'y a rien à faire progresser. #}
+        <p class="kd-planprog">
+            <a href="{{ path('app_plan_template_progression', {id: template.id}|merge(back_to('plan-edit', template.id))) }}"
+               class="kd-btn kd-btn--secondary kd-btn--sm">
+                {{ ux_icon('lucide:trending-up') }} Faire progresser un exercice
+            </a>
+            <span class="kd-editsection__hint">« +2,5 kg par semaine », sur toutes les cases d'une séance.</span>
+        </p>
         {# Coach sur le plan de son athlète : la note d'une case est une consigne
            qu'il lira, pas un pense-bête (#65). #}
         {{ include('components/_visible_to.html.twig', {owner: template.owner, what: 'Les consignes de case'}, with_context = false) }}

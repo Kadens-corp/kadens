@@ -14903,3 +14903,74 @@ a.kd-coachitem__date:hover {
         font-size: 0;
     }
 }
+
+/* ----------------------------------------------------------------------------
+   Outil de progression d'un plan (#110) : formulaire de réglage, puis aperçu
+   case par case dans le tableau des séries (`kd-settable`). Les champs courts
+   (pas, départ, semaines) vont par deux ou trois sur une ligne, empilés au
+   téléphone.
+   ---------------------------------------------------------------------------- */
+.kd-progtool {
+    max-width: 40rem;
+}
+
+.kd-progtool__row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: var(--kd-space-6);
+}
+
+.kd-progtool__hint {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--color-text-soft);
+    max-width: 60ch;
+}
+
+.kd-progtool__apply {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kd-space-6);
+    margin-top: var(--kd-space-8);
+}
+
+.kd-progtable {
+    min-width: 0;
+}
+
+.kd-progtable tbody th {
+    padding: var(--kd-space-3) var(--kd-space-6);
+    border-top: 1px solid var(--color-divider-soft);
+    background: var(--color-surface-raised);
+    font-weight: var(--kd-weight-semibold);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.kd-progtable__note {
+    font-family: var(--font-body);
+    color: var(--color-text-soft);
+}
+
+/* Ce qui ne bougera pas s'efface : on lit d'abord les cases qui changent. */
+.kd-progtable__row--absent th,
+.kd-progtable__row--same th,
+.kd-progtable__row--done th {
+    color: var(--color-text-soft);
+    font-weight: var(--kd-weight-regular);
+}
+
+/* Lien de l'outil de progression sous l'aide de la trame (#110). */
+.kd-planprog {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kd-space-3) var(--kd-space-5);
+    margin: 0 0 var(--kd-space-6);
+}
+
+.kd-planprog .kd-editsection__hint {
+    margin: 0;
+}
