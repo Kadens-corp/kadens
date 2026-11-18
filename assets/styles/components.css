@@ -8437,6 +8437,57 @@ button.kd-libx:active {
     margin-left: auto;
 }
 
+/* « Copier vers » d'une semaine (#111) : les semaines cibles en pastilles à
+   cocher, qui passent à la ligne au-delà de la largeur du menu (un plan de 12
+   semaines en propose 11). */
+.kd-weekcopy {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+
+.kd-weekcopy legend {
+    padding: 0;
+    margin-bottom: var(--kd-space-2);
+}
+
+.kd-weekcopy__choices {
+    max-width: 16rem;
+}
+
+.kd-weekcopy__choices .kd-label {
+    padding: 4px var(--kd-space-4);
+    font-size: 12px;
+}
+
+.kd-weekcopy__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kd-space-2);
+}
+
+/* Confirmation sous l'en-tête de semaine : « Semaine 1 copiée sur S2, S3 et S4. » */
+.kd-planweek__notice {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: calc(-1 * var(--kd-space-4)) 0 var(--kd-space-6);
+    font-size: 12px;
+    color: var(--color-success);
+}
+
+.kd-planweek__notice--error {
+    color: var(--color-status-missed);
+}
+
+.kd-planweek__notice svg {
+    width: 13px;
+    height: 13px;
+    flex: none;
+}
+
 .kd-planweek__select {
     font-family: var(--font-body);
     font-size: 12px;

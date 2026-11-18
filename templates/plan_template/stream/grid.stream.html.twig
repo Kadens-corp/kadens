@@ -1,7 +1,13 @@
 {# Réponse Turbo Stream d'une mutation de la trame : on remplace le CONTENU du
    conteneur (action="update"), pas l'élément lui-même — l'id #plan-grid survit
    ainsi à chaque mutation (même piège que #workout-blocks dans le compositeur).
-   Contexte fourni par gridContext(). #}
+   Contexte fourni par gridContext(), plus `gridNotice` (facultatif) : la
+   confirmation du geste, rendue sous l'en-tête de sa semaine. Quand il y en a
+   une, les flashes de la page partent d'abord, sinon ils se liraient comme la
+   réponse (cf. goals.stream). #}
+{% if gridNotice|default(null) %}
+    <turbo-stream action="remove" targets=".kd-flash"></turbo-stream>
+{% endif %}
 <turbo-stream action="update" target="plan-grid">
     <template>
         {{ include('plan_template/_grid.html.twig') }}

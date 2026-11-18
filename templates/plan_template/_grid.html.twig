@@ -33,22 +33,38 @@
                             {{ ux_icon('lucide:ellipsis') }}
                         </summary>
                         <div class="kd-kebab__panel">
-                            {# Copier cette semaine vers une cible libre (remplace la cible). #}
+                            {# Copier cette semaine vers une ou plusieurs autres (#111),
+                               chacune remplacée. Des cases à cocher en pastilles : S1 vers
+                               S2 à S4 en un geste. La suivante est cochée d'office, le cas
+                               le plus courant (comme « Copier vers » d'une séance).
+                               « Toutes les suivantes » envoie le formulaire sans tenir compte
+                               des cases : remplir S2 à S12 depuis S1 ne demande pas 11 clics.
+                               Bouton d'envoi nommé, donc sans JS aussi ; la confirmation lit
+                               le bouton cliqué (`event.submitter`) pour dire ce qui part où. #}
+                            {% set followingWeeks = template.durationWeeks - week.weekNumber %}
                             <form method="post" class="kd-kebab__form"
                                   action="{{ path('app_plan_template_week_copy', {id: template.id, week: week.weekNumber}) }}"
-                                  onsubmit="return confirm('Copier la semaine {{ week.weekNumber }} vers la semaine choisie ? Son contenu actuel sera remplacé.');">
+                                  onsubmit="return confirm(event.submitter &amp;&amp; event.submitter.name === 'all_after' ? 'Copier la semaine {{ week.weekNumber }} vers toutes les suivantes (S{{ week.weekNumber + 1 }} à S{{ template.durationWeeks }}) ? Leur contenu actuel sera remplacé.' : 'Copier la semaine {{ week.weekNumber }} vers les semaines cochées ? Leur contenu actuel sera remplacé.');">
                                 <input type="hidden" name="_token" value="{{ csrf_token('week_copy' ~ week.weekNumber) }}">
-                                <label class="kd-kebab__formlabel" for="week-copy-{{ week.weekNumber }}">
-                                    {{ ux_icon('lucide:copy') }} Copier vers
-                                </label>
-                                <div class="kd-kebab__formrow">
-                                    <select name="target" id="week-copy-{{ week.weekNumber }}" class="kd-input"
-                                            aria-label="Semaine de destination">
+                                <fieldset class="kd-weekcopy">
+                                    <legend class="kd-kebab__formlabel">
+                                        {{ ux_icon('lucide:copy') }} Copier vers
+                                    </legend>
+                                    <div class="kd-choicegrid kd-weekcopy__choices">
                                         {% for w in 1..template.durationWeeks %}
-                                            {% if w != week.weekNumber %}<option value="{{ w }}">Semaine {{ w }}</option>{% endif %}
+                                            {% if w != week.weekNumber %}
+                                                <input type="checkbox" name="targets[]" value="{{ w }}"
+                                                       id="week-copy-{{ week.weekNumber }}-{{ w }}"{{ w == week.weekNumber + 1 ? ' checked' }}>
+                                                <label class="kd-label" for="week-copy-{{ week.weekNumber }}-{{ w }}">S{{ w }}</label>
+                                            {% endif %}
                                         {% endfor %}
-                                    </select>
+                                    </div>
+                                </fieldset>
+                                <div class="kd-weekcopy__actions">
                                     <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">Copier</button>
+                                    {% if followingWeeks >= 2 %}
+                                        <button type="submit" name="all_after" value="1" class="kd-btn kd-btn--ghost kd-btn--sm">Toutes les suivantes</button>
+                                    {% endif %}
                                 </div>
                             </form>
 
@@ -64,6 +80,15 @@
                     </details>
                 {% endif %}
             </div>
+            {# Confirmation de « Copier vers » (#111), là où l'on vient de cliquer. #}
+            {% set notice = gridNotice|default(null) %}
+            {% if notice and notice.week == week.weekNumber %}
+                {% if notice.tone == 'error' %}
+                    <p class="kd-planweek__notice kd-planweek__notice--error" role="alert">{{ ux_icon('lucide:x') }} {{ notice.text }}</p>
+                {% else %}
+                    <p class="kd-planweek__notice" role="status">{{ ux_icon('lucide:circle-check') }} {{ notice.text }}</p>
+                {% endif %}
+            {% endif %}
 
             {# Charge de la semaine, ventilée par activité (salle : séries par groupe
                musculaire + tonnage ; endurance : distance/durée). Source : PlanVolumeAggregator. #}

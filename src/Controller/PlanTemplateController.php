@@ -809,42 +809,63 @@ final class PlanTemplateController extends AbstractController
     }
 
     /**
-     * Copie le contenu d'une semaine vers une autre (cible libre). Chaque séance est
-     * clonée en copie locale indépendante ; le contenu de la semaine cible est
-     * d'abord REMPLACÉ (ses cases détachées, réalisé préservé). Support de la
-     * construction incrémentale (« ma S1 est bonne, je la reporte en S3 »).
+     * Copie le contenu d'une semaine vers une ou plusieurs autres (#111). Chaque
+     * séance est clonée en copie locale indépendante, une par semaine cible ; le
+     * contenu de chaque cible est d'abord REMPLACÉ (ses cases détachées, réalisé
+     * préservé). Support de la construction incrémentale (« ma S1 est bonne, je
+     * la reporte sur S2 à S4 » en un geste, et non trois).
+     *
+     * La confirmation dit ce qui a été fait (« Semaine 1 copiée sur S2, S3 et
+     * S4. »), sous l'en-tête de la semaine source, là où l'on vient de cliquer.
      */
     #[Route('/{id}/weeks/{week}/copy', name: 'app_plan_template_week_copy', methods: ['POST'], requirements: ['id' => '\d+', 'week' => '\d+'])]
     public function copyWeek(Request $request, PlanTemplate $template, int $week, WorkoutCloner $cloner, ScheduledWorkoutRepository $scheduledRepository, PlanScheduler $scheduler): Response
     {
         $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
         $payload = $request->getPayload();
-        $target = $payload->getInt('target');
+        $duration = (int) $template->getDurationWeeks();
 
-        if ($this->isCsrfTokenValid('week_copy'.$week, $payload->getString('_token'))
-            && $week >= 1 && $week <= (int) $template->getDurationWeeks()
-            && $target >= 1 && $target <= (int) $template->getDurationWeeks() && $target !== $week) {
-            // Snapshots AVANT toute modification de la collection.
-            $sources = [];
-            $targetItems = [];
-            foreach ($template->getPlanItems() as $item) {
-                if ($item->getWeekNumber() === $week) {
-                    $sources[] = $item;
-                } elseif ($item->getWeekNumber() === $target) {
-                    $targetItems[] = $item;
-                }
+        if (!$this->isCsrfTokenValid('week_copy'.$week, $payload->getString('_token')) || $week < 1 || $week > $duration) {
+            return $this->gridResponse($request, $template);
+        }
+
+        // « Toutes les suivantes » l'emporte sur les cases cochées : c'est le
+        // bouton cliqué qui dit l'intention.
+        $allAfter = $payload->getBoolean('all_after') && $week < $duration;
+        $targets = $allAfter
+            ? range($week + 1, $duration)
+            : self::copyTargets($payload->all('targets'), $week, $duration);
+        if ([] === $targets) {
+            return $this->gridResponse($request, $template, [
+                'week' => $week,
+                'tone' => 'error',
+                'text' => 'Coche au moins une semaine de destination.',
+            ]);
+        }
+
+        // Snapshots AVANT toute modification de la collection.
+        $sources = [];
+        $targetItems = [];
+        foreach ($template->getPlanItems() as $item) {
+            if ($item->getWeekNumber() === $week) {
+                $sources[] = $item;
+            } elseif (\in_array($item->getWeekNumber(), $targets, true)) {
+                $targetItems[] = $item;
             }
+        }
 
-            // 1) Vider la semaine cible (remplacement, réalisé préservé).
-            $orphans = [];
-            foreach ($targetItems as $item) {
-                $orphan = $this->detachItem($template, $item, $scheduledRepository);
-                if (null !== $orphan) {
-                    $orphans[] = $orphan;
-                }
+        // 1) Vider les semaines cibles (remplacement, réalisé préservé).
+        $orphans = [];
+        foreach ($targetItems as $item) {
+            $orphan = $this->detachItem($template, $item, $scheduledRepository);
+            if (null !== $orphan) {
+                $orphans[] = $orphan;
             }
+        }
 
-            // 2) Cloner les cases de la source vers la cible.
+        // 2) Cloner les cases de la source vers chaque cible : une copie locale
+        // par case ET par semaine, pour que chacune progresse seule.
+        foreach ($targets as $target) {
             foreach ($sources as $item) {
                 $source = $item->getWorkout();
                 if (null === $source) {
@@ -859,20 +880,66 @@ final class PlanTemplateController extends AbstractController
                 $template->addPlanItem($newItem);
                 $this->entityManager->persist($newItem);
             }
-
-            $this->entityManager->flush();
-
-            if ([] !== $orphans) {
-                foreach ($orphans as $copy) {
-                    $this->entityManager->remove($copy);
-                }
-                $this->entityManager->flush();
-            }
-
-            $scheduler->resync($template);
         }
 
-        return $this->gridResponse($request, $template);
+        $this->entityManager->flush();
+
+        if ([] !== $orphans) {
+            foreach ($orphans as $copy) {
+                $this->entityManager->remove($copy);
+            }
+            $this->entityManager->flush();
+        }
+
+        $scheduler->resync($template);
+
+        return $this->gridResponse($request, $template, [
+            'week' => $week,
+            'tone' => 'success',
+            'text' => $allAfter && \count($targets) > 1
+                ? sprintf('Semaine %d copiée sur toutes les suivantes (S%d à S%d).', $week, $week + 1, $duration)
+                : self::weekCopyMessage($week, $targets),
+        ]);
+    }
+
+    /**
+     * Les semaines cibles cochées, nettoyées : entiers du plan, sans la source,
+     * sans doublon, dans l'ordre. Une valeur hors plan est ignorée, pas refusée
+     * en bloc : le plan a pu raccourcir dans un autre onglet.
+     *
+     * @param array<mixed> $raw
+     *
+     * @return list<int>
+     */
+    private static function copyTargets(array $raw, int $week, int $duration): array
+    {
+        $targets = [];
+        foreach ($raw as $value) {
+            if (!\is_scalar($value) || !ctype_digit((string) $value)) {
+                continue;
+            }
+            $target = (int) $value;
+            if ($target >= 1 && $target <= $duration && $target !== $week) {
+                $targets[$target] = $target;
+            }
+        }
+        ksort($targets);
+
+        return array_values($targets);
+    }
+
+    /**
+     * « Semaine 1 copiée sur S2. », « … sur S2 et S3. », « … sur S2, S3 et S4. »
+     *
+     * @param non-empty-list<int> $targets
+     */
+    private static function weekCopyMessage(int $week, array $targets): string
+    {
+        $labels = array_map(static fn (int $w): string => 'S'.$w, $targets);
+        $last = array_pop($labels);
+        $list = [] === $labels ? $last : implode(', ', $labels).' et '.$last;
+
+        return sprintf('Semaine %d copiée sur %s.', $week, $list);
     }
 
     /**
@@ -1325,13 +1392,26 @@ final class PlanTemplateController extends AbstractController
     /**
      * Répond à une mutation de la trame : Turbo Stream si accepté, sinon repli
      * par redirection vers l'édition (dégradation sans JS).
+     *
+     * `$notice` (facultatif) confirme le geste sous l'en-tête de la semaine
+     * concernée ; le stream retire d'abord les flashes de la page, qui se liraient
+     * sinon comme la réponse (même logique que `goalsResponse()`). Sans JS, il
+     * devient un flash sur l'éditeur.
+     *
+     * @param array{week: int, tone: 'success'|'error', text: string}|null $notice
      */
-    private function gridResponse(Request $request, PlanTemplate $template): Response
+    private function gridResponse(Request $request, PlanTemplate $template, ?array $notice = null): Response
     {
         if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
             $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
 
-            return $this->render('plan_template/stream/grid.stream.html.twig', $this->gridContext($template));
+            return $this->render('plan_template/stream/grid.stream.html.twig', [
+                'gridNotice' => $notice,
+            ] + $this->gridContext($template));
+        }
+
+        if (null !== $notice) {
+            $this->addFlash($notice['tone'], $notice['text']);
         }
 
         return $this->redirectToRoute('app_plan_template_edit', ['id' => $template->getId()]);
