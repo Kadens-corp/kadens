@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\PlanTemplate;
 use App\Entity\User;
+use App\Entity\Workout;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -88,6 +89,36 @@ class PlanTemplateRepository extends ServiceEntityRepository
             ->setMaxResults(1)
             ->getQuery()
             ->getOneOrNullResult();
+    }
+
+    /**
+     * Plans où une séance de bibliothèque a été posée (#113) : ceux dont une case
+     * est une copie de sa lignée (`origin`). Le compositeur les nomme pour dire
+     * que ces cases gardent leur version, puisque la pose forke.
+     *
+     * Portée = le propriétaire de la séance, comme `findDoneInLineage` : ses
+     * copies `planLocal` sont à lui, et le plan d'un autre n'a rien à faire dans
+     * ce rappel. Trié par titre, sans doublon (un plan peut poser la séance
+     * dans plusieurs cases).
+     *
+     * @return list<PlanTemplate>
+     */
+    public function findUsingLibraryWorkout(Workout $root): array
+    {
+        $owner = $root->getOwner();
+        if (null === $owner || $root->isPlanLocal()) {
+            return [];
+        }
+
+        return $this->createQueryBuilder('t')
+            ->andWhere('t.owner = :owner')
+            ->andWhere('EXISTS (SELECT 1 FROM App\Entity\PlanItem i JOIN i.workout w WHERE i.planTemplate = t AND w.origin = :root)')
+            ->setParameter('owner', $owner)
+            ->setParameter('root', $root)
+            ->orderBy('t.title', 'ASC')
+            ->addOrderBy('t.id', 'ASC')
+            ->getQuery()
+            ->getResult();
     }
 
     //    /**

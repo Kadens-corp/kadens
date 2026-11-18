@@ -20,6 +20,7 @@ use App\Http\BackTarget;
 use App\Repository\CoachingRepository;
 use App\Repository\ExerciseRepository;
 use App\Repository\LoggedExerciseRepository;
+use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
 use App\Repository\WorkoutRepository;
 use App\Security\Voter\WorkoutVoter;
@@ -234,17 +235,27 @@ final class WorkoutController extends AbstractController
      * métadonnées ici, donc plus de POST sur cette route.
      */
     #[Route('/{id}/edit', name: 'app_workout_edit', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function edit(Workout $workout, CoachingRepository $coachingRepository): Response
-    {
+    public function edit(
+        Workout $workout,
+        CoachingRepository $coachingRepository,
+        PlanTemplateRepository $planTemplateRepository,
+        ScheduledWorkoutRepository $scheduledRepository,
+    ): Response {
         $this->denyAccessUnlessGranted(WorkoutVoter::EDIT, $workout);
 
         /** @var User $user */
         $user = $this->getUser();
 
+        // Ce qui suit la séance et ce qui reste figé (#113). Une copie locale de
+        // plan n'est posée nulle part ailleurs que dans sa case : rien à dire.
+        $library = !$workout->isPlanLocal();
+
         return $this->render('workout/edit.html.twig', [
             'workout' => $workout,
             // Notes privées du coach sur l'athlète propriétaire (#65), null pour soi.
             'coachRelation' => $coachingRepository->findAcceptedRelation($user, $workout->getOwner()),
+            'usedInPlans' => $library ? $planTemplateRepository->findUsingLibraryWorkout($workout) : [],
+            'directPoses' => $library ? $scheduledRepository->directPoseCounts($workout) : ['total' => 0, 'done' => 0],
         ] + $this->blocksContext($workout) + $this->libraryContext($workout));
     }
 

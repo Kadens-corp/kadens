@@ -9039,6 +9039,39 @@ textarea.kd-inlineedit__input {
     margin: calc(-1 * var(--kd-space-4)) 0 var(--kd-space-6);
 }
 
+/* « Utilisée dans 2 plans : les cases déjà posées gardent leur version » (#113),
+   sous l'en-tête du compositeur. Même voix que `.kd-visibleto` : une information
+   de portée, pas une alerte. Le lien vers le plan garde la couleur du texte,
+   souligné, pour ne pas prendre le rouge des actions. */
+.kd-poses {
+    display: grid;
+    gap: var(--kd-space-1);
+    margin: var(--kd-space-2) 0 0;
+}
+
+.kd-poses__line {
+    display: flex;
+    align-items: baseline;
+    gap: var(--kd-space-2);
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--color-text-soft);
+}
+
+.kd-poses__line svg {
+    width: 13px;
+    height: 13px;
+    flex: none;
+    align-self: center;
+}
+
+.kd-poses__line a {
+    color: var(--color-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 /* ----------------------------------------------------------------------------
    Mini-modale d'édition rapide (éditeur de plan)
    Le panneau (#quick-panel) liste les exercices de la copie locale avec leurs

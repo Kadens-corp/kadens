@@ -73,6 +73,8 @@
                title="Cliquer pour modifier">{{ workout.description ?: '+ Ajouter une description' }}</p>
             {# Le coach écrit ici pour l'athlète, pas pour lui (#65). #}
             {{ include('components/_visible_to.html.twig', {owner: workout.owner}, with_context = false) }}
+            {# Où la séance est déjà posée, et ce que ses modifications y changent (#113). #}
+            {{ include('workout/_poses.html.twig', {plans: usedInPlans, directPoses: directPoses}, with_context = false) }}
         </div>
     </div>
 

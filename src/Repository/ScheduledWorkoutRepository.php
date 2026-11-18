@@ -1004,6 +1004,39 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
     }
 
     /**
+     * Séances datées qui pointent CETTE séance elle-même (#113) : les poses
+     * directes à l'agenda, qui ne forkent pas et suivent donc chaque
+     * modification. Les séances issues d'un plan pointent une copie locale et
+     * n'entrent pas dans ce compte. Tous statuts, et les faites à part : elles
+     * relisent elles aussi le prescrit vivant, si bien que modifier la séance
+     * change ce que leur comparaison prévu/réalisé affiche. Le compositeur le dit.
+     *
+     * Portée = le propriétaire de la séance, comme `findDoneInLineage`.
+     *
+     * @return array{total: int, done: int}
+     */
+    public function directPoseCounts(Workout $workout): array
+    {
+        $owner = $workout->getOwner();
+        if (null === $owner) {
+            return ['total' => 0, 'done' => 0];
+        }
+
+        /** @var array{total: int|string|null, done: int|string|null} $row */
+        $row = $this->createQueryBuilder('s')
+            ->select('COUNT(s.id) AS total', 'SUM(CASE WHEN s.status = :done THEN 1 ELSE 0 END) AS done')
+            ->andWhere('s.workout = :workout')
+            ->andWhere('s.owner = :owner')
+            ->setParameter('workout', $workout)
+            ->setParameter('owner', $owner)
+            ->setParameter('done', ScheduledStatus::DONE)
+            ->getQuery()
+            ->getSingleResult();
+
+        return ['total' => (int) $row['total'], 'done' => (int) $row['done']];
+    }
+
+    /**
      * Date de la dernière séance FAITE de chacune de ces séances (copies locales de
      * plan, en pratique), en une requête. L'outil de progression du plan (#110)
      * laisse ces cases telles quelles : leur prescrit est celui qu'on a suivi, et

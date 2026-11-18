@@ -1,0 +1,57 @@
+{# ============================================================================
+   Ce qui suit la séance et ce qui reste figé (#113).
+
+   Poser une séance dans un plan la copie (fork à la pose, `Workout.planLocal`) ;
+   la poser directement à l'agenda la référence. Les deux se ressemblent à
+   l'écran, et rien ne disait au coach qu'une description ajoutée après coup
+   apparaîtrait sur la séance du 04/12 mais pas sur celle du plan.
+
+   Ne se rend que dans le compositeur d'une séance de bibliothèque déjà posée
+   quelque part : une copie de case n'a pas d'autre usage que sa case.
+
+   Paramètres :
+     - plans       : list<PlanTemplate>, plans dont une case descend de la séance
+     - directPoses : {total: int, done: int}, séances datées qui pointent la
+                     séance elle-même, et combien sont déjà faites
+   ============================================================================ #}
+{% if plans is not empty or directPoses.total > 0 %}
+    <div class="kd-poses">
+        {% if plans is not empty %}
+            <p class="kd-poses__line">
+                {{ ux_icon('lucide:copy') }}
+                <span>
+                    {%- if plans|length == 1 -%}
+                        Utilisée dans le plan <a href="{{ path('app_plan_template_edit', {id: plans[0].id}) }}">{{ plans[0].title }}</a>
+                    {%- elseif plans|length <= 3 -%}
+                        Utilisée dans {{ plans|length }} plans,
+                        {% for plan in plans -%}
+                            <a href="{{ path('app_plan_template_edit', {id: plan.id}) }}">{{ plan.title }}</a>
+                            {%- if loop.revindex == 2 %} et {% elseif not loop.last %}, {% endif -%}
+                        {%- endfor -%}
+                    {%- else -%}
+                        Utilisée dans {{ plans|length }} plans
+                    {%- endif -%}
+                    {{- ' ' }}: les cases déjà posées gardent leur version.
+                </span>
+            </p>
+        {% endif %}
+        {% if directPoses.total > 0 %}
+            {# Une séance faite relit le prescrit vivant : la modifier change ce
+               que sa comparaison prévu/réalisé affiche. Ça se dit. #}
+            {% set done = directPoses.done %}
+            <p class="kd-poses__line">
+                {{ ux_icon('lucide:calendar-days') }}
+                <span>
+                    {%- if directPoses.total == 1 -%}
+                        Posée 1 fois directement à l'agenda : elle suit chaque modification
+                        {%- if done == 1 %}, même déjà faite{% endif %}.
+                    {%- else -%}
+                        Posée {{ directPoses.total }} fois directement à l'agenda : ces séances suivent chaque modification
+                        {%- if done == 1 %}, y compris celle déjà faite
+                        {%- elseif done > 1 %}, y compris les {{ done }} déjà faites{% endif %}.
+                    {%- endif -%}
+                </span>
+            </p>
+        {% endif %}
+    </div>
+{% endif %}
