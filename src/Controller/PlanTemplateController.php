@@ -1309,7 +1309,8 @@ final class PlanTemplateController extends AbstractController
      * retrouver les séances de cet athlète — dont celles qu'il a lui-même créées
      * pour lui, qui appartiennent à l'athlète (cf. CLAUDE.md §3). S'y ajoutent,
      * pour ce coach seulement, ses propres séances pas encore copiées chez
-     * l'athlète (#58) : la pose les y copie (`placeableSource()`).
+     * l'athlète (#58) : la pose les y copie (`placeableSource()`). Les déjà
+     * copiées ne restent nommées que par `paletteAlreadyCopied` (#112).
      *
      * @return array<string, mixed>
      */
@@ -1321,14 +1322,23 @@ final class PlanTemplateController extends AbstractController
         // Le coach qui compose le plan de son athlète voit aussi SES séances (#58).
         // Celles déjà copiées chez l'athlète s'effacent : leur copie est dans la
         // liste ci-dessus, et c'est elle que la pose reprendrait de toute façon.
+        // Mais l'effacement se dit (#112) : la copie porte « Copie de la tienne »
+        // et une ligne sous les pastilles les compte, sans quoi « Moi · 0 » se lit
+        // comme une séance perdue.
         $coach = $this->coachComposing($template);
         $coachWorkouts = [];
+        $coachIds = [];
+        $alreadyCopied = [];
         if (null !== $coach) {
             $copied = array_flip($this->workoutRepository->findCopiedSourceIds($owner));
-            $coachWorkouts = array_values(array_filter(
-                $this->workoutRepository->findLibraryForOwnerWithContent($coach),
-                static fn (Workout $w): bool => !isset($copied[(int) $w->getId()]),
-            ));
+            foreach ($this->workoutRepository->findLibraryForOwnerWithContent($coach) as $w) {
+                $coachIds[(int) $w->getId()] = true;
+                if (isset($copied[(int) $w->getId()])) {
+                    $alreadyCopied[] = $w;
+                } else {
+                    $coachWorkouts[] = $w;
+                }
+            }
         }
         // La pose part de la dernière réalisation : la carte le dit, pour que
         // les valeurs de la case ne changent pas de source en silence.
@@ -1361,6 +1371,10 @@ final class PlanTemplateController extends AbstractController
                 'offProgram' => $offProgram[(int) $workout->getId()] ?? 0,
                 // À la séance du coach : la poser la copiera chez l'athlète.
                 'mine' => $index >= \count($workouts),
+                // Chez l'athlète, la copie d'une séance du coach (#112) : c'est
+                // elle qui remplace l'original effacé de « Moi ». Lire l'id d'un
+                // proxy ne le charge pas.
+                'copyOfMine' => isset($coachIds[(int) $workout->getCopiedFrom()?->getId()]),
             ];
         }
 
@@ -1386,6 +1400,7 @@ final class PlanTemplateController extends AbstractController
                 'owner' => ['label' => $owner->getDisplayName(), 'count' => \count($workouts)],
                 'mine' => ['label' => 'Moi', 'count' => \count($coachWorkouts)],
             ],
+            'paletteAlreadyCopied' => $alreadyCopied,
         ];
     }
 

@@ -16,7 +16,12 @@
 
    Un coach qui compose le plan de son athlète y voit aussi SES séances (`mine`,
    #58), marquées « À moi » : la poser la copie d'abord dans la bibliothèque de
-   l'athlète. Les pastilles « à qui » n'existent que dans ce cas. #}
+   l'athlète. Les pastilles « à qui » n'existent que dans ce cas.
+
+   Une séance du coach déjà copiée chez l'athlète n'est listée qu'une fois, par sa
+   copie (`copyOfMine`, « Copie de la tienne ») : la pose la reprendrait de toute
+   façon. L'effacement se dit sous les pastilles (`paletteAlreadyCopied`, #112),
+   sinon « Moi · 0 » se lit comme une séance perdue. #}
 {% import 'components/_activity.html.twig' as activity %}
 {% import 'components/_rating.html.twig' as ratings %}
 
@@ -70,6 +75,19 @@
                             data-action="plangrid#pickOwner">{{ facet.label }} · {{ facet.count }}</button>
                 {% endfor %}
             </div>
+            {% set copied = paletteAlreadyCopied|length %}
+            {% if copied %}
+                <p class="kd-libpanel__note">
+                    {% if copied == 1 %}
+                        <strong>{{ (paletteAlreadyCopied|first).title }}</strong> est déjà copiée
+                        chez {{ paletteOwners.owner.label }} : elle est dans ses séances,
+                        marquée « Copie de la tienne ».
+                    {% else %}
+                        {{ copied }} de tes séances sont déjà copiées chez {{ paletteOwners.owner.label }} :
+                        elles sont dans ses séances, marquées « Copie de la tienne ».
+                    {% endif %}
+                </p>
+            {% endif %}
         {% endif %}
     </div>
 
@@ -89,6 +107,10 @@
                     {% if card.mine %}
                         <span class="kd-scope" title="Ajoutée au plan, elle sera copiée dans ses séances">
                             {{ ux_icon('lucide:user') }} À moi
+                        </span>
+                    {% elseif card.copyOfMine %}
+                        <span class="kd-scope" title="Copiée depuis tes séances : c'est elle que l'ajout reprend">
+                            {{ ux_icon('lucide:copy') }} Copie de la tienne
                         </span>
                     {% endif %}
                     <span class="kd-palettecard__meta">

@@ -61,12 +61,13 @@
             {{ include('components/_visible_to.html.twig', {owner: template.owner}, with_context = false) }}
 
             {# Coach sur le plan d'un athlète : ce que fait la pose d'une de ses
-               propres séances (#58). À qui est le plan, le bandeau propriétaire
-               le dit déjà (#64). #}
+               propres séances (#58), et pourquoi elle quitte ensuite « Moi »
+               (#112). À qui est le plan, le bandeau propriétaire le dit déjà (#64). #}
             {% if composingFor %}
                 <p class="kd-editsection__hint">
-                    Ses séances et les tiennes sont dans la liste des séances. Si tu ajoutes
-                    une des tiennes, elle est d'abord copiée dans ses séances.
+                    La liste des séances réunit les siennes et les tiennes. Ajouter une des
+                    tiennes la copie d'abord dans ses séances. Ensuite, seule la copie reste
+                    dans la liste, marquée « Copie de la tienne ».
                 </p>
             {% endif %}
         </div>

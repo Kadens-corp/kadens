@@ -587,6 +587,47 @@ final class CoachControllerTest extends WebTestCase
         self::assertSelectorExists('[data-owner-pill][data-owner="mine"]');
     }
 
+    /**
+     * #112 : une séance du coach déjà copiée chez l'athlète s'efface de « Moi »
+     * (sa copie est listée, la pose la reprendrait). L'effacement se dit : la
+     * copie porte « Copie de la tienne », une ligne sous les pastilles nomme
+     * l'original, et « Moi » ne compte que ce qui reste à copier.
+     */
+    public function testPlanEditorPaletteSaysWhichCoachWorkoutsAreAlreadyCopied(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $hills = $this->createWorkout($coach, 'Côtes 10 x 30 s');
+        // Renommée par l'athlète : la marque suit le lien, pas le titre.
+        $copy = $this->createWorkout($athlete, 'Mes côtes')->setCopiedFrom($hills);
+        $own = $this->createWorkout($athlete, 'Fractionné athlète');
+        $plan = $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
+        $this->em->flush();
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/plan-template/'.$plan->getId().'/edit');
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorNotExists('.kd-palettecard[data-workout-id="'.$hills->getId().'"]');
+        self::assertSelectorTextContains('[data-owner-pill][data-owner="mine"]', 'Moi · 0');
+        self::assertStringContainsString(
+            'Copie de la tienne',
+            $crawler->filter('.kd-palettecard[data-workout-id="'.$copy->getId().'"]')->text(),
+        );
+        self::assertStringNotContainsString(
+            'Copie de la tienne',
+            $crawler->filter('.kd-palettecard[data-workout-id="'.$own->getId().'"]')->text(),
+        );
+        self::assertSelectorTextContains('.kd-libpanel__note', 'Côtes 10 x 30 s est déjà copiée chez athlete@example.com');
+
+        // L'athlète, dans son propre plan, ne voit ni la ligne ni la marque.
+        $this->client->loginUser($athlete);
+        $this->client->request('GET', '/plan-template/'.$plan->getId().'/edit');
+        self::assertSelectorNotExists('.kd-libpanel__note');
+        self::assertSelectorTextNotContains('.kd-palette', 'Copie de la tienne');
+    }
+
     /** La relation est dirigée : l'athlète, dans son propre plan, ne voit que ses séances. */
     public function testAthletePaletteNeverShowsCoachWorkouts(): void
     {

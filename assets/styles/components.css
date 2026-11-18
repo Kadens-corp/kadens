@@ -6750,6 +6750,20 @@ a.kd-summplan__title:hover {
     color: var(--color-primary-on-tint);
 }
 
+/* Sous les pastilles « à qui » : les séances du coach déjà copiées chez l'athlète,
+   qui ne figurent plus que par leur copie (#112). Même voix que la cible. */
+.kd-libpanel__note {
+    margin: var(--kd-space-3) 0 0;
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+}
+
+.kd-libpanel__note strong {
+    font-weight: var(--kd-weight-semibold);
+}
+
 /* N'a de sens qu'en feuille : sur écran large la bibliothèque est une colonne, il
    n'y a rien à fermer. */
 .kd-libpanel__close {
