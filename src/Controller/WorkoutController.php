@@ -262,6 +262,8 @@ final class WorkoutController extends AbstractController
             'workout' => $workout,
             // Notes privées du coach sur l'athlète propriétaire (#65), null pour soi.
             'coachRelation' => $coachingRepository->findAcceptedRelation($user, $workout->getOwner()),
+            // Le bandeau de volume, rendu en esquisse pour réserver sa place (#125).
+            'volumePanel' => $this->volumeContext($workout),
         ] + $this->deletionContext($workout, $planTemplateRepository, $scheduledRepository)
             + $this->blocksContext($workout) + $this->libraryContext($workout));
     }
@@ -843,7 +845,9 @@ final class WorkoutController extends AbstractController
      * `composer`). Deux raisons qui vont dans le même sens : le contenu change à
      * chaque exercice posé, et les deux planches pèsent ~70 Ko de tracés — les
      * poser dans le HTML initial ralentirait l'ouverture du compositeur pour une
-     * information qu'on ne lit pas en premier.
+     * information qu'on ne lit pas en premier. La page rend quand même le bandeau
+     * en esquisse (chiffres complets, silhouettes sans tracés) : sa place est prise
+     * avant que cette route ne remplisse le dessin (#125).
      *
      * Cette route ne mute rien : c'est le pendant de `app_plan_template_grid`,
      * qui re-rend la trame du plan sans la toucher.

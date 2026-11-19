@@ -1495,6 +1495,57 @@ a.kd-scope--link:hover {
     border-color: color-mix(in srgb, var(--color-status-missed) 22%, transparent);
 }
 
+/* Le flash en toast (#125) : `components/_flash_toasts`. Pour une page qui garde
+   son défilement après un geste, où un message en tête ne se lirait pas. Même
+   place que la pastille « Enregistré » (`.kd-savestatus`), mêmes couleurs que le
+   flash. Seul le fond de l'erreur change : sa teinte est translucide et
+   laisserait transparaître la page dessous, on la mélange donc au papier. */
+.kd-toasts {
+    position: fixed;
+    right: var(--kd-space-7);
+    bottom: calc(var(--kd-navbar-h, 0px) + var(--kd-space-7));
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--kd-space-3);
+    max-width: min(28rem, calc(100vw - 2 * var(--kd-space-7)));
+    pointer-events: none;
+}
+
+.kd-toasts .kd-flash {
+    margin-bottom: 0;
+    padding: var(--kd-space-4) var(--kd-space-5);
+    pointer-events: auto;
+}
+
+.kd-toasts .kd-flash--error {
+    background: color-mix(in srgb, var(--color-status-missed) 9%, var(--color-surface));
+}
+
+.kd-flash__close {
+    display: inline-flex;
+    margin-left: auto;
+    padding: var(--kd-space-1);
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+.kd-flash__close svg {
+    width: 14px;
+    height: 14px;
+}
+
+@media (max-width: 560px) {
+    .kd-toasts {
+        right: var(--kd-space-4);
+        left: var(--kd-space-4);
+        max-width: none;
+    }
+}
+
 /* ----------------------------------------------------------------------------
    Formulaires — stylés globalement via le thème form/kadens_theme.html.twig.
    Ces classes sont appliquées automatiquement par le thème à tous les champs.
@@ -6477,10 +6528,12 @@ a.kd-summplan__title:hover {
 }
 
 /* ---- Bandeau « ce que cette séance va charger » ----
-   Silhouette + légende chiffrée à gauche, tuiles de volume dessous. Il arrive
-   APRÈS le rendu de la page (fetch), d'où l'absence de hauteur réservée : rien
-   ne saute, parce que rien n'est posé en dessous avant qu'il n'existe — le
-   compositeur qui le suit descend simplement d'un cran. */
+   Silhouette + légende chiffrée à gauche, tuiles de volume dessous. Dans le
+   compositeur, il est rendu avec la page en esquisse (silhouettes sans tracés,
+   même boîte), puis complété par fetch : la place est prise dès le départ. Il
+   arrivait vide et poussait le compositeur d'un cran, sous la main (#125). Ses
+   changements de hauteur ensuite sont compensés au défilement
+   (`composer#holdPlaceOnVolume`). */
 .kd-wkvol {
     margin-bottom: var(--kd-space-6);
     padding: var(--kd-space-6);

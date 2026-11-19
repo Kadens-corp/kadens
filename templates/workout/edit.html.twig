@@ -87,13 +87,16 @@
        programme (#65). Ne se rend que pour le coach de l'athlète propriétaire. #}
     {{ include('components/_coach_notes.html.twig', {coaching: coachRelation}, with_context = false) }}
 
-    {# Le bandeau « ce que cette séance va charger » : vide au rendu, rempli par le
-       contrôleur `composer` puis rafraîchi à chaque mutation. Il est HORS de la
-       section compositeur (donc jamais emporté par un stream de blocs) et vide à
-       dessein : les deux planches pèsent ~70 Ko de tracés, les poser dans le HTML
-       initial ralentirait l'ouverture de l'éditeur pour ce qu'on ne lit pas en
-       premier. #}
-    <div id="workout-volume"></div>
+    {# Le bandeau « ce que cette séance va charger ». Il est HORS de la section
+       compositeur (donc jamais emporté par un stream de blocs). Rendu ici en
+       ESQUISSE : chiffres et légende complets, silhouettes sans leurs tracés — les
+       deux planches pèsent ~70 Ko, les poser dans le HTML initial ralentirait
+       l'ouverture de l'éditeur pour ce qu'on ne lit pas en premier. Le contrôleur
+       `composer` les charge ensuite à la même place. Vide au rendu, il arrivait
+       après coup et poussait tout le compositeur vers le bas (#125). #}
+    <div id="workout-volume">
+        {{ include('components/_workout_volume.html.twig', volumePanel|merge({sketch: true}), with_context = false) }}
+    </div>
 
     {# data-turbo="false" : Turbo n'intercepte aucun formulaire ici ; le contrôleur
        `composer` applique lui-même les Turbo Streams via fetch (voir le contrôleur). #}

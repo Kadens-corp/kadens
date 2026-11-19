@@ -43,6 +43,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\UX\Turbo\TurboBundle;
 
 /**
  * Espace de travail du coach (ROLE_COACH, cf. access_control).
@@ -64,6 +65,12 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/coach')]
 final class CoachController extends AbstractController
 {
+    /** Les sections de la fiche où l'on reste après le geste : leur ancre (#125). */
+    private const SECTION_SCHEDULE = 'poser-une-seance';
+    private const SECTION_PLACE = 'placer-un-plan';
+    private const SECTION_PLAN_COPY = 'un-de-mes-plans';
+    private const SECTION_WORKOUT_COPY = 'une-de-mes-seances';
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly CoachingResolver $coachingResolver,
@@ -364,20 +371,18 @@ final class CoachController extends AbstractController
         $source = $workoutRepository->find($request->getPayload()->getInt('workout'));
 
         if (!$source instanceof Workout || $source->getOwner()?->getId() !== $coach->getId() || $source->isPlanLocal()) {
-            $this->addFlash('error', 'Choisis une séance de ta bibliothèque.');
-
-            return $this->redirectToRoute('app_coach_athlete', ['id' => $athlete->getId()]);
+            return $this->backToSection($request, $athlete, self::SECTION_WORKOUT_COPY, 'error', 'Choisis une séance de ta bibliothèque.');
         }
 
         $copy = $copier->copyFor($source, $athlete)->workout;
         $this->entityManager->flush();
 
-        $this->addFlash('success', sprintf('Copie de « %s » donnée à %s. Ajuste-la à son niveau si besoin.', $copy->getTitle(), $athlete->getDisplayName()));
-
-        return $this->redirectToRoute('app_workout_edit', [
-            'id' => $copy->getId(),
-            'from' => BackTarget::token(BackTarget::ATHLETE, (int) $athlete->getId()),
-        ]);
+        // On reste sur la fiche (#125), comme pour la copie de plan : la séance
+        // apparaît dans « Ses séances », d'où elle s'ouvre, et le formulaire
+        // annonce désormais la copie existante (#82).
+        return $this->backToSection($request, $athlete, self::SECTION_WORKOUT_COPY, 'success', sprintf(
+            'Copie de « %s » donnée à %s. Ajuste-la à son niveau si besoin.', $copy->getTitle(), $athlete->getDisplayName(),
+        ));
     }
 
     /**
@@ -455,17 +460,17 @@ final class CoachController extends AbstractController
         $source = $planTemplateRepository->find($request->getPayload()->getInt('plan'));
 
         if (!$source instanceof PlanTemplate || $source->getOwner()?->getId() !== $coach->getId()) {
-            $this->addFlash('error', 'Choisis un plan de ta bibliothèque.');
-
-            return $this->redirectToRoute('app_coach_athlete', ['id' => $athlete->getId()]);
+            return $this->backToSection($request, $athlete, self::SECTION_PLAN_COPY, 'error', 'Choisis un plan de ta bibliothèque.');
         }
 
         $copy = $copier->copyFor($source, $athlete);
         $this->entityManager->flush();
 
-        $this->addFlash('success', sprintf('« %s » ajouté aux plans de %s, avec ses séances.', $copy->getTitle(), $athlete->getDisplayName()));
-
-        return $this->redirectToRoute('app_plan_template_edit', ['id' => $copy->getId()]);
+        // On reste sur la fiche (#125) : le plan apparaît dans « Ses plans », d'où
+        // il s'ouvre. L'éditeur s'ouvrait d'office et faisait perdre la fiche.
+        return $this->backToSection($request, $athlete, self::SECTION_PLAN_COPY, 'success', sprintf(
+            '« %s » ajouté aux plans de %s, avec ses séances.', $copy->getTitle(), $athlete->getDisplayName(),
+        ));
     }
 
     /**
@@ -513,7 +518,6 @@ final class CoachController extends AbstractController
         $this->denyUnlessCsrf($request, 'coach_schedule'.$athlete->getId());
 
         $payload = $request->getPayload();
-        $redirect = $this->redirectToRoute('app_coach_athlete', ['id' => $athlete->getId()]);
 
         $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $payload->getString('date')) ?: null;
         $workout = $workoutRepository->find($payload->getInt('workoutId'));
@@ -523,9 +527,7 @@ final class CoachController extends AbstractController
         // appartienne bien à cet athlète : sans ça, un coach poserait sa propre
         // séance (ou celle d'un autre athlète) sur ce calendrier.
         if (null === $date || null === $workout || $workout->isPlanLocal() || $workout->getOwner() !== $athlete) {
-            $this->addFlash('error', 'Impossible de planifier cette séance.');
-
-            return $redirect;
+            return $this->backToSection($request, $athlete, self::SECTION_SCHEDULE, 'error', 'Impossible de planifier cette séance.');
         }
 
         $scheduled = (new ScheduledWorkout())
@@ -537,9 +539,9 @@ final class CoachController extends AbstractController
         $this->entityManager->persist($scheduled);
         $this->entityManager->flush();
 
-        $this->addFlash('success', sprintf('Séance posée au %s sur le calendrier de %s.', $date->format('d/m/Y'), $athlete->getDisplayName()));
-
-        return $redirect;
+        return $this->backToSection($request, $athlete, self::SECTION_SCHEDULE, 'success', sprintf(
+            'Séance posée au %s sur le calendrier de %s.', $date->format('d/m/Y'), $athlete->getDisplayName(),
+        ));
     }
 
     /**
@@ -558,15 +560,12 @@ final class CoachController extends AbstractController
         $this->denyUnlessCsrf($request, 'coach_instantiate'.$athlete->getId());
 
         $payload = $request->getPayload();
-        $redirect = $this->redirectToRoute('app_coach_athlete', ['id' => $athlete->getId()]);
 
         $template = $planTemplateRepository->find($payload->getInt('planId'));
         $startDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $payload->getString('startDate')) ?: null;
 
         if (null === $template || null === $startDate || $template->getOwner() !== $athlete) {
-            $this->addFlash('error', 'Impossible de placer ce plan dans l\'agenda.');
-
-            return $redirect;
+            return $this->backToSection($request, $athlete, self::SECTION_PLACE, 'error', 'Impossible de placer ce plan dans l\'agenda.');
         }
 
         $alreadyOnCalendar = $planScheduler->isInstantiated($template, $athlete);
@@ -574,7 +573,7 @@ final class CoachController extends AbstractController
 
         $count = \count($created);
         $plural = $count > 1 ? 's' : '';
-        $this->addFlash('success', $alreadyOnCalendar
+        return $this->backToSection($request, $athlete, self::SECTION_PLACE, 'success', $alreadyOnCalendar
             ? sprintf(
                 'Le plan « %s » était déjà dans l\'agenda de %s : %d nouvelle%s séance%s ajoutée%s, les autres n\'ont pas bougé.',
                 $template->getTitle(), $athlete->getDisplayName(), $count, $plural, $plural, $plural,
@@ -583,8 +582,37 @@ final class CoachController extends AbstractController
                 'Plan « %s » placé dans l\'agenda de %s : %d séance%s.',
                 $template->getTitle(), $athlete->getDisplayName(), $count, $plural,
             ));
+    }
 
-        return $redirect;
+    /**
+     * La fin d'un geste fait depuis la fiche (#125) : poser une séance, placer un
+     * plan, lui donner une de ses séances ou un de ses plans. On reste où l'on a
+     * cliqué.
+     *
+     * Ces gestes redirigeaient vers la fiche, qui se rouvrait en haut : le coach
+     * perdait le formulaire qu'il venait de remplir. Désormais :
+     *  - avec Turbo, la fiche se relit en arrière-plan et se morphe, défilement
+     *    gardé (même motif que le calendrier, #120) : ce que le geste change
+     *    ailleurs sur la fiche (prochaines séances, « Ses plans », aperçu « déjà
+     *    placé ») suit ;
+     *  - sans JS, la redirection vise l'ancre de la section, que le navigateur
+     *    sait suivre seul (Turbo, lui, perd le fragment d'une redirection).
+     * Le message reste un flash ordinaire, que la fiche rend en toast en bas à
+     * droite (`components/_flash_toasts`) : en tête, il ne se lirait pas.
+     *
+     * @param 'success'|'error' $tone
+     */
+    private function backToSection(Request $request, User $athlete, string $section, string $tone, string $message): Response
+    {
+        $this->addFlash($tone, $message);
+
+        if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
+            $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
+
+            return $this->render('coach/stream/refresh.stream.html.twig');
+        }
+
+        return $this->redirect($this->generateUrl('app_coach_athlete', ['id' => $athlete->getId()]).'#'.$section);
     }
 
     /**

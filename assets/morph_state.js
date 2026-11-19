@@ -26,3 +26,42 @@ document.addEventListener('turbo:before-morph-attribute', (event) => {
         event.preventDefault();
     }
 });
+
+/*
+ * La barre de débogage Symfony (dev seulement) ne survit pas à un morph, et le
+ * morph a deux usages ici : la séance ramenée à aujourd'hui (#109), les gestes
+ * du calendrier (#120) et de la fiche coach (#125).
+ *
+ * Symfony injecte d'abord une barre provisoire, « Loading… », que son script
+ * remplace par la vraie. Le morph aligne la page sur le HTML relu : la barre
+ * chargée redevient la provisoire, et le script de la page relue ne s'exécute
+ * pas (un morph n'exécute aucun script inséré). Elle restait donc en
+ * « Loading » jusqu'au prochain chargement complet.
+ *
+ * On la rend permanente pour la durée de ce rendu seulement : même id des deux
+ * côtés, `data-turbo-permanent`, et Turbo la laisse telle quelle. Seulement pour
+ * un morph : une navigation ordinaire doit afficher la barre de la NOUVELLE
+ * requête, pas garder celle de la page quittée. La requête du refresh, elle,
+ * figure déjà dans le panneau AJAX de la barre gardée.
+ */
+const DEBUG_TOOLBAR_ID = 'kd-sf-toolbar';
+
+document.addEventListener('turbo:before-render', (event) => {
+    const { newBody, renderMethod } = event.detail;
+    if (renderMethod !== 'morph' || !newBody) return;
+
+    const current = document.querySelector('[id^="sfwdt"]')?.closest('.sf-toolbar');
+    const incoming = newBody.querySelector('[id^="sfwdt"]')?.closest('.sf-toolbar');
+    if (!current || !incoming) return;
+
+    for (const toolbar of [current, incoming]) {
+        toolbar.id = DEBUG_TOOLBAR_ID;
+        toolbar.setAttribute('data-turbo-permanent', '');
+    }
+});
+
+// La permanence ne vaut que pour le morph : retirée après le rendu, la barre
+// suivra de nouveau les navigations ordinaires.
+document.addEventListener('turbo:render', () => {
+    document.getElementById(DEBUG_TOOLBAR_ID)?.removeAttribute('data-turbo-permanent');
+});

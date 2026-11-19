@@ -133,8 +133,10 @@ export default class extends Controller {
             this.closeLib();
         };
         this.onBeforeStreamRender = this.keepPendingInput.bind(this);
+        this.onVolumeRender = this.holdPlaceOnVolume.bind(this);
         this.element.addEventListener('submit', this.onSubmit);
         document.addEventListener('turbo:before-stream-render', this.onBeforeStreamRender);
+        document.addEventListener('turbo:before-stream-render', this.onVolumeRender);
         document.addEventListener('keydown', this.onKey);
         document.addEventListener('click', this.onOutside);
         this.knownBlockIds = new Set(this.blockTargets.map((el) => el.dataset.blockId));
@@ -146,6 +148,7 @@ export default class extends Controller {
     disconnect() {
         this.element.removeEventListener('submit', this.onSubmit);
         document.removeEventListener('turbo:before-stream-render', this.onBeforeStreamRender);
+        document.removeEventListener('turbo:before-stream-render', this.onVolumeRender);
         document.removeEventListener('keydown', this.onKey);
         document.removeEventListener('click', this.onOutside);
         // Une navigation Turbo pendant que la feuille est ouverte laisserait la page
@@ -336,7 +339,7 @@ export default class extends Controller {
         });
     }
 
-    // ---- Bandeau de volume (chargé après la page) --------------------------
+    // ---- Bandeau de volume (esquissé avec la page, dessiné ensuite) --------
 
     /**
      * Recharge « ce que cette séance va charger » : la carte des muscles et le
@@ -365,6 +368,30 @@ export default class extends Controller {
         } finally {
             this.volumePending = false;
         }
+    }
+
+    /**
+     * Le bandeau est AU-DESSUS du compositeur : quand il change de hauteur (il
+     * apparaît au premier exercice de force, sa légende gagne une zone), tout ce
+     * qu'on est en train d'éditer glisse d'autant (#125). On garde donc le
+     * compositeur à sa place à l'écran, et c'est le bandeau qui grandit vers le haut.
+     *
+     * Sur l'événement de rendu et non après `renderStreamMessage` : le stream rend
+     * de façon asynchrone, c'est ici seulement qu'on encadre la mise à jour réelle.
+     * Le défilement natif (`overflow-anchor`) fait la même chose dans Chrome et
+     * Firefox, mais pas dans Safari ; s'il est déjà passé, l'écart mesuré est nul
+     * et rien ne bouge deux fois.
+     */
+    holdPlaceOnVolume(event) {
+        if (event.target.getAttribute('target') !== 'workout-volume') return;
+
+        const { render } = event.detail;
+        event.detail.render = async (stream) => {
+            const before = this.element.getBoundingClientRect().top;
+            await render(stream);
+            const shift = this.element.getBoundingClientRect().top - before;
+            if (shift !== 0) window.scrollBy(0, shift);
+        };
     }
 
     // ---- Bloc actif --------------------------------------------------------

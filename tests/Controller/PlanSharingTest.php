@@ -433,10 +433,16 @@ final class PlanSharingTest extends WebTestCase
         $this->em->clear();
         $copy = $this->em->getRepository(PlanTemplate::class)->findOneBy(['owner' => $athlete]);
         self::assertNotNull($copy);
-        self::assertResponseRedirects('/plan-template/'.$copy->getId().'/edit');
+        // #125 : on reste sur la fiche, à la section du geste ; le plan apparaît
+        // dans « Ses plans » et le message arrive en toast.
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId().'#un-de-mes-plans');
         self::assertSame('Bloc force', $copy->getTitle());
         // Le modèle reste au coach.
         self::assertSame($coach->getId(), $this->mustFind(PlanTemplate::class, $plan->getId())->getOwner()?->getId());
+
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-toasts .kd-flash', '« Bloc force » ajouté aux plans de');
+        self::assertSelectorExists('a[href^="/plan-template/'.$copy->getId().'"]');
     }
 
     public function testCoachCannotGiveAPlanHeDoesNotOwn(): void
@@ -453,7 +459,7 @@ final class PlanSharingTest extends WebTestCase
             'plan' => (string) $foreign->getId(),
         ]);
 
-        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId());
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId().'#un-de-mes-plans');
         self::assertCount(0, $this->em->getRepository(PlanTemplate::class)->findBy(['owner' => $athlete]));
     }
 

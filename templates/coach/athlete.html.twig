@@ -3,12 +3,8 @@
 {% block title %}{{ athlete.displayName }} — Espace coach — Kadens{% endblock %}
 
 {% block body %}
-    {% for message in app.flashes('success') %}
-        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-    {% for message in app.flashes('error') %}
-        <p data-turbo-temporary class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ message }}</p>
-    {% endfor %}
+    {# En toast et non en tête : les poses gardent le défilement de la fiche (#125). #}
+    {{ include('components/_flash_toasts.html.twig', {}, with_context = false) }}
 
     {# ============================== EN-TÊTE ATHLÈTE ========================= #}
     <header class="kd-phero">
@@ -97,7 +93,7 @@
             {# Une séance de SA bibliothèque à lui, copiée chez l'athlète : l'original
                reste intact, la copie appartient à l'athlète (#58). Le dire avant
                l'envoi, et prévenir le doublon quand il en a déjà une copie (#82). #}
-            <section class="kd-card">
+            <section class="kd-card" id="une-de-mes-seances">
                 <h3 class="kd-card__title">{{ ux_icon('lucide:copy') }} Une de mes séances</h3>
                 {% if coachWorkouts is empty %}
                     <p class="kd-lead">Tu n'as pas encore de séance : crée-en une dans « Mes séances ».</p>
@@ -152,7 +148,7 @@
 
             {# Un plan de SA bibliothèque, copié chez l'athlète avec ses séances (#58).
                Pour lui donner le plan lui-même : « Donner ce plan à », dans l'éditeur. #}
-            <section class="kd-card">
+            <section class="kd-card" id="un-de-mes-plans">
                 <h3 class="kd-card__title">{{ ux_icon('lucide:copy') }} Un de mes plans</h3>
                 {% if coachPlans is empty %}
                     <p class="kd-lead">Tu n'as pas encore de plan : compose-en un dans « Mes plans ».</p>
@@ -207,8 +203,9 @@
             </div>
 
             {# Pose directe sur son calendrier : le contrôleur refuse toute séance
-               qui ne lui appartient pas, ou qui est une copie privée de plan. #}
-            <section class="kd-card kd-section__block">
+               qui ne lui appartient pas, ou qui est une copie privée de plan.
+               L'id est l'ancre du retour sans JS après la pose (#125). #}
+            <section class="kd-card kd-section__block" id="poser-une-seance">
                 <h3 class="kd-card__title">{{ ux_icon('lucide:calendar-plus') }} Poser une séance sur son calendrier</h3>
                 <form method="post" action="{{ path('app_coach_schedule', {id: athlete.id}) }}" class="kd-coachform">
                     <input type="hidden" name="_token" value="{{ csrf_token('coach_schedule' ~ athlete.id) }}">

@@ -847,6 +847,42 @@ final class WorkoutControllerTest extends WebTestCase
     }
 
     /**
+     * #125 : le compositeur rend son bandeau avec la page, en esquisse. Il
+     * arrivait vide puis poussait les blocs sous la main ; désormais légende et
+     * chiffres sont là dès l'ouverture, et chaque planche occupe déjà sa boîte
+     * (mêmes dimensions) sans porter un seul tracé : les ~70 Ko de dessin
+     * restent au fetch du contrôleur `composer`.
+     */
+    public function testTheComposerReservesTheVolumePanelWithoutItsDrawing(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $exercise = $this->createExercise($user, 'Développé couché');
+        $exercise->setTargetAreas([TargetArea::CHEST]);
+        $workout = $this->createWorkout($user, 'Séance');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setPosition(0);
+        $block->addPrescribedExercise($this->makePrescribed($exercise, 0)->setSets(4)->setReps(8)->setWeightKg(60.0));
+        $workout->addBlock($block);
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $page = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        $fragment = $this->client->request('GET', '/workout/'.$workout->getId().'/volume');
+
+        $sketch = $page->filter('#workout-volume .kd-bodymap__plate');
+        $drawn = $fragment->filter('.kd-bodymap__plate');
+        self::assertCount(2, $sketch);
+        self::assertCount(0, $sketch->filter('path'));
+        self::assertGreaterThan(0, $drawn->filter('path')->count());
+        foreach ([0, 1] as $i) {
+            foreach (['viewBox', 'width', 'height'] as $attribute) {
+                self::assertSame($drawn->eq($i)->attr($attribute), $sketch->eq($i)->attr($attribute));
+            }
+        }
+        self::assertStringContainsString('Pectoraux', $page->filter('#workout-volume .kd-wkvol__legend')->text());
+        self::assertStringContainsString('1 920', $page->filter('#workout-volume .kd-wkvol__kpis')->text());
+    }
+
+    /**
      * Le même bandeau vit AUSSI dans la page de consultation, et il y est rendu
      * d'emblée : une vue de consultation ne charge rien après coup.
      */

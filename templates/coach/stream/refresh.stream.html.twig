@@ -1,0 +1,6 @@
+{# Réponse à un geste fait depuis la fiche d'un athlète (#125) : séance posée
+   sur son calendrier, plan placé dans son agenda, séance ou plan copié chez lui. La fiche
+   se relit en arrière-plan et se morphe, défilement gardé (même motif que le
+   calendrier, #120), au lieu de se rouvrir en haut. Le message est un flash
+   ordinaire, rendu en toast en bas à droite (components/_flash_toasts). #}
+<turbo-stream action="refresh" method="morph" scroll="preserve"></turbo-stream>

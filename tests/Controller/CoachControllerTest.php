@@ -252,8 +252,8 @@ final class CoachControllerTest extends WebTestCase
 
     /**
      * #58 : le coach donne une de SES séances à son athlète. La copie appartient
-     * à l'athlète, l'original reste au coach, et le compositeur s'ouvre avec la
-     * fiche athlète comme retour.
+     * à l'athlète et l'original reste au coach. #125 : on reste sur la fiche, la
+     * copie s'y lit dans « Ses séances » et le formulaire l'annonce désormais.
      */
     public function testCoachCopiesOwnWorkoutIntoAthleteLibrary(): void
     {
@@ -271,9 +271,16 @@ final class CoachControllerTest extends WebTestCase
         $copies = $this->em->getRepository(Workout::class)->findBy(['owner' => $athlete]);
         self::assertCount(1, $copies);
         self::assertSame('Upper A', $copies[0]->getTitle());
-        self::assertResponseRedirects('/workout/'.$copies[0]->getId().'/edit?from=athlete-'.$athlete->getId());
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId().'#une-de-mes-seances');
         // L'original reste au coach, intact.
         self::assertSame($coach->getId(), $this->mustFind(Workout::class, $source->getId())->getOwner()?->getId());
+
+        $crawler = $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-toasts .kd-flash', 'Copie de « Upper A » donnée à');
+        self::assertSelectorExists('a[href^="/workout/'.$copies[0]->getId().'"]');
+        /** @var array<int, array{count: int}> $existing */
+        $existing = json_decode((string) $crawler->filter('form[action$="/workout/copy"]')->attr('data-copy-notice-copies-value'), true, flags: \JSON_THROW_ON_ERROR);
+        self::assertSame(1, $existing[(int) $source->getId()]['count'] ?? null);
     }
 
     /**
@@ -337,8 +344,10 @@ final class CoachControllerTest extends WebTestCase
             'workout' => (string) $foreign->getId(),
         ]);
 
-        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId());
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId().'#une-de-mes-seances');
         self::assertCount(0, $this->em->getRepository(Workout::class)->findBy(['owner' => $athlete]));
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-toasts .kd-flash--error', 'Choisis une séance de ta bibliothèque.');
     }
 
     public function testCopyToAthleteIsDeniedWithoutAcceptedRelation(): void
@@ -378,6 +387,44 @@ final class CoachControllerTest extends WebTestCase
         // La séance datée appartient à l'athlète : elle apparaît sur SON calendrier.
         self::assertSame($athlete->getId(), $scheduled[0]->getOwner()?->getId());
         self::assertSame($date, $scheduled[0]->getScheduledDate()->format('Y-m-d'));
+
+        // #125 : sans JS, retour à l'ancre de la section, et le message en toast
+        // plutôt qu'en tête de page.
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId().'#poser-une-seance');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-toasts .kd-flash', 'Séance posée au');
+    }
+
+    /**
+     * #125 : avec Turbo, la pose ne redirige plus (la fiche se rouvrait en haut) :
+     * elle répond par un refresh morphé qui garde le défilement, et la fiche relue
+     * porte le message en toast, lisible où que l'on soit dans la page.
+     */
+    public function testSchedulingFromTheSheetKeepsTheCoachInPlace(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $workout = $this->createWorkout($athlete, 'Seuil 3x8');
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+        $token = $crawler->filter('form[action$="/schedule"] input[name="_token"]')->attr('value');
+
+        $this->client->request('POST', '/coach/athlete/'.$athlete->getId().'/schedule', [
+            '_token' => $token,
+            'workoutId' => (string) $workout->getId(),
+            'date' => (new \DateTimeImmutable('+3 days'))->format('Y-m-d'),
+        ], [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html, text/html, application/xhtml+xml']);
+
+        self::assertResponseIsSuccessful();
+        self::assertResponseHeaderSame('Content-Type', 'text/vnd.turbo-stream.html; charset=UTF-8');
+        $stream = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('action="refresh" method="morph" scroll="preserve"', $stream);
+        self::assertCount(1, $this->em->getRepository(ScheduledWorkout::class)->findAll());
+
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+        self::assertSelectorTextContains('.kd-toasts .kd-flash', 'Séance posée au');
     }
 
     /** Un coach ne pose pas sa propre séance sur le calendrier d'un athlète. */
@@ -400,6 +447,9 @@ final class CoachControllerTest extends WebTestCase
         ]);
 
         self::assertCount(0, $this->em->getRepository(ScheduledWorkout::class)->findAll());
+        // Le refus se dit lui aussi en toast (#125).
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-toasts .kd-flash--error', 'Impossible de planifier cette séance.');
     }
 
     public function testCoachInstantiatesPlanOnAthleteCalendar(): void
@@ -428,8 +478,9 @@ final class CoachControllerTest extends WebTestCase
         self::assertSame($monday->format('Y-m-d'), $scheduled[0]->getScheduledDate()->format('Y-m-d'));
 
         // #68 : le verbe simple, et l'aperçu sait désormais que le plan est placé.
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId().'#placer-un-plan');
         $crawler = $this->client->followRedirect();
-        self::assertSelectorTextContains('body', 'Plan « Bloc 2 semaines » placé dans l\'agenda de');
+        self::assertSelectorTextContains('.kd-toasts .kd-flash', 'Plan « Bloc 2 semaines » placé dans l\'agenda de');
         $plans = json_decode((string) $crawler->filter('form[action$="/instantiate"]')->attr('data-plan-preview-plans-value'), true);
         self::assertTrue($plans[$plan->getId()]['placed']);
     }
