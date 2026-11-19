@@ -1,0 +1,137 @@
+{#
+    Une carte du flux d'amis (#126), masquée ou pleine. Rendue par la page du
+    flux (`_feed_page`) et, seule, par la réponse Turbo Stream d'une copie ou
+    d'un masquage (`stream/card.stream.html.twig`), qui la remplace par son id :
+    l'id `seance-{id}` est donc sur l'élément racine, et nulle part ailleurs.
+
+    Une carte se lit de haut en bas : qui, quoi, combien (durée, volume,
+    exercices), le record battu, le ressenti écrit, puis les exercices — les
+    trois premiers, les autres derrière « Voir les N autres » (un <details>
+    natif : tout est dans la page, rien ne se charge après coup). Le pied dit ce
+    qu'on peut faire : copier la séance d'un ami, ou masquer la sienne.
+
+    Attend : entry (FeedEntry, cf. FriendFeed), filter (null | 'moi' | id d'ami),
+    page, previewCount. `filter` et `page` ne servent qu'au repli sans JS, qui
+    redirige vers la même page du flux.
+#}
+{% macro exerciseRow(row) %}
+    <li class="kd-feedex">
+        <span class="kd-feedex__n">{{ row.n }}</span>
+        <span class="kd-feedex__name">{{ exercise_name(row.exercise, row.name) }}</span>
+        {% if row.perso %}
+            <span class="kd-feedex__perso">{{ ux_icon('lucide:lock') }} Perso</span>
+        {% endif %}
+        {% if row.record %}
+            <span class="kd-feedex__record" title="Record battu">{{ ux_icon('lucide:crown', {class: 'kd-icon--solid', 'aria-label': 'Record battu'}) }}</span>
+        {% endif %}
+        <span class="kd-feedex__sum">{{ row.summary }}</span>
+        <span class="kd-feedex__rpe">{{ row.rpe ?? '—' }}</span>
+    </li>
+{% endmacro %}
+{% import _self as ui %}
+{% set session = entry.session %}
+
+{% if entry.hidden %}
+    <article class="kd-feedcard kd-feedcard--hidden" id="seance-{{ session.id }}">
+        {{ ux_icon('lucide:lock') }}
+        <p>Ta séance <strong>{{ entry.title }}</strong> est masquée pour tes amis. Toi seul la vois ici.</p>
+        <form method="post" action="{{ path('app_friend_session_visibility', {id: session.id}) }}">
+            <input type="hidden" name="_token" value="{{ csrf_token('friend_visibility' ~ session.id) }}">
+            <input type="hidden" name="hidden" value="0">
+            <input type="hidden" name="ami" value="{{ filter }}">
+            <input type="hidden" name="page" value="{{ page }}">
+            <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm">Partager à nouveau</button>
+        </form>
+    </article>
+{% else %}
+    <article class="kd-feedcard kd-act--gym" id="seance-{{ session.id }}">
+        <div class="kd-feedcard__who">
+            <span class="kd-friend__avatar kd-friend__avatar--sm" aria-hidden="true">{{ entry.author.displayName|first|upper }}</span>
+            <p><strong>{{ entry.mine ? 'Toi' : entry.author.displayName }}</strong></p>
+            {% if session.startedAt %}
+                <time class="kd-feedcard__time" datetime="{{ session.startedAt|date('c') }}">{{ session.startedAt|date('H:i') }}</time>
+            {% endif %}
+        </div>
+
+        <h3 class="kd-feedcard__title">{{ entry.title }}</h3>
+
+        <dl class="kd-feedcard__kpis">
+            <div>
+                <dt>Durée</dt>
+                <dd>{% if entry.durationMinutes is not null %}{{ entry.durationMinutes }}<span> min</span>{% else %}—{% endif %}</dd>
+            </div>
+            <div>
+                <dt>Volume</dt>
+                <dd>{{ entry.tonnageKg > 0 ? entry.tonnageKg|tonnage : '—' }}</dd>
+            </div>
+            <div>
+                <dt>Exercices</dt>
+                <dd>{{ entry.exerciseCount }}</dd>
+            </div>
+        </dl>
+
+        {% for record in entry.records %}
+            <p class="kd-feedcard__record">
+                {{ ux_icon('lucide:crown', {class: 'kd-icon--solid'}) }}
+                <span class="kd-feedcard__recordtag">Record</span>
+                {{ exercise_name(record.exercise, record.name) }} · {{ record.value }} ({{ record.gain }})
+            </p>
+        {% endfor %}
+
+        {% if entry.note %}
+            <div class="kd-feedcard__note">
+                <p class="kd-feedcard__notelabel">Ressenti</p>
+                <p>{{ entry.note|nl2br }}</p>
+            </div>
+        {% endif %}
+
+        {% set shown = entry.exercises|slice(0, previewCount) %}
+        {% set rest = entry.exercises|slice(previewCount) %}
+        <ol class="kd-feedcard__exos">
+            {% for row in shown %}{{ ui.exerciseRow(row) }}{% endfor %}
+        </ol>
+        {% if rest is not empty %}
+            <details class="kd-feedcard__more">
+                <summary>
+                    <span class="kd-feedcard__moreopen">Voir {{ rest|length > 1 ? 'les ' ~ rest|length ~ ' autres exercices' : 'l\'autre exercice' }}</span>
+                    <span class="kd-feedcard__moreclose">Réduire</span>
+                    {{ ux_icon('lucide:chevron-down') }}
+                </summary>
+                <ol class="kd-feedcard__exos" start="{{ previewCount + 1 }}">
+                    {% for row in rest %}{{ ui.exerciseRow(row) }}{% endfor %}
+                </ol>
+            </details>
+        {% endif %}
+
+        <div class="kd-feedcard__foot">
+            {% if entry.mine %}
+                {% if entry.copiedBy is not empty %}
+                    <p class="kd-feedcard__copiedby">
+                        {{ ux_icon('lucide:copy') }}
+                        Copiée par
+                        {% for copy in entry.copiedBy %}
+                            {{- copy.owner.displayName }} le {{ copy.createdAt|date('d/m') }}{{ not loop.last ? ', ' -}}
+                        {% endfor %}
+                    </p>
+                {% endif %}
+                <form method="post" action="{{ path('app_friend_session_visibility', {id: session.id}) }}" class="kd-feedcard__end">
+                    <input type="hidden" name="_token" value="{{ csrf_token('friend_visibility' ~ session.id) }}">
+                    <input type="hidden" name="hidden" value="1">
+                    <input type="hidden" name="ami" value="{{ filter }}">
+                    <input type="hidden" name="page" value="{{ page }}">
+                    <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm">{{ ux_icon('lucide:lock') }} Masquer pour mes amis</button>
+                </form>
+            {% elseif entry.myCopy %}
+                <p class="kd-feedcard__copied">
+                    {{ ux_icon('lucide:circle-check') }}
+                    Copiée dans tes séances : <strong>{{ entry.myCopy.title }}</strong>
+                </p>
+                <a href="{{ path('app_workout_show', {id: entry.myCopy.id}) }}" class="kd-feedcard__end kd-friend__link">
+                    Ouvrir {{ ux_icon('lucide:arrow-right') }}
+                </a>
+            {% else %}
+                {{ include('friend/_copy_dialog.html.twig', {entry: entry, filter: filter, page: page}) }}
+            {% endif %}
+        </div>
+    </article>
+{% endif %}

@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Entity\PlanTemplate;
 use App\Entity\ScheduledWorkout;
 use App\Entity\User;
+use App\Entity\Workout;
 use App\Enum\ScheduledStatus;
 use App\Form\PlanInstantiationType;
 use App\Http\BackTarget;
@@ -54,6 +55,7 @@ final class ScheduledWorkoutController extends AbstractController
         private readonly LogMetrics $logMetrics,
         private readonly ImportedActivityRepository $importedActivities,
         private readonly CalendarWeek $calendarWeek,
+        private readonly WorkoutRepository $workoutRepository,
     ) {
     }
 
@@ -287,11 +289,32 @@ final class ScheduledWorkoutController extends AbstractController
             // La consigne de la case du plan (#95), qui n'était lisible que dans
             // l'éditeur de plan : l'athlète ne l'aurait jamais vue.
             'planInstruction' => $planFlattener->planInstruction($scheduled),
+            // « Copiée par Tom le 20/11 » (#126) : les amis qui ont copié cette
+            // séance depuis leur flux. Au propriétaire seul : c'est le nom de
+            // ses amis, son coach n'a pas à le lire.
+            'copiedBy' => $viewer instanceof User && $scheduled->getOwner()?->getId() === $viewer->getId()
+                ? $this->copiesByOthers($scheduled)
+                : [],
         ] + $activities + [
             // Le volume PRÉVU, dans le HTML initial comme le reste de la page :
             // une vue de consultation ne charge rien après coup (cache offline).
             // Sans prescrit, il n'y a pas de volume prévu à annoncer.
         ] + (null === $workout ? [] : $volumePanel->for($workout, $viewer instanceof User ? $viewer : null)));
+    }
+
+    /**
+     * Les copies de cette séance faites par d'autres, depuis le flux d'amis.
+     *
+     * @return list<Workout>
+     */
+    private function copiesByOthers(ScheduledWorkout $scheduled): array
+    {
+        $ownerId = $scheduled->getOwner()?->getId();
+
+        return array_values(array_filter(
+            $this->workoutRepository->findCopiesOfSessions([(int) $scheduled->getId()])[(int) $scheduled->getId()] ?? [],
+            static fn (Workout $copy): bool => $copy->getOwner()?->getId() !== $ownerId,
+        ));
     }
 
     /**

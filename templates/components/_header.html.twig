@@ -58,7 +58,10 @@
         { label: 'Coaching', icon: 'lucide:users', path: 'app_coaching_index', routes: ['app_coaching_index'] },
     ]) %}
 {% endif %}
+{# « Amis » (#126) : la page Amis et le flux. Sa pastille compte les demandes
+   reçues : sans elle, une demande attendait qu'on passe par hasard sur la page. #}
 {% set menuItems = menuItems|merge([
+    { label: 'Amis', icon: 'lucide:rss', path: 'app_friend_index', match: 'app_friend', badge: pending_friend_requests(app.user) },
     { label: 'Paramètres',  icon: 'lucide:settings-2',  path: 'app_profile_settings', routes: ['app_profile_settings'] },
     { label: 'Aide',        icon: 'lucide:circle-help', path: 'app_help',             routes: ['app_help'] },
 ]) %}
@@ -122,6 +125,9 @@
                                class="kd-usermenu__link{{ active ? ' is-active' }}"
                                {{ active ? 'aria-current="page"' }}>
                                 {{ ux_icon(item.icon) }}<span>{{ item.label }}</span>
+                                {% if item.badge ?? 0 %}
+                                    <span class="kd-usermenu__count" aria-label="{{ item.badge }} demande{{ item.badge > 1 ? 's' }} en attente">{{ item.badge }}</span>
+                                {% endif %}
                             </a>
                         {% endfor %}
                         <a href="{{ path('app_logout') }}" class="kd-usermenu__link kd-usermenu__link--out">

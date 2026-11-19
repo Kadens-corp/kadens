@@ -1,0 +1,74 @@
+{% extends 'base.html.twig' %}
+
+{#
+    Le flux d'amis (#126) : « Lire, copier, c'est tout ». Aucune réaction, aucun
+    compteur. Les séances de salle faites de ses amis et les siennes, de la plus
+    récente à la plus ancienne, avec la liste complète de leurs exercices.
+
+    La liste est `_feed_page` (une page dans son turbo-frame, la suivante se
+    charge à sa suite) et chaque carte `_feed_card`, que la copie et le masquage
+    remplacent seule par Turbo Stream : aucun geste du flux ne recharge la page.
+
+    Attend : entries (list<FeedEntry>, cf. FriendFeed), hasMore, page,
+    friends (list<User>), filter (null | 'moi' | id d'ami), previewCount.
+#}
+
+{% block title %}Le flux — Kadens{% endblock %}
+
+{% block body %}
+    {% set filterParams = filter ? {ami: filter} : {} %}
+
+    <div class="kd-feed-page">
+        <div class="kd-pagehead">
+            <div>
+                <p class="kd-eyebrow kd-eyebrow--accent">Amis</p>
+                <h1 class="kd-title">Le flux</h1>
+                <p class="kd-lead">Les séances de salle faites par tes amis et par toi, de la plus récente à la plus ancienne.</p>
+            </div>
+            <a href="{{ path('app_friend_index') }}" class="kd-btn kd-btn--secondary kd-btn--sm">
+                {{ ux_icon('lucide:users') }} Mes amis
+            </a>
+        </div>
+
+        {% if friends is not empty %}
+            <nav class="kd-feedfilter" aria-label="Filtrer le flux par personne">
+                {% set filters = [{key: null, label: 'Tous'}] %}
+                {% for friend in friends %}
+                    {% set filters = filters|merge([{key: friend.id ~ '', label: friend.displayName}]) %}
+                {% endfor %}
+                {% set filters = filters|merge([{key: 'moi', label: 'Mes séances'}]) %}
+                {% for f in filters %}
+                    {% set active = f.key == filter %}
+                    <a href="{{ path('app_friend_feed', f.key ? {ami: f.key} : {}) }}"
+                       class="kd-feedfilter__chip{{ active ? ' is-active' }}"
+                       {{ active ? 'aria-current="page"' }}>{{ f.label }}</a>
+                {% endfor %}
+            </nav>
+        {% endif %}
+
+        {% if entries is empty %}
+            <div class="kd-feedempty">
+                {{ ux_icon('lucide:rss') }}
+                {% if page > 1 %}
+                    <h2 class="kd-feedempty__title">Plus rien avant</h2>
+                    <p>Tu es arrivé au bout du flux.</p>
+                    <a href="{{ path('app_friend_feed', filterParams) }}" class="kd-btn kd-btn--secondary kd-btn--sm">Revenir au plus récent</a>
+                {% elseif filter == 'moi' %}
+                    <h2 class="kd-feedempty__title">Aucune séance à toi</h2>
+                    <p>Tes séances de salle faites, consignées depuis l'app, arrivent ici et chez tes amis.</p>
+                {% elseif filter %}
+                    <h2 class="kd-feedempty__title">Rien à lire pour l'instant</h2>
+                    <p>Cette personne n'a pas encore de séance de salle partagée.</p>
+                {% else %}
+                    <h2 class="kd-feedempty__title">Rien à lire pour l'instant</h2>
+                    <p>Quand un ami accepte ta demande, ses séances de salle faites arrivent ici, avec la liste complète de ses exercices. Tu peux copier celles qui t'intéressent dans tes séances.</p>
+                    <a href="{{ path('app_friend_index') }}#ajouter" class="kd-btn kd-btn--primary kd-btn--sm">{{ ux_icon('lucide:user-plus') }} Ajouter un ami</a>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="kd-feed__list">
+                {{ include('friend/_feed_page.html.twig', {continuesDay: null}) }}
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

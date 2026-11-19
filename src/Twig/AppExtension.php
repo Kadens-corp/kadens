@@ -9,6 +9,7 @@ use App\Enum\Feeling;
 use App\Enum\PrescriptionType;
 use App\Form\UsernameType;
 use App\Http\BackTarget;
+use App\Repository\FriendshipRepository;
 use App\Service\ActivityPalette;
 use App\Service\BackLink;
 use App\Service\CustomMessageInbox;
@@ -48,6 +49,8 @@ use Twig\TwigFunction;
  * - `username_prompt_form()` fabrique le formulaire de l'invitation à choisir un
  *   pseudo, que `base.html.twig` pose sur toutes les pages : aucun contrôleur
  *   n'a à le passer. Null quand il n'y a rien à demander.
+ * - `pending_friend_requests()` compte les demandes d'amitié reçues, pour la
+ *   pastille de l'entrée « Amis » du menu de compte (#126).
  * - `pending_custom_message()` rend le message programmé à montrer aujourd'hui
  *   (`base.html.twig`), `custom_message_media_url()` l'URL signée de son image
  *   (modale et aperçu du back-office). Cf. `CustomMessageInbox`.
@@ -62,6 +65,7 @@ final class AppExtension extends AbstractExtension
         private readonly FormFactoryInterface $forms,
         private readonly CustomMessageInbox $inbox,
         private readonly DistancePlausibility $distancePlausibility,
+        private readonly FriendshipRepository $friendships,
     ) {
     }
 
@@ -93,6 +97,8 @@ final class AppExtension extends AbstractExtension
             new TwigFunction('activity_palette_css', [$this, 'activityPaletteCss'], ['is_safe' => ['html']]),
             new TwigFunction('username_prompt_form', [$this, 'usernamePromptForm']),
             new TwigFunction('pending_custom_message', [$this, 'pendingCustomMessage']),
+            // La pastille de l'entrée « Amis » du menu de compte (#126).
+            new TwigFunction('pending_friend_requests', [$this, 'pendingFriendRequests']),
             new TwigFunction('custom_message_media_url', [$this->inbox, 'mediaUrl']),
             // Les libellés du ressenti de séance, pour une valeur ou une moyenne
             // (le cran le plus proche) : un seul endroit les écrit, `Feeling` et
@@ -113,6 +119,15 @@ final class AppExtension extends AbstractExtension
         }
 
         return $this->forms->create(UsernameType::class, $user, ['required' => true, 'action' => $action])->createView();
+    }
+
+    /**
+     * Le nombre de demandes d'amitié à traiter (#126), lu par le header sur
+     * chaque page : un COUNT sur l'index (destinataire, statut).
+     */
+    public function pendingFriendRequests(mixed $user): int
+    {
+        return $user instanceof User ? $this->friendships->countReceivedPending($user) : 0;
     }
 
     /** Même règle : seul un `User` reçoit des messages. */

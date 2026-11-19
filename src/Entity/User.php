@@ -51,6 +51,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $usernamePromptDismissedAt = null;
 
+    // « Partager mes séances avec mes amis » (#126). Ouvert par défaut : accepter
+    // un ami, c'est déjà consentir à ce qu'il lise ses séances de salle faites.
+    // Coupé, plus rien ne sort, ni le nouveau ni l'ancien : le flux lit ce
+    // réglage à chaque affichage (`ScheduledWorkoutRepository::feedQuery()`).
+    #[ORM\Column(options: ['default' => true])]
+    private bool $shareWithFriends = true;
+
     /**
      * @var list<string> The user roles
      */
@@ -306,6 +313,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     {
         $username = null === $username ? null : trim($username);
         $this->username = '' === $username ? null : $username;
+
+        return $this;
+    }
+
+    public function isShareWithFriends(): bool
+    {
+        return $this->shareWithFriends;
+    }
+
+    public function setShareWithFriends(bool $shareWithFriends): static
+    {
+        $this->shareWithFriends = $shareWithFriends;
 
         return $this;
     }

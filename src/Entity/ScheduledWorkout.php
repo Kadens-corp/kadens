@@ -103,6 +103,15 @@ class ScheduledWorkout
     #[ORM\Column(type: Types::SMALLINT, nullable: true)]
     private ?int $sessionRpe = null;
 
+    /**
+     * « Masquer pour mes amis » (#126) : la séance faite sort du flux de ses
+     * amis, et d'eux seuls. Le propriétaire la voit toujours dans le sien, sous
+     * une ligne qui le lui rappelle. Lu à chaque affichage, jamais recopié :
+     * repartager la remet en place pour tout le monde, d'un coup.
+     */
+    #[ORM\Column(options: ['default' => false])]
+    private bool $hiddenFromFriends = false;
+
     // Bornes réelles de l'exécution, écrites par le mobile. Distinctes de la date
     // planifiée : on peut faire à 19h une séance prévue pour la journée.
     #[ORM\Column(nullable: true)]
@@ -327,6 +336,18 @@ class ScheduledWorkout
     public function setSessionRpe(?int $sessionRpe): static
     {
         $this->sessionRpe = $sessionRpe;
+
+        return $this;
+    }
+
+    public function isHiddenFromFriends(): bool
+    {
+        return $this->hiddenFromFriends;
+    }
+
+    public function setHiddenFromFriends(bool $hiddenFromFriends): static
+    {
+        $this->hiddenFromFriends = $hiddenFromFriends;
 
         return $this;
     }

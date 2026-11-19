@@ -42,6 +42,43 @@ class WorkoutRepository extends ServiceEntityRepository
     }
 
     /**
+     * Les copies faites de ces séances d'amis (#126), la plus ancienne d'abord,
+     * leur propriétaire chargé : « Copiée par Tom » sous la séance de l'auteur,
+     * « Copiée dans tes séances » sur la carte de celui qui l'a prise.
+     *
+     * @param list<int> $sessionIds
+     *
+     * @return array<int, list<Workout>> indexé par identifiant de séance datée
+     */
+    public function findCopiesOfSessions(array $sessionIds): array
+    {
+        if ([] === $sessionIds) {
+            return [];
+        }
+
+        /** @var list<Workout> $copies */
+        $copies = $this->createQueryBuilder('w')
+            ->addSelect('o')
+            ->join('w.owner', 'o')
+            ->andWhere('w.copiedFromSession IN (:sessions)')
+            ->setParameter('sessions', $sessionIds)
+            ->orderBy('w.createdAt', 'ASC')
+            ->addOrderBy('w.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        $bySession = [];
+        foreach ($copies as $copy) {
+            $sessionId = $copy->getCopiedFromSession()?->getId();
+            if (null !== $sessionId) {
+                $bySession[$sessionId][] = $copy;
+            }
+        }
+
+        return $bySession;
+    }
+
+    /**
      * La copie de `$source` dans la bibliothèque de `$owner` (#58), la plus récente
      * s'il y en a plusieurs. Sert à reposer la même copie quand un coach repose sa
      * séance dans le plan de son athlète.

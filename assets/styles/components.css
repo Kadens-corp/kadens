@@ -15157,3 +15157,1001 @@ a.kd-coachitem__date:hover {
 .kd-planprog .kd-editsection__hint {
     margin: 0;
 }
+
+/* ============================================================================
+   AMIS ET FLUX (#126) — page /friends et flux /friends/feed.
+   Rien de neuf en couleur : la carte de séance porte la bande de son activité
+   (classe porteuse kd-act--gym, `--act`), le record le rouge de l'intensité,
+   la copie réussie le vert de « fait ». Le reste est encre et papier.
+   ========================================================================== */
+
+/* ── Pastille du menu de compte : demandes d'amitié reçues ─────────────────── */
+.kd-usermenu__count {
+    margin-left: auto;
+    padding: 1px 5px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    line-height: 1.4;
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+}
+
+/* ── Page Amis : deux colonnes, l'outil (recherche, partage) à droite ──────── */
+.kd-friends {
+    display: grid;
+    gap: var(--kd-space-12);
+    align-items: start;
+}
+
+@media (min-width: 900px) {
+    .kd-friends {
+        grid-template-columns: minmax(0, 1fr) 340px;
+    }
+}
+
+.kd-friends__main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-12);
+    min-width: 0;
+}
+
+.kd-friends__heading {
+    margin: 0 0 var(--kd-space-5);
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-extrabold);
+    font-size: 18px;
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-friends__stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-3);
+}
+
+.kd-friends__list {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+}
+
+.kd-friends__list .kd-friend + .kd-friend {
+    border-top: 1px solid var(--color-divider-soft);
+}
+
+.kd-friend {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-6);
+    flex-wrap: wrap;
+    padding: var(--kd-space-6) var(--kd-space-8);
+}
+
+.kd-friend--card {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+}
+
+.kd-friend--card.is-muted {
+    background: var(--color-surface-subtle);
+}
+
+.kd-friend__avatar {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-strong);
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-bold);
+    font-size: 17px;
+    line-height: 1;
+}
+
+.kd-friend__avatar--sm {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+}
+
+.kd-friend__body {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.kd-friend__top {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-3);
+}
+
+.kd-friend__name {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 16px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.kd-friend__meta {
+    margin: var(--kd-space-1) 0 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-friend__meta--text {
+    font-family: var(--font-body);
+    font-size: 13px;
+}
+
+.kd-friend__meta strong {
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
+.kd-friend__tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+    padding: 3px var(--kd-space-3);
+    border: 1px solid var(--color-border-pill);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-lg);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-friend__tag svg {
+    width: 12px;
+    height: 12px;
+}
+
+.kd-friend__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin: 0;
+}
+
+.kd-friend__actions form,
+.kd-friend form {
+    margin: 0;
+}
+
+.kd-friend__link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    padding: var(--kd-space-3);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: var(--kd-weight-bold);
+    letter-spacing: var(--kd-tracking-action);
+    text-transform: uppercase;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.kd-friend__link:hover {
+    color: var(--color-primary);
+}
+
+.kd-friend__link svg {
+    width: 14px;
+    height: 14px;
+}
+
+.kd-friend__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-text-soft);
+    cursor: pointer;
+}
+
+.kd-friend__remove:hover {
+    color: var(--color-status-missed);
+    border-color: var(--color-border);
+}
+
+.kd-friend__remove svg {
+    width: 15px;
+    height: 15px;
+}
+
+/* Colonne de droite : deux panneaux d'outil. */
+.kd-friends__side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-6);
+}
+
+.kd-friends__panel {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    padding: var(--kd-space-8) var(--kd-space-9);
+    scroll-margin-top: var(--kd-space-13);
+}
+
+.kd-friends__paneltitle {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-bold);
+    font-size: 19px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-friends__paneltitle svg {
+    width: 16px;
+    height: 16px;
+    color: var(--color-text-soft);
+}
+
+.kd-friends__hint {
+    margin: var(--kd-space-3) 0 var(--kd-space-5);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-friends__search {
+    display: flex;
+    gap: var(--kd-space-3);
+    margin: 0;
+}
+
+.kd-friends__search .kd-inputgroup {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.kd-friends__result {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-4);
+    flex-wrap: wrap;
+    margin-top: var(--kd-space-3);
+    padding: var(--kd-space-4) var(--kd-space-5);
+    border: 1px solid var(--color-text);
+}
+
+.kd-friends__result form {
+    margin: 0 0 0 auto;
+}
+
+.kd-friends__found {
+    font-size: 14px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.kd-friends__state {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-friends__none {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+/* Interrupteur de partage : un vrai bouton de formulaire, `role="switch"`. */
+.kd-friends__panel form {
+    margin: 0;
+}
+
+.kd-friends__switch {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-6);
+    width: 100%;
+    margin-top: var(--kd-space-5);
+    padding: var(--kd-space-5) 0;
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
+    font-family: var(--font-body);
+    text-align: left;
+    cursor: pointer;
+}
+
+.kd-friends__switchlabel {
+    flex: 1;
+    font-size: 15px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text);
+}
+
+.kd-switch {
+    flex: none;
+    display: flex;
+    width: 44px;
+    height: 24px;
+    padding: 2px;
+    box-sizing: border-box;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border-strong);
+}
+
+.kd-switch__knob {
+    width: 18px;
+    height: 18px;
+    background: var(--color-text-soft);
+}
+
+.kd-switch.is-on {
+    justify-content: flex-end;
+    background: var(--color-text);
+    border-color: var(--color-text);
+}
+
+.kd-switch.is-on .kd-switch__knob {
+    background: var(--color-surface-raised);
+}
+
+.kd-friends__status {
+    margin: var(--kd-space-3) 0 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-friends__scope {
+    margin: var(--kd-space-6) 0 0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.kd-friends__scope dt {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-xl);
+    text-transform: uppercase;
+    color: var(--color-text-soft);
+}
+
+.kd-friends__scope dd {
+    margin: 2px 0 var(--kd-space-4);
+    color: var(--color-text-strong);
+}
+
+.kd-friends__hidden {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-6) 0 0;
+    padding-top: var(--kd-space-5);
+    border-top: 1px solid var(--color-divider-soft);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-friends__hidden svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* ── Le flux ─────────────────────────────────────────────────────────────── */
+.kd-feed-page {
+    max-width: 760px;
+}
+
+.kd-feedfilter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--kd-space-2);
+    margin-bottom: var(--kd-space-9);
+}
+
+.kd-feedfilter__chip {
+    padding: var(--kd-space-2) var(--kd-space-4);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface-raised);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+}
+
+.kd-feedfilter__chip:hover {
+    border-color: var(--color-text);
+    color: var(--color-text);
+}
+
+.kd-feedfilter__chip.is-active {
+    border-color: var(--color-text);
+    background: var(--color-text);
+    color: var(--color-on-ink);
+}
+
+.kd-feed__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-5);
+}
+
+/* Une page du flux est un turbo-frame (la suivante s'y charge, cf.
+   `_feed_page`). Il ne doit pas faire boîte : ses cartes restent des enfants
+   de la liste et en gardent l'espacement, d'une page à l'autre. */
+turbo-frame.kd-feed__page {
+    display: contents;
+}
+
+/* Pendant le chargement de la page suivante, Turbo pose `busy` sur le frame. */
+turbo-frame.kd-feed__page[busy] > .kd-feed__older {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.kd-feed__day {
+    margin: var(--kd-space-4) 0 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-xl);
+    text-transform: uppercase;
+    color: var(--color-text-soft);
+}
+
+.kd-feedcard {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--act, var(--color-border));
+    scroll-margin-top: var(--kd-space-13);
+}
+
+.kd-feedcard__who {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-4);
+    padding: var(--kd-space-7) var(--kd-space-8) 0;
+}
+
+.kd-feedcard__who p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.kd-feedcard__who strong {
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
+.kd-feedcard__time {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-soft);
+}
+
+/* Nom de séance : du contenu saisi, Barlow en casse normale. */
+.kd-feedcard__title {
+    margin: var(--kd-space-4) var(--kd-space-8) 0;
+    font-family: var(--font-body);
+    font-size: 22px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text);
+    overflow-wrap: anywhere;
+}
+
+.kd-feedcard__kpis {
+    display: flex;
+    margin: var(--kd-space-6) var(--kd-space-8) 0;
+    border-top: 1px solid var(--color-divider-soft);
+    border-bottom: 1px solid var(--color-divider-soft);
+}
+
+.kd-feedcard__kpis > div {
+    flex: 1;
+    padding: var(--kd-space-4) 0;
+}
+
+.kd-feedcard__kpis > div + div {
+    padding-left: var(--kd-space-7);
+    border-left: 1px solid var(--color-border);
+}
+
+.kd-feedcard__kpis dt {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-xl);
+    text-transform: uppercase;
+    color: var(--color-text-soft);
+}
+
+.kd-feedcard__kpis dd {
+    margin: 2px 0 0;
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-extrabold);
+    font-size: 26px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text);
+}
+
+.kd-feedcard__kpis dd span {
+    font-size: .48em;
+    color: var(--color-text-soft);
+}
+
+.kd-feedcard__record {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-5) var(--kd-space-8) 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-strong);
+}
+
+.kd-feedcard__record svg {
+    width: 13px;
+    height: 13px;
+    color: var(--color-primary);
+}
+
+.kd-feedcard__recordtag {
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-primary-on-tint);
+}
+
+.kd-feedcard__note {
+    margin: var(--kd-space-5) var(--kd-space-8) 0;
+    padding: var(--kd-space-4) var(--kd-space-6);
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-divider-soft);
+}
+
+.kd-feedcard__note p {
+    margin: var(--kd-space-1) 0 0;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--color-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.kd-feedcard__note .kd-feedcard__notelabel {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-xl);
+    text-transform: uppercase;
+    color: var(--color-text-soft);
+}
+
+.kd-feedcard__exos {
+    list-style: none;
+    margin: var(--kd-space-5) var(--kd-space-8) 0;
+    padding: 0;
+}
+
+.kd-feedex {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--kd-space-1) var(--kd-space-4);
+    padding: 7px 0;
+    border-top: 1px solid var(--color-divider-soft);
+}
+
+.kd-feedex__n {
+    flex: none;
+    width: 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-soft);
+}
+
+.kd-feedex__name {
+    min-width: 0;
+    font-size: 15px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.kd-feedex__perso {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 5px;
+    border: 1px solid var(--color-border-pill);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-feedex__perso svg {
+    width: 10px;
+    height: 10px;
+}
+
+.kd-feedex__record {
+    align-self: center;
+    display: inline-flex;
+    color: var(--color-primary);
+}
+
+.kd-feedex__record svg {
+    width: 12px;
+    height: 12px;
+}
+
+.kd-feedex__sum {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+
+.kd-feedex__rpe {
+    flex: none;
+    width: 58px;
+    padding-left: var(--kd-space-4);
+    border-left: 1px solid var(--color-border);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: right;
+    color: var(--color-text-secondary);
+}
+
+/* « Voir les N autres exercices » : <details> natif, libellé selon l'état. */
+.kd-feedcard__more > summary {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: 0 var(--kd-space-8);
+    padding: var(--kd-space-4) 0;
+    border-top: 1px solid var(--color-divider-soft);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text);
+    list-style: none;
+    cursor: pointer;
+}
+
+.kd-feedcard__more > summary::-webkit-details-marker {
+    display: none;
+}
+
+.kd-feedcard__more > summary svg {
+    width: 13px;
+    height: 13px;
+    transition: transform .12s ease;
+}
+
+.kd-feedcard__more .kd-feedcard__moreclose,
+.kd-feedcard__more[open] .kd-feedcard__moreopen {
+    display: none;
+}
+
+.kd-feedcard__more[open] .kd-feedcard__moreclose {
+    display: inline;
+}
+
+.kd-feedcard__more[open] > summary svg {
+    transform: rotate(180deg);
+}
+
+.kd-feedcard__more > .kd-feedcard__exos {
+    margin-top: 0;
+}
+
+.kd-feedcard__foot {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-4);
+    margin-top: var(--kd-space-1);
+    padding: var(--kd-space-5) var(--kd-space-8) var(--kd-space-6);
+    border-top: 1px solid var(--color-border);
+}
+
+.kd-feedcard__exos + .kd-feedcard__foot {
+    margin-top: var(--kd-space-5);
+}
+
+.kd-feedcard__foot form {
+    margin: 0;
+}
+
+.kd-feedcard__end {
+    margin-left: auto;
+}
+
+.kd-feedcard__copiedby {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-feedcard__copiedby svg {
+    flex: none;
+    width: 12px;
+    height: 12px;
+}
+
+.kd-feedcard__copied {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: 0;
+    font-size: 14px;
+    color: var(--color-text-strong);
+}
+
+.kd-feedcard__copied svg {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    color: var(--color-success);
+}
+
+.kd-feedcard__copied strong {
+    font-weight: var(--kd-weight-semibold);
+}
+
+/* Sa propre séance masquée : en retrait, tirets, rien d'autre que le rappel. */
+.kd-feedcard--hidden {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-5);
+    padding: var(--kd-space-6) var(--kd-space-8);
+    background: var(--color-fill);
+    border: 1px dashed var(--color-border-strong);
+    color: var(--color-text-secondary);
+}
+
+.kd-feedcard--hidden > svg {
+    flex: none;
+    width: 15px;
+    height: 15px;
+}
+
+.kd-feedcard--hidden p {
+    flex: 1 1 16rem;
+    margin: 0;
+    font-size: 14px;
+}
+
+.kd-feedcard--hidden strong {
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
+.kd-feedcard--hidden form {
+    margin: 0 0 0 auto;
+}
+
+.kd-feed__older {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--kd-space-2);
+    margin-top: var(--kd-space-3);
+    padding: var(--kd-space-5);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface-raised);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: var(--kd-weight-bold);
+    letter-spacing: var(--kd-tracking-action);
+    text-transform: uppercase;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.kd-feed__older:hover {
+    border-color: var(--color-text);
+}
+
+.kd-feed__older svg {
+    width: 15px;
+    height: 15px;
+}
+
+.kd-feedempty {
+    padding: var(--kd-space-13) var(--kd-space-10);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    text-align: center;
+    color: var(--color-text-secondary);
+}
+
+.kd-feedempty > svg {
+    width: 28px;
+    height: 28px;
+    color: var(--color-text-soft);
+}
+
+.kd-feedempty__title {
+    margin: var(--kd-space-5) 0 0;
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-extrabold);
+    font-size: 28px;
+    line-height: 1;
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-feedempty p {
+    max-width: 52ch;
+    margin: var(--kd-space-4) auto var(--kd-space-8);
+    font-size: 14px;
+}
+
+/* ── Modale de copie ─────────────────────────────────────────────────────── */
+.kd-modal--copy {
+    width: min(520px, calc(100vw - 2 * var(--kd-space-8)));
+}
+
+.kd-modal--copy .kd-modal__head {
+    margin-bottom: var(--kd-space-4);
+}
+
+.kd-copy__lead {
+    margin: 0 0 var(--kd-space-7);
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.kd-copy__count {
+    margin: var(--kd-space-6) 0 var(--kd-space-3);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-copy__list {
+    max-height: 40vh;
+    overflow-y: auto;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--color-divider-soft);
+}
+
+.kd-copy__list li {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--kd-space-1) var(--kd-space-4);
+    padding: 7px 0;
+    border-bottom: 1px solid var(--color-divider-soft);
+}
+
+.kd-copy__name {
+    font-size: 14px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
+.kd-copy__added {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-copy__added svg {
+    width: 11px;
+    height: 11px;
+}
+
+.kd-copy__notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-6) 0 var(--kd-space-7);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-copy__notice svg {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+}
+
+/* ── Sous 560px : la carte se resserre, le RPE passe sous le résumé ──────── */
+@media (max-width: 560px) {
+    .kd-feedcard__who,
+    .kd-feedcard__foot {
+        padding-left: var(--kd-space-6);
+        padding-right: var(--kd-space-6);
+    }
+
+    .kd-feedcard__title,
+    .kd-feedcard__kpis,
+    .kd-feedcard__record,
+    .kd-feedcard__note,
+    .kd-feedcard__exos,
+    .kd-feedcard__more > summary {
+        margin-left: var(--kd-space-6);
+        margin-right: var(--kd-space-6);
+    }
+
+    .kd-feedcard__kpis dd {
+        font-size: 22px;
+    }
+
+    .kd-feedex__rpe {
+        width: auto;
+    }
+
+    .kd-friend {
+        padding: var(--kd-space-5) var(--kd-space-6);
+    }
+}
+
+/* « Copiée par » sous le hero d'une séance (#126) : une ligne, en retrait. */
+.kd-copiedby {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-7) 0 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-copiedby svg {
+    flex: none;
+    width: 13px;
+    height: 13px;
+}

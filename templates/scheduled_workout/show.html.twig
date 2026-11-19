@@ -38,7 +38,7 @@
             volume: volume|default(null), load: load|default(null),
             plates: plates|default([]), endurance: endurance|default([]),
             eyebrow: 'Séance au calendrier', summaryContext: summaryContext,
-            planInstruction: planInstruction
+            planInstruction: planInstruction, copiedBy: copiedBy
         } only %}
             {% block actions %}
                 {{ include('scheduled_workout/_hero_actions.html.twig', {
@@ -50,6 +50,7 @@
             {# La consigne de la case du plan (#95), avant le bilan : c'est ce
                qu'on lit avant de faire la séance. #}
             {% block afterhero %}
+                {{ include('components/_copied_by.html.twig', {copies: copiedBy}, with_context = false) }}
                 {{ include('components/_plan_instruction.html.twig', {instruction: planInstruction}, with_context = false) }}
                 {{ include('components/_scheduled_summary.html.twig', summaryContext, with_context = false) }}
             {% endblock %}
@@ -71,6 +72,7 @@
                 </div>
             </header>
 
+            {{ include('components/_copied_by.html.twig', {copies: copiedBy}, with_context = false) }}
             {{ include('components/_plan_instruction.html.twig', {instruction: planInstruction}, with_context = false) }}
             {{ include('components/_scheduled_summary.html.twig', summaryContext, with_context = false) }}
 

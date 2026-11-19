@@ -289,6 +289,12 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   vide dit **pourquoi** (`components/_filter_empty.html.twig` : recherche, puces,
   ou « rien à toi » avec un lien vers chaque athlète qui a du contenu) — sans
   quoi un coach croit que ce qu'il vient de créer pour son athlète a disparu.
+- **Amis (#126) : une amitié n'ouvre que le flux, en lecture.** `Friendship`
+  ne donne aucun droit (aucun voter ne la lit) : elle fait entrer les séances de
+  salle faites de l'autre dans son flux, rien d'autre. Ce que le flux montre est
+  écrit une fois (`ScheduledWorkoutRepository::feedQuery()`), et la copie d'une
+  séance d'ami passe par `LineageSeed` et `SharedWorkoutCopier`. Invariants :
+  [`docs/feature-friends.md`](./docs/feature-friends.md).
 - **Copier une séance chez un autre (#58) ne référence jamais un exercice qu'il
   ne peut pas lire.** Coach → athlète (`/coach/athlete/{id}/workout/copy`) et
   copie depuis le lien public (`/workout/shared/{token}/copy`) passent par

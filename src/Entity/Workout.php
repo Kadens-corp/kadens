@@ -107,6 +107,18 @@ class Workout
     private ?Workout $copiedFrom = null;
 
     /**
+     * La séance FAITE d'un ami dont cette séance est la copie (#126) : « Copier
+     * dans mes séances » depuis le flux. C'est ce qui permet d'écrire « Copiée
+     * par Tom » sous la séance de l'auteur, et « Copiée dans tes séances » sur la
+     * carte du flux de celui qui l'a prise. Un repère, jamais un droit : la copie
+     * appartient à son nouveau propriétaire et ne bouge plus avec l'original.
+     * SET NULL : l'auteur qui supprime sa séance ne touche pas la copie.
+     */
+    #[ORM\ManyToOne(targetEntity: ScheduledWorkout::class)]
+    #[ORM\JoinColumn(onDelete: 'SET NULL')]
+    private ?ScheduledWorkout $copiedFromSession = null;
+
+    /**
      * Qui, autre que le propriétaire, a mis ce contenu chez lui (#80) : le coach
      * qui l'a créé, copié, posé ou donné. Null = le propriétaire lui-même, c'est
      * le cas courant. Posé une fois pour toutes par `ContentAuthorListener` à la
@@ -279,6 +291,18 @@ class Workout
     public function setOrigin(?Workout $origin): static
     {
         $this->origin = $origin;
+
+        return $this;
+    }
+
+    public function getCopiedFromSession(): ?ScheduledWorkout
+    {
+        return $this->copiedFromSession;
+    }
+
+    public function setCopiedFromSession(?ScheduledWorkout $copiedFromSession): static
+    {
+        $this->copiedFromSession = $copiedFromSession;
 
         return $this;
     }

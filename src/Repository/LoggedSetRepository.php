@@ -519,6 +519,77 @@ class LoggedSetRepository extends ServiceEntityRepository
     }
 
     /**
+     * La matière des records battus d'une page du flux d'amis (#126) : pour
+     * chaque séance de chaque auteur, et chaque exercice demandé, les charges
+     * soulevées avec le plus de répétitions faites à chacune.
+     *
+     * Une ligne par (séance, exercice, charge), pas par série : c'est ce qui
+     * suffit à rejouer la règle du record (la charge, puis les répétitions à
+     * charge égale ; au poids du corps, les répétitions seules) sans remonter
+     * chaque série de l'historique. `weightKg` null et 0 restent deux lignes,
+     * l'appelant les lit pareil (`unloaded()`).
+     *
+     * Même périmètre que `workingSetScope()` au mot près (échauffement, exercice
+     * sauté et série non chiffrée exclus, statut non filtré), mais sur plusieurs
+     * propriétaires : le flux mêle les séances de ses amis et les siennes.
+     * Bornée en haut par `$until` : rien après la séance la plus récente de la
+     * page ne peut servir de référence.
+     *
+     * @param list<int> $ownerIds
+     * @param list<int> $exerciseIds
+     *
+     * @return list<array{ownerId: int, exerciseId: int, scheduledWorkoutId: int, date: \DateTimeImmutable, weightKg: float|null, reps: int}>
+     */
+    public function loadsBySessionForOwners(array $ownerIds, array $exerciseIds, \DateTimeImmutable $until): array
+    {
+        if ([] === $ownerIds || [] === $exerciseIds) {
+            return [];
+        }
+
+        $rows = $this->createQueryBuilder('ls')
+            ->select(
+                'IDENTITY(s.owner) AS ownerId',
+                'IDENTITY(le.exercise) AS exerciseId',
+                's.id AS scheduledWorkoutId',
+                's.scheduledDate AS date',
+                'ls.weightKg AS weightKg',
+                'MAX(COALESCE(ls.reps, 0)) AS reps',
+            )
+            ->join('ls.loggedExercise', 'le')
+            ->join('le.scheduledWorkout', 's')
+            ->andWhere('s.owner IN (:owners)')
+            ->andWhere('le.exercise IN (:exercises)')
+            ->andWhere('le.skipped = false')
+            ->andWhere('ls.setType != :warmup')
+            ->andWhere(self::measured('ls'))
+            ->andWhere('s.scheduledDate <= :until')
+            ->setParameter('owners', $ownerIds)
+            ->setParameter('exercises', $exerciseIds)
+            ->setParameter('warmup', SetType::WARMUP->value)
+            ->setParameter('until', $until, \Doctrine\DBAL\Types\Types::DATE_IMMUTABLE)
+            ->groupBy('s.owner')
+            ->addGroupBy('le.exercise')
+            ->addGroupBy('s.id')
+            ->addGroupBy('s.scheduledDate')
+            ->addGroupBy('ls.weightKg')
+            ->getQuery()
+            ->getArrayResult();
+
+        return array_values(array_map(static function (array $row): array {
+            $date = $row['date'];
+
+            return [
+                'ownerId' => (int) $row['ownerId'],
+                'exerciseId' => (int) $row['exerciseId'],
+                'scheduledWorkoutId' => (int) $row['scheduledWorkoutId'],
+                'date' => $date instanceof \DateTimeImmutable ? $date : new \DateTimeImmutable((string) $date),
+                'weightKg' => null !== $row['weightKg'] ? (float) $row['weightKg'] : null,
+                'reps' => (int) $row['reps'],
+            ];
+        }, $rows));
+    }
+
+    /**
      * Le périmètre des agrégats : « les séries de travail de cet utilisateur »,
      * éventuellement bornées dans le temps. Mêmes filtres que
      * `workingSetScope()` au mot près — échauffement, exercice sauté et série

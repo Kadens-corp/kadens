@@ -79,6 +79,8 @@ security:
         # utilisateur — c'est là que l'athlète répond aux demandes.
         - { path: ^/coaching, roles: ROLE_USER }
         - { path: ^/coach, roles: ROLE_COACH }
+        # Amis et flux (#126) : ouverts à tout compte.
+        - { path: ^/friends, roles: ROLE_USER }
         # Le back-office (messages programmés). ROLE_SUPER_ADMIN et non
         # ROLE_ADMIN : un admin de la bibliothèque globale peut être destinataire
         # d'un message, il ne doit pas pouvoir le lire avant le jour J.

@@ -1,0 +1,42 @@
+{#
+    Une page du flux d'amis (#126), dans son <turbo-frame>.
+
+    « Séances plus anciennes » charge la page suivante DANS le frame qui le
+    contient : le lien est remplacé par les cartes suivantes, sous celles qu'on
+    lisait, sans recharger ni remonter en haut. Chaque page porte donc son
+    frame (`feed-page-N`) et y prépare celui de la suivante. Sans JS, le lien
+    reste un lien : la page N s'ouvre entière (`FriendController::feed()`).
+
+    `target="_top"` : le frame ne capture que son lien de pagination (qui le
+    vise par `data-turbo-frame`). Les autres liens et formulaires des cartes
+    gardent la page entière pour cible.
+
+    Le séparateur de jour ne se répète pas d'une page à l'autre : la page
+    chargée dans le frame reçoit le dernier jour de la précédente
+    (`continuesDay`, par `?jour=`), et ne le redit pas.
+
+    Attend : entries, hasMore, page, filter, previewCount, continuesDay (null
+    sur une page ouverte entière).
+#}
+{% set filterParams = filter ? {ami: filter} : {} %}
+<turbo-frame id="feed-page-{{ page }}" class="kd-feed__page" target="_top">
+    {% set lastDay = continuesDay|default(null) %}
+    {% for entry in entries %}
+        {% if entry.dayKey != lastDay %}
+            <p class="kd-feed__day">{{ entry.dayLabel }}</p>
+            {% set lastDay = entry.dayKey %}
+        {% endif %}
+        {{ include('friend/_feed_card.html.twig', {
+            entry: entry, filter: filter, page: page, previewCount: previewCount
+        }, with_context = false) }}
+    {% endfor %}
+
+    {% if hasMore %}
+        <turbo-frame id="feed-page-{{ page + 1 }}" class="kd-feed__page" target="_top">
+            <a href="{{ path('app_friend_feed', filterParams|merge({page: page + 1, jour: (entries|last).dayKey})) }}"
+               class="kd-feed__older" data-turbo-frame="feed-page-{{ page + 1 }}">
+                Séances plus anciennes {{ ux_icon('lucide:chevron-down') }}
+            </a>
+        </turbo-frame>
+    {% endif %}
+</turbo-frame>

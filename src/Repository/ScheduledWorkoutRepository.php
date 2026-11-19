@@ -28,6 +28,152 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
     }
 
     /**
+     * Une page du flux d'amis (#126) : les séances de salle FAITES des auteurs
+     * donnés, la plus récente d'abord, hydratées avec leur réalisé (exercices,
+     * séries, exercice de bibliothèque) et leur séance d'origine.
+     *
+     * « De salle faite » = statut `DONE` et au moins un exercice consigné : le
+     * flux montre le réalisé, une séance simplement cochée n'a rien à y lire, et
+     * seule la muscu se logue (le cardio s'importe et reste hors du flux).
+     *
+     * La visibilité se lit ICI, à chaque affichage, et nulle part ailleurs :
+     * les séances de `$viewer` passent toujours (masquées comprises, le template
+     * les dit masquées), celles d'un autre seulement si son partage est ouvert
+     * et qu'il ne l'a pas masquée. Couper le partage retire donc aussi l'ancien.
+     * L'appelant ne passe que des auteurs autorisés (lui-même et ses amis).
+     *
+     * Deux temps, parce qu'une page bornée par `setMaxResults` ne se combine pas
+     * avec des jointures de collection : les identifiants d'abord, triés et
+     * bornés, puis le contenu de ces seules séances. Bornée à une dizaine de
+     * séances, l'hydratation reste dans la contrainte de coût du projet.
+     *
+     * @param list<User> $authors
+     *
+     * @return list<ScheduledWorkout>
+     */
+    public function findFeedPage(User $viewer, array $authors, int $offset, int $limit): array
+    {
+        if ([] === $authors || $limit < 1) {
+            return [];
+        }
+
+        $ids = array_map('intval', array_column($this->feedQuery($viewer, $authors)
+            ->select('s.id')
+            ->orderBy('s.scheduledDate', 'DESC')
+            ->addOrderBy('s.endedAt', 'DESC')
+            ->addOrderBy('s.id', 'DESC')
+            ->setFirstResult(max(0, $offset))
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getScalarResult(), 'id'));
+
+        if ([] === $ids) {
+            return [];
+        }
+
+        /** @var list<ScheduledWorkout> $sessions */
+        $sessions = $this->createQueryBuilder('s')
+            ->addSelect('o', 'w', 'le', 'ls', 'e')
+            ->join('s.owner', 'o')
+            ->leftJoin('s.workout', 'w')
+            ->leftJoin('s.loggedExercises', 'le')
+            ->leftJoin('le.loggedSets', 'ls')
+            ->leftJoin('le.exercise', 'e')
+            ->andWhere('s.id IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->getResult();
+
+        $byId = [];
+        foreach ($sessions as $session) {
+            $byId[(int) $session->getId()] = $session;
+        }
+
+        return array_values(array_filter(array_map(static fn (int $id): ?ScheduledWorkout => $byId[$id] ?? null, $ids)));
+    }
+
+    /**
+     * La séance la plus récente que chacun de ces amis montre dans le flux, pour
+     * la ligne « Dernière séance » de la page Amis. Mêmes conditions que le flux
+     * (`feedQuery()`), vues par un tiers : partage ouvert, séance non masquée.
+     * Un ami qui ne partage rien est absent du tableau.
+     *
+     * @param list<User> $friends
+     *
+     * @return array<int, array{title: string, date: \DateTimeImmutable}> indexé par identifiant d'ami
+     */
+    public function latestSharedByOwner(array $friends): array
+    {
+        if ([] === $friends) {
+            return [];
+        }
+
+        $rows = $this->createQueryBuilder('s')
+            ->select('IDENTITY(s.owner) AS ownerId', 's.id AS id', 's.scheduledDate AS date', 'w.title AS workoutTitle', 's.title AS ownTitle')
+            ->join('s.owner', 'o')
+            ->leftJoin('s.workout', 'w')
+            ->andWhere('s.owner IN (:authors)')
+            ->andWhere('s.status = :done')
+            ->andWhere('EXISTS (SELECT 1 FROM '.LoggedExercise::class.' le WHERE le.scheduledWorkout = s)')
+            ->andWhere('o.shareWithFriends = true')
+            ->andWhere('s.hiddenFromFriends = false')
+            ->setParameter('authors', $friends)
+            ->setParameter('done', ScheduledStatus::DONE)
+            ->orderBy('s.scheduledDate', 'DESC')
+            ->addOrderBy('s.endedAt', 'DESC')
+            ->addOrderBy('s.id', 'DESC')
+            ->getQuery()
+            ->getArrayResult();
+
+        $latest = [];
+        foreach ($rows as $row) {
+            $ownerId = (int) $row['ownerId'];
+            if (isset($latest[$ownerId])) {
+                continue;
+            }
+            $latest[$ownerId] = [
+                // La règle de titrage de l'entité, rejouée (cf. `TrainingLog`).
+                'title' => (string) ($row['workoutTitle'] ?? $row['ownTitle'] ?? 'Séance libre'),
+                'date' => self::asDate($row['date']) ?? throw new \UnexpectedValueException('Séance sans date.'),
+            ];
+        }
+
+        return $latest;
+    }
+
+    /** Le nombre de ses séances que `$owner` a masquées pour ses amis (#126). */
+    public function countHiddenFromFriends(User $owner): int
+    {
+        return (int) $this->createQueryBuilder('s')
+            ->select('COUNT(s.id)')
+            ->andWhere('s.owner = :owner')
+            ->andWhere('s.hiddenFromFriends = true')
+            ->setParameter('owner', $owner)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * Le périmètre du flux, sans projection ni tri : cf. `findFeedPage()`. Aussi
+     * la garde de la copie (`FriendFeed::canRead()`), pour qu'une séance qu'on
+     * ne voit pas ne se copie pas.
+     *
+     * @param list<User> $authors
+     */
+    public function feedQuery(User $viewer, array $authors): QueryBuilder
+    {
+        return $this->createQueryBuilder('s')
+            ->join('s.owner', 'o')
+            ->andWhere('s.owner IN (:authors)')
+            ->andWhere('s.status = :done')
+            ->andWhere('EXISTS (SELECT 1 FROM '.LoggedExercise::class.' le WHERE le.scheduledWorkout = s)')
+            ->andWhere('s.owner = :viewer OR (o.shareWithFriends = true AND s.hiddenFromFriends = false)')
+            ->setParameter('authors', $authors)
+            ->setParameter('viewer', $viewer)
+            ->setParameter('done', ScheduledStatus::DONE);
+    }
+
+    /**
      * Retrouve une séance datée par son identifiant client, sans son contenu.
      * Les endpoints de l'API, eux, passent par `findByUuidWithContentAndLog()` :
      * ils rendent le document complet, et le charger en une fois est ce qui leur
