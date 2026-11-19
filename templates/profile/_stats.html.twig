@@ -78,7 +78,7 @@
                 <div class="kd-profile__tile">
                     <span class="kd-profile__tileicon">{{ ux_icon('lucide:dumbbell') }}</span>
                     <div class="kd-stat__value">{{ vol.tonnageLabel }}</div>
-                    <div class="kd-stat__label">Tonnage soulevé · {{ vol.gymSets }} séries</div>
+                    <div class="kd-stat__label">Tonnage soulevé · {{ vol.gymSets }} série{{ vol.gymSets > 1 ? 's' }}</div>
                 </div>
                 {% if vol.running.meters > 0 or vol.running.seconds > 0 %}
                     <div class="kd-profile__tile">

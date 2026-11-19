@@ -117,7 +117,7 @@
                         {% if w.estimatedDurationMinutes %}
                             <span>{{ ux_icon('lucide:clock') }} {{ w.estimatedDurationMinutes }} min</span>
                         {% endif %}
-                        <span>{{ card.exerciseCount }} exos</span>
+                        <span>{{ card.exerciseCount }} exo{{ card.exerciseCount > 1 ? 's' }}</span>
                     </span>
                     {# La pose part de la dernière réalisation (LineageSeed) : la
                        carte le dit, sinon la case changerait de source en silence. #}

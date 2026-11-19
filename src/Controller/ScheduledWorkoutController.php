@@ -634,10 +634,14 @@ final class ScheduledWorkoutController extends AbstractController
         }
         $this->entityManager->flush();
 
+        $count = \count($scheduled);
+        $plural = $count > 1 ? 's' : '';
         $this->addFlash('success', sprintf(
-            'Plan « %s » retiré du planning : %d séance(s) supprimée(s).',
+            'Plan « %s » retiré du planning : %d séance%s supprimée%s.',
             $template->getTitle(),
-            \count($scheduled),
+            $count,
+            $plural,
+            $plural,
         ));
 
         return $redirect;
