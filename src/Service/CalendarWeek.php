@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\Entity\Goal;
+use App\Entity\ScheduledWorkout;
 use App\Entity\User;
 use App\Repository\GoalRepository;
 use App\Repository\ScheduledWorkoutRepository;
@@ -16,6 +17,8 @@ use App\Repository\ScheduledWorkoutRepository;
  * c'est ce qui permet au coach de lire la semaine de son athlète avec le même
  * template et les mêmes chiffres que l'athlète voit chez lui (#77, C-14). Le
  * contrôleur décide de qui l'on parle ; ce service ne sait pas qui regarde.
+ *
+ * @phpstan-type WeekSummary array{counts: array<string, int>, sessionCount: int, totalMinutes: int}
  */
 final class CalendarWeek
 {
@@ -46,9 +49,7 @@ final class CalendarWeek
      */
     public function for(User $owner, \DateTimeImmutable $ref): array
     {
-        // Ancrage au lundi ISO de la semaine contenant la date.
-        $monday = $ref->modify(sprintf('-%d days', (int) $ref->format('N') - 1))->setTime(0, 0);
-        $sunday = $monday->modify('+6 days');
+        [$monday, $sunday] = self::bounds($ref);
         $todayKey = (new \DateTimeImmutable('today'))->format('Y-m-d');
 
         $byDate = [];
@@ -67,14 +68,10 @@ final class CalendarWeek
         $goalsByDate = self::goalsByDate($this->goals->findByOwnerBetween($owner, $monday, $sunday));
 
         $days = [];
-        $totalMinutes = 0;
         $cursor = $monday;
         for ($i = 0; $i < 7; ++$i) {
             $key = $cursor->format('Y-m-d');
             $scheduled = $byDate[$key] ?? [];
-            foreach ($scheduled as $s) {
-                $totalMinutes += (int) $s->getWorkout()?->getEstimatedDurationMinutes();
-            }
             $days[] = [
                 'date' => $cursor,
                 'dayName' => self::DAY_NAMES[(int) $cursor->format('N')],
@@ -87,7 +84,6 @@ final class CalendarWeek
             $cursor = $cursor->modify('+1 day');
         }
 
-        $counts = $this->scheduledWorkouts->countByStatusForOwnerBetween($owner, $monday, $sunday);
         $pivot = $monday->modify('+3 days');
 
         return [
@@ -103,14 +99,62 @@ final class CalendarWeek
             // pour la semaine. La vue mois ne l'affiche pas, faute de place.
             'ratings' => $this->scheduledWorkouts->ratingsFor($ids),
             'nextGoal' => $this->goals->findNextForOwner($owner),
-            'counts' => $counts,
-            'sessionCount' => array_sum($counts),
-            'totalMinutes' => $totalMinutes,
+            'summary' => $this->summarize($owner, $monday, $sunday, $week),
             'todayKey' => $todayKey,
             'prevDate' => $monday->modify('-7 days')->format('Y-m-d'),
             'nextDate' => $monday->modify('+7 days')->format('Y-m-d'),
             'monthPivot' => ['year' => (int) $pivot->format('Y'), 'month' => (int) $pivot->format('n')],
         ];
+    }
+
+    /**
+     * Le seul bandeau de synthèse de la semaine qui contient `$ref`, sans les
+     * jours ni les séances aplaties : ce que le flux d'un changement de statut
+     * re-rend à côté de la pastille (#120), sans quoi le bandeau gardait les
+     * chiffres de l'ouverture jusqu'au rechargement.
+     *
+     * @return WeekSummary
+     */
+    public function summary(User $owner, \DateTimeImmutable $ref): array
+    {
+        [$monday, $sunday] = self::bounds($ref);
+
+        return $this->summarize($owner, $monday, $sunday, $this->scheduledWorkouts->findByOwnerBetween($owner, $monday, $sunday));
+    }
+
+    /**
+     * Une seule écriture des chiffres du bandeau, lue par la page et par le flux.
+     *
+     * @param list<ScheduledWorkout> $week
+     *
+     * @return WeekSummary
+     */
+    private function summarize(User $owner, \DateTimeImmutable $monday, \DateTimeImmutable $sunday, array $week): array
+    {
+        $totalMinutes = 0;
+        foreach ($week as $scheduled) {
+            $totalMinutes += (int) $scheduled->getWorkout()?->getEstimatedDurationMinutes();
+        }
+
+        $counts = $this->scheduledWorkouts->countByStatusForOwnerBetween($owner, $monday, $sunday);
+
+        return [
+            'counts' => $counts,
+            'sessionCount' => array_sum($counts),
+            'totalMinutes' => $totalMinutes,
+        ];
+    }
+
+    /**
+     * Lundi ISO (00:00) et dimanche de la semaine qui contient `$ref`.
+     *
+     * @return array{\DateTimeImmutable, \DateTimeImmutable}
+     */
+    private static function bounds(\DateTimeImmutable $ref): array
+    {
+        $monday = $ref->modify(sprintf('-%d days', (int) $ref->format('N') - 1))->setTime(0, 0);
+
+        return [$monday, $monday->modify('+6 days')];
     }
 
     /**

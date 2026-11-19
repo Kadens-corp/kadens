@@ -76,8 +76,13 @@
             {% endfor %}
         </div>
 
-        <form method="post" action="{{ path('app_scheduled_workout_place') }}" class="kd-picker">
+        {# `return=calendar` : la vue reste en place et se morphe au lieu d'être
+           rechargée (ScheduledWorkoutController::staysOnCalendar). La modale se
+           referme d'elle-même à la réussite (caladd#placed). #}
+        <form method="post" action="{{ path('app_scheduled_workout_place') }}" class="kd-picker"
+              data-action="turbo:submit-end->caladd#placed">
             <input type="hidden" name="_token" value="{{ csrf_token('schedule_place') }}">
+            <input type="hidden" name="return" value="calendar">
             <input type="hidden" name="date" data-caladd-target="dateInput">
 
             {# Un jour passé (#109) : on n'y planifie plus, on dit ce qui a eu
@@ -179,8 +184,13 @@
             class: 'kd-picker',
             'data-controller': 'plan-preview',
             'data-plan-preview-plans-value': planPlacement|json_encode,
-            'data-action': 'change->plan-preview#update input->plan-preview#update',
+            'data-action': 'change->plan-preview#update input->plan-preview#update turbo:submit-end->caladd#planPlaced',
         }}) }}
+            {# Hors du nom du formulaire Symfony (pas de champ en trop) : la vue
+               reste si la première séance y tombe, sinon on l'ouvre sur elle
+               (ScheduledWorkoutController::staysOnCalendar). #}
+            <input type="hidden" name="return" value="calendar">
+            {% if backFrom|default(null) %}<input type="hidden" name="from" value="{{ backFrom }}">{% endif %}
             <div class="kd-picker__hidden" data-caladd-target="planSelectWrap" hidden>
                 {{ form_row(instantiateForm.planTemplate, {attr: {'data-plan-preview-target': 'plan'}}) }}
             </div>

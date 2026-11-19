@@ -292,10 +292,15 @@
                cerné de noir, et se lisait comme l'enregistrement (#90). #}
             <div class="kd-modal__section">
                 <p class="kd-modal__section-title">Déplacer</p>
-                {# Déplacer recharge la vue : une saisie en cours partirait avec. #}
+                {# Déplacer referme la modale : une saisie en cours partirait avec.
+                   Vers un jour de la vue (lue sur `from`), la vue reste et se
+                   morphe ; ailleurs, on va voir le jour visé
+                   (ScheduledWorkoutController::staysOnCalendar). #}
                 <form method="post" action="{{ path('app_scheduled_workout_move', {id: scheduled.id}) }}" class="kd-modal__inline"
                       data-action="submit->dialog#guardSubmit">
                     <input type="hidden" name="_token" value="{{ csrf_token('move' ~ scheduled.id) }}">
+                    <input type="hidden" name="return" value="calendar">
+                    {% if backFrom %}<input type="hidden" name="from" value="{{ backFrom }}">{% endif %}
                     <div class="kd-field">
                         <input type="date" name="scheduledDate" value="{{ scheduled.scheduledDate|date('Y-m-d') }}" class="kd-input" required aria-label="Nouvelle date">
                     </div>
@@ -306,6 +311,8 @@
             <div class="kd-modal__section">
                 <form method="post" action="{{ path('app_scheduled_workout_delete', {id: scheduled.id}) }}" onsubmit="return confirm('Retirer cette séance de l\'agenda ?');">
                     <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ scheduled.id) }}">
+                    {# Reste sur la vue, sans rechargement (ScheduledWorkoutController::staysOnCalendar). #}
+                    <input type="hidden" name="return" value="calendar">
                     <button type="submit" class="kd-btn kd-btn--ghost kd-btn--danger">{{ ux_icon('lucide:trash-2') }} Retirer de l'agenda</button>
                 </form>
             </div>

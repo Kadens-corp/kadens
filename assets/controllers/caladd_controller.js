@@ -4,7 +4,8 @@ import { Controller } from '@hotwired/stimulus';
  * Modales de sélection du calendrier (remplacent les anciens dropdowns) :
  *  - « poser une séance » : ouverte par le « + » d'un jour (data-caladd-date-param),
  *    la date choisie alimente un champ caché ; chaque carte est un bouton submit
- *    (clic = pose immédiate, endpoint lean `app_scheduled_workout_place`), et
+ *    (clic = pose immédiate, endpoint lean `app_scheduled_workout_place`, la vue
+ *    se morphe sans rechargement puis la modale se ferme : `placed`), et
  *    « Nouvelle séance pour ce jour » crée un brouillon posé à cette date (#92) ;
  *  - « placer un plan dans l'agenda » : ouverte par le bouton en tête, carte
  *    cliquée = sélection (alimente le <select> caché du PlanInstantiationType et
@@ -75,6 +76,16 @@ export default class extends Controller {
         this.workoutDialogTarget.showModal();
     }
 
+    /**
+     * Séance posée : le serveur répond par un refresh morphé de la vue, plus
+     * par une redirection. La modale, ouverte côté client, n'a pas d'état
+     * serveur à reprendre : on la ferme ici, avant que le morphing ne passe.
+     * En échec (jeton, séance introuvable), Turbo suit la redirection.
+     */
+    placed(event) {
+        if (event.detail.success) this.workoutDialogTarget.close();
+    }
+
     filterWorkouts(event) {
         this.workoutQuery = (event.target.value || '').trim().toLowerCase();
         this.applyWorkoutFilter();
@@ -134,6 +145,11 @@ export default class extends Controller {
             this.planDateTarget.dispatchEvent(new Event('change', { bubbles: true }));
         }
         if (!this.planDialogTarget.open) this.planDialogTarget.showModal();
+    }
+
+    /** Plan placé : même logique que `placed`, pour la modale des plans. */
+    planPlaced(event) {
+        if (event.detail.success) this.planDialogTarget.close();
     }
 
     filterPlans(event) {

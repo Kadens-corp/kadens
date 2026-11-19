@@ -119,6 +119,40 @@ final class BackTarget
     }
 
     /**
+     * Les jours que montre une vue calendrier : la semaine (lundi → dimanche)
+     * d'un jeton `cal-week` ou `athlete-cal`, le mois d'un jeton `cal-month`.
+     * `null` sur tout autre type. Sert à savoir si un geste fait dans cette vue
+     * (déplacer, placer un plan) y reste visible : sinon, il faut aller voir
+     * ailleurs. Le mois s'arrête à ses propres jours, pas aux débords de la
+     * grille : un débord renvoie au mois voisin, ce qui reste juste.
+     *
+     * @return array{\DateTimeImmutable, \DateTimeImmutable}|null
+     */
+    public function calendarSpan(): ?array
+    {
+        $day = match ($this->kind) {
+            self::CAL_WEEK => $this->value,
+            self::ATHLETE_CAL => $this->athleteWeek()[1] ?? null,
+            default => null,
+        };
+
+        if (null !== $day) {
+            $date = new \DateTimeImmutable($day);
+            $monday = $date->modify(sprintf('-%d days', (int) $date->format('N') - 1));
+
+            return [$monday, $monday->modify('+6 days')];
+        }
+
+        if (self::CAL_MONTH === $this->kind) {
+            $first = new \DateTimeImmutable($this->value.'-01');
+
+            return [$first, $first->modify('last day of this month')];
+        }
+
+        return null;
+    }
+
+    /**
      * La regex laisse passer `2026-13-45` : le format est bon, la date n'existe
      * pas. Sans ce filtre, la route se génèrerait (son requirement est le même
      * `\d{4}-\d{2}-\d{2}`) et c'est le calendrier qui planterait à l'arrivée.

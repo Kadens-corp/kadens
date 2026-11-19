@@ -1,0 +1,15 @@
+{# Réponse à une séance posée ou retirée **depuis le calendrier** (le formulaire
+   poste `return=calendar`). Ajouter ou retirer une séance change plus que sa
+   pastille : le jour (« Repos », jours libres de la vue mois), le bandeau de la
+   semaine, le compteur du pli. Plutôt que de cibler chacun, la page se relit en
+   arrière-plan et se morphe, scroll gardé : même motif que la séance ramenée à
+   aujourd'hui (#109). Le message part en session et s'affiche au refresh. Ce que
+   le morphing ne reprend pas au serveur : assets/morph_state.js.
+
+   Paramètre :
+     - removed (int, optionnel) : id de la séance retirée. Sa pastille part tout
+       de suite, avec la modale qu'elle contient ; le refresh suit. #}
+{% if removed|default(null) %}
+    <turbo-stream action="remove" target="cal-event-{{ removed }}"></turbo-stream>
+{% endif %}
+<turbo-stream action="refresh" method="morph" scroll="preserve"></turbo-stream>

@@ -7,6 +7,7 @@ use App\Entity\ScheduledWorkout;
 use App\Entity\User;
 use App\Enum\ScheduledStatus;
 use App\Form\PlanInstantiationType;
+use App\Http\BackTarget;
 use App\Repository\ImportedActivityRepository;
 use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
@@ -14,6 +15,7 @@ use App\Repository\WorkoutRepository;
 use App\Security\Voter\PlanTemplateVoter;
 use App\Security\Voter\ScheduledWorkoutVoter;
 use App\Security\Voter\WorkoutVoter;
+use App\Service\CalendarWeek;
 use App\Service\ImportedActivityPresenter;
 use App\Service\LogComparator;
 use App\Service\LogMetrics;
@@ -51,6 +53,7 @@ final class ScheduledWorkoutController extends AbstractController
         private readonly TrackableSchedule $trackable,
         private readonly LogMetrics $logMetrics,
         private readonly ImportedActivityRepository $importedActivities,
+        private readonly CalendarWeek $calendarWeek,
     ) {
     }
 
@@ -99,6 +102,10 @@ final class ScheduledWorkoutController extends AbstractController
         $this->entityManager->flush();
 
         $this->addFlash('success', $this->placedMessage($date, $past, $status));
+
+        if ($this->staysOnCalendar($request)) {
+            return $this->streamCalendarRefresh($request);
+        }
 
         return $this->redirectToMonth($date);
     }
@@ -213,7 +220,14 @@ final class ScheduledWorkoutController extends AbstractController
                 $first ??= $planScheduler->firstScheduledDate($template, $user);
             }
 
-            return $this->redirectToDay($first ?? $startDate);
+            // Première séance dans la vue affichée : on reste, la vue se morphe.
+            // Sinon on ouvre l'agenda sur elle (#68), quitte à changer de vue.
+            $landing = $first ?? $startDate;
+            if ($this->staysOnCalendar($request, $landing)) {
+                return $this->streamCalendarRefresh($request);
+            }
+
+            return $this->redirectToDay($landing);
         }
 
         $this->addFlash('error', 'Impossible de placer ce plan dans l\'agenda.');
@@ -356,7 +370,14 @@ final class ScheduledWorkoutController extends AbstractController
             $scheduled->setScheduledDate($newDate);
             $this->entityManager->flush();
 
-            $this->addFlash('success', 'Séance déplacée.');
+            $this->addFlash('success', sprintf('Séance déplacée au %s.', $newDate->format('d/m')));
+
+            // Depuis le calendrier, vers un jour de la vue affichée : on reste.
+            // La pastille part avec sa modale, le refresh la repose à son jour.
+            // Ailleurs, on va la voir là où elle est tombée (redirection).
+            if ($this->staysOnCalendar($request, $newDate)) {
+                return $this->streamCalendarRefresh($request, $scheduled->getId());
+            }
 
             return $this->redirectAfterMutation($request, $scheduled, $newDate);
         }
@@ -536,6 +557,7 @@ final class ScheduledWorkoutController extends AbstractController
      * Re-rend la pastille d'une séance datée en Turbo Stream (action="replace"
      * sur `#cal-event-{id}`), à l'identique de son rendu d'origine. `detailed`
      * (vue semaine) est reporté par le formulaire ; `overdue` est recalculé.
+     * En vue semaine, le bandeau de synthèse part avec (#120).
      */
     private function streamCalEvent(Request $request, ScheduledWorkout $scheduled, PlanFlattener $planFlattener, bool $refresh = false): Response
     {
@@ -546,6 +568,8 @@ final class ScheduledWorkoutController extends AbstractController
             && $scheduled->getScheduledDate() < $today;
 
         $workout = $scheduled->getWorkout();
+        $detailed = (bool) $request->getPayload()->getInt('detailed');
+        $owner = $scheduled->getOwner();
 
         return $this->render('calendar/stream/cal_event.stream.html.twig', [
             'scheduled' => $scheduled,
@@ -553,7 +577,13 @@ final class ScheduledWorkoutController extends AbstractController
             'fw' => null === $workout ? null : $planFlattener->flattenWorkout($workout),
             'instruction' => $planFlattener->planInstruction($scheduled),
             'statuses' => ScheduledStatus::cases(),
-            'detailed' => (bool) $request->getPayload()->getInt('detailed'),
+            'detailed' => $detailed,
+            // Vue semaine : son bandeau de synthèse suit le statut (#120). La
+            // semaine est celle de la séance, chez son propriétaire, comme la
+            // page l'a rendue (le coach lit celle de son athlète).
+            'weekSummary' => $detailed && null !== $owner
+                ? $this->calendarWeek->summary($owner, $scheduled->getScheduledDate())
+                : null,
             'rating' => $this->ratingOf($scheduled),
             'overdue' => $overdue,
             // Ancre de contexte de la vue appelante, reconduite telle quelle : la
@@ -656,15 +686,66 @@ final class ScheduledWorkoutController extends AbstractController
 
         $date = $scheduled->getScheduledDate();
         $owner = $scheduled->getOwner();
+        $id = $scheduled->getId();
 
-        if ($this->isCsrfTokenValid('delete'.$scheduled->getId(), $request->getPayload()->getString('_token'))) {
+        if ($this->isCsrfTokenValid('delete'.$id, $request->getPayload()->getString('_token'))) {
             $this->entityManager->remove($scheduled);
             $this->entityManager->flush();
 
             $this->addFlash('success', 'Séance retirée de l\'agenda.');
+
+            if ($this->staysOnCalendar($request)) {
+                return $this->streamCalendarRefresh($request, $id);
+            }
         }
 
         return $this->redirectToCalendarOf($owner, $date);
+    }
+
+    /**
+     * Le geste vient du calendrier (`return=calendar`) et Turbo est là : on reste
+     * sur la vue au lieu de la recharger par une redirection, qui remontait en
+     * haut de page à chaque geste. Le marqueur est explicite parce que retirer
+     * et déplacer servent aussi la page de la séance datée, qui doit garder son
+     * propre retour.
+     *
+     * `$landing` = le jour où le geste a porté, quand il peut sortir de la vue
+     * (déplacer, placer un plan). Il faut alors qu'il tombe dans les jours que
+     * montre la vue, lus sur le jeton `from` (`BackTarget::calendarSpan()`) :
+     * sinon rester ferait disparaître la séance sans la montrer. Jeton absent ou
+     * illisible = vue inconnue = on redirige, le comportement d'avant.
+     */
+    private function staysOnCalendar(Request $request, ?\DateTimeImmutable $landing = null): bool
+    {
+        if (TurboBundle::STREAM_FORMAT !== $request->getPreferredFormat()
+            || 'calendar' !== $request->getPayload()->getString('return')) {
+            return false;
+        }
+
+        if (null === $landing) {
+            return true;
+        }
+
+        $span = BackTarget::parse($request->getPayload()->getString('from'))?->calendarSpan();
+        if (null === $span) {
+            return false;
+        }
+
+        $day = $landing->format('Y-m-d');
+
+        return $day >= $span[0]->format('Y-m-d') && $day <= $span[1]->format('Y-m-d');
+    }
+
+    /**
+     * Relit la vue calendrier courante en arrière-plan et la morphe (cf.
+     * calendar/stream/refresh.stream.html.twig). `$removed` = pastille à retirer
+     * tout de suite, sans attendre le refresh.
+     */
+    private function streamCalendarRefresh(Request $request, ?int $removed = null): Response
+    {
+        $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
+
+        return $this->render('calendar/stream/refresh.stream.html.twig', ['removed' => $removed]);
     }
 
     /**

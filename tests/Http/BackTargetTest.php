@@ -107,4 +107,28 @@ final class BackTargetTest extends TestCase
             self::assertSame($kind, $target->kind);
         }
     }
+
+    /**
+     * Les jours que montre une vue calendrier : de quoi savoir si un geste fait
+     * dans la vue (déplacer, placer un plan) y reste visible.
+     *
+     * @return iterable<string, array{string, ?string, ?string}>
+     */
+    public static function calendarSpans(): iterable
+    {
+        yield 'semaine, depuis son lundi' => ['cal-week-2026-03-09', '2026-03-09', '2026-03-15'];
+        yield 'semaine, depuis un autre jour' => ['cal-week-2026-03-11', '2026-03-09', '2026-03-15'];
+        yield 'agenda d\'athlète' => ['athlete-cal-7-2026-03-11', '2026-03-09', '2026-03-15'];
+        yield 'mois de février' => ['cal-month-2026-02', '2026-02-01', '2026-02-28'];
+        yield 'hors calendrier' => ['plan-12', null, null];
+    }
+
+    #[DataProvider('calendarSpans')]
+    public function testCalendarSpan(string $raw, ?string $from, ?string $to): void
+    {
+        $span = BackTarget::parse($raw)?->calendarSpan();
+
+        self::assertSame($from, $span ? $span[0]->format('Y-m-d') : null);
+        self::assertSame($to, $span ? $span[1]->format('Y-m-d') : null);
+    }
 }

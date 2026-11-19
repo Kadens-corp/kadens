@@ -18,6 +18,20 @@
         }) }}
     </template>
 </turbo-stream>
+{# Vue semaine (#120) : le statut change aussi le bandeau de synthèse (faites,
+   prévues, assiduité). Sans lui, « 1 faite · 100 % » restait affiché sur une
+   séance redevenue prévue jusqu'au rechargement. Deux cibles, la ligne du pli et
+   la barre, jamais le `<details>` : le remplacer rouvrirait le pli replié. La
+   vue mois n'a pas de bandeau, le contrôleur ne fournit alors rien. #}
+{% if weekSummary|default(null) %}
+    {% import 'calendar/_week_summary.html.twig' as week %}
+    <turbo-stream action="replace" target="week-summary-line">
+        <template>{{ week.line(weekSummary) }}</template>
+    </turbo-stream>
+    <turbo-stream action="replace" target="week-summary">
+        <template>{{ week.bar(weekSummary) }}</template>
+    </turbo-stream>
+{% endif %}
 {# Séance ramenée à aujourd'hui (#109) : elle change de jour, et tout ce qui
    dépend de sa date bouge avec elle (résumé de la semaine, « Repos », jours
    libres). Remplacer d'abord le fragment ferme la modale ou le menu ouverts ;
