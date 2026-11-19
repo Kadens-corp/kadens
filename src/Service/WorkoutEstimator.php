@@ -54,7 +54,7 @@ final class WorkoutEstimator
         foreach ($this->supersets->segments($block) as $segment) {
             $last = count($segment['exercises']) - 1;
             foreach ($segment['exercises'] as $i => $prescribed) {
-                $seconds += $this->prescribedSeconds($prescribed, $i < $last);
+                $seconds += $this->effortSeconds($prescribed, $i < $last);
             }
         }
 
@@ -73,10 +73,17 @@ final class WorkoutEstimator
     }
 
     /**
+     * Durée d'UN effort prescrit, récupérations comprises, hors tours de bloc.
+     * C'est la seule écriture de « combien de temps dure cet effort » : la durée
+     * d'une séance en est la somme, et `WorkoutMetrics::volume()` la ventile par
+     * activité (`estimatedSeconds`) pour que la semaine et le plan comptent le
+     * même temps que la séance (#122). Un fractionné 6 × 400 m récup 90 s dure
+     * donc ses 6 × 400 m courus ET ses six récupérations, partout.
+     *
      * @param bool $chained membre d'un superset suivi d'un autre membre : enchaîné
      *                      sans repos
      */
-    private function prescribedSeconds(PrescribedExercise $pe, bool $chained): int
+    public function effortSeconds(PrescribedExercise $pe, bool $chained = false): int
     {
         return match ($pe->getPrescriptionType()) {
             PrescriptionType::SETS_REPS => $this->setsReps($pe, $chained),

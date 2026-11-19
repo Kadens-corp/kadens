@@ -16,6 +16,7 @@ use App\Enum\BlockRole;
 use App\Enum\PrescriptionType;
 use App\Enum\ScheduledStatus;
 use App\Enum\SetType;
+use App\Service\EnduranceMeasure;
 use App\Service\LogMetrics;
 use App\Service\ProgressionAggregator;
 use App\Service\RegionBreakdown;
@@ -39,6 +40,7 @@ final class ProgressionAggregatorTest extends TestCase
             new UnitFormatter(),
             new WorkoutMetrics(new WorkoutEstimator(new SupersetGrouper()), new SupersetGrouper(), $regions),
             new LogMetrics($regions),
+            new EnduranceMeasure(new UnitFormatter()),
         );
     }
 

@@ -37,6 +37,7 @@ final class VolumePanel
         private readonly BodyLoad $bodyLoad,
         private readonly BodyPlates $bodyPlates,
         private readonly UnitFormatter $units,
+        private readonly EnduranceMeasure $endurance,
     ) {
     }
 
@@ -70,6 +71,10 @@ final class VolumePanel
      * les deux, mais la part déduite est dite à part — une estimation tirée d'une
      * allure n'est pas une consigne, et l'écran doit pouvoir le signaler.
      *
+     * La durée est le temps passé, récupérations comprises (`estimatedSeconds`,
+     * #122), arrondi comme la durée de la séance : un fractionné annoncé 44 min
+     * dit 44 min ici, pas les 25 min de ses seules durées saisies.
+     *
      * @param WorkoutVolume $volume
      *
      * @return list<EnduranceLine>
@@ -90,7 +95,7 @@ final class VolumePanel
             $data = $volume[$key];
             $total = $data['meters'] + $data['derivedMeters'];
 
-            if (0 === $total && 0 === $data['seconds']) {
+            if (0 === $total && 0 === $data['estimatedSeconds']) {
                 continue;
             }
 
@@ -102,7 +107,9 @@ final class VolumePanel
                 // un « ? » : ce n'est pas une valeur manquante, c'est une séance
                 // décrite en durée seule.
                 'distanceLabel' => $total > 0 ? $this->units->distance($total) : '',
-                'durationLabel' => $data['seconds'] > 0 ? $this->units->duration($data['seconds']) : null,
+                'durationLabel' => $data['estimatedSeconds'] > 0
+                    ? ($data['derivedSeconds'] > 0 ? '≈ ' : '').$this->endurance->format((float) $data['estimatedSeconds'], false)
+                    : null,
             ];
         }
 

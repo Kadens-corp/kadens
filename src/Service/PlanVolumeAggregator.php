@@ -11,8 +11,16 @@ use App\Enum\TargetArea;
 /**
  * Agrège la charge d'une trame PAR SEMAINE et PAR ACTIVITÉ, pour équilibrer d'un
  * coup d'œil : salle = séries par groupe musculaire (+ tonnage), course/vélo/
- * natation = distance (et durée). S'appuie sur WorkoutMetrics (volume par séance)
+ * natation = distance ou durée. S'appuie sur WorkoutMetrics (volume par séance)
  * et UnitFormatter (mise en forme lisible). Consommé par l'éditeur de trame.
+ *
+ * L'endurance se chiffre comme sur la rampe du plan, par la même règle
+ * (`EnduranceMeasure`, #122) : une semaine de l'éditeur et la même semaine de la
+ * vue du plan disent le même nombre, dans la même unité. Une semaine qui ne se
+ * chiffre pas du tout dans l'unité du plan retombe sur l'autre plutôt que de
+ * taire l'activité.
+ *
+ * @phpstan-import-type EnduranceVolume from WorkoutMetrics
  *
  * @phpstan-type VolumeChip array{activity: ActivityType, label: string, value: string}
  * @phpstan-type GymArea array{label: string, sets: int}
@@ -31,6 +39,7 @@ final class PlanVolumeAggregator
     public function __construct(
         private readonly WorkoutMetrics $metrics,
         private readonly UnitFormatter $units,
+        private readonly EnduranceMeasure $endurance,
     ) {
     }
 
@@ -51,9 +60,9 @@ final class PlanVolumeAggregator
                 'tonnage' => 0.0,
                 'byArea' => [],
                 'endurance' => [
-                    'running' => ['meters' => 0, 'seconds' => 0],
-                    'cycling' => ['meters' => 0, 'seconds' => 0],
-                    'swimming' => ['meters' => 0, 'seconds' => 0],
+                    'running' => EnduranceMeasure::EMPTY,
+                    'cycling' => EnduranceMeasure::EMPTY,
+                    'swimming' => EnduranceMeasure::EMPTY,
                 ],
             ];
         }
@@ -74,14 +83,22 @@ final class PlanVolumeAggregator
                 $raw[$week]['byArea'][$area] = ($raw[$week]['byArea'][$area] ?? 0) + $sets;
             }
             foreach (['running', 'cycling', 'swimming'] as $key) {
-                $raw[$week]['endurance'][$key]['meters'] += $vol[$key]['meters'];
-                $raw[$week]['endurance'][$key]['seconds'] += $vol[$key]['seconds'];
+                $raw[$week]['endurance'][$key] = $this->endurance->add($raw[$week]['endurance'][$key], $vol[$key]);
             }
+        }
+
+        // L'unité d'une activité se choisit sur le plan entier, comme la rampe.
+        $byDistance = [];
+        foreach (['running', 'cycling', 'swimming'] as $key) {
+            $byDistance[$key] = $this->endurance->prefersDistance(array_map(
+                static fn (array $data): array => $data['endurance'][$key],
+                $raw,
+            ));
         }
 
         $weeks = [];
         foreach ($raw as $week => $data) {
-            $weeks[$week] = $this->finalize($data);
+            $weeks[$week] = $this->finalize($data, $byDistance);
         }
 
         return $weeks;
@@ -89,10 +106,11 @@ final class PlanVolumeAggregator
 
     /**
      * @param array<string, mixed> $data
+     * @param array<string, bool>  $byDistance activité => chiffrée en distance sur ce plan
      *
      * @return WeekVolume
      */
-    private function finalize(array $data): array
+    private function finalize(array $data, array $byDistance): array
     {
         $chips = [];
 
@@ -110,13 +128,8 @@ final class PlanVolumeAggregator
             'swimming' => ActivityType::SWIMMING,
         ];
         foreach ($enduranceActivities as $key => $activity) {
-            $meters = $data['endurance'][$key]['meters'];
-            $seconds = $data['endurance'][$key]['seconds'];
-            if ($meters > 0) {
-                $value = $this->units->distance($meters);
-            } elseif ($seconds > 0) {
-                $value = $this->units->duration($seconds);
-            } else {
+            $value = $this->enduranceValue($data['endurance'][$key], $byDistance[$key]);
+            if (null === $value) {
                 continue;
             }
             $chips[] = [
@@ -145,6 +158,21 @@ final class PlanVolumeAggregator
             'gymAreas' => $gymAreas,
             'tonnage' => $data['tonnage'] > 0 ? $this->units->tonnage($data['tonnage']) : null,
         ];
+    }
+
+    /**
+     * @param EnduranceVolume $week
+     */
+    private function enduranceValue(array $week, bool $distance): ?string
+    {
+        foreach ([$distance, !$distance] as $unit) {
+            $measure = $this->endurance->planned($week, $unit);
+            if ($measure['value'] > 0.0) {
+                return ($measure['estimated'] ? '≈ ' : '').$this->endurance->format($measure['value'], $unit);
+            }
+        }
+
+        return null;
     }
 
     private function humanMinutes(int $minutes): string
