@@ -165,13 +165,6 @@
 {% block body %}
     {% import _self as sections %}
 
-    {% for message in app.flashes('success') %}
-        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-    {% for message in app.flashes('error') %}
-        <p data-turbo-temporary class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ message }}</p>
-    {% endfor %}
-
     {% set me = app.user %}
 
     <div class="kd-pagehead">

@@ -3,13 +3,6 @@
 {% block title %}Récit — {{ goal.title }}{% endblock %}
 
 {% block body %}
-    {% for message in app.flashes('success') %}
-        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-    {% for message in app.flashes('error') %}
-        <p data-turbo-temporary class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ message }}</p>
-    {% endfor %}
-
     {# Éditeur du récit (#42). Chaque geste est un formulaire classique qui revient
        ici, ancré sur le bloc touché : sans JS, tout fonctionne. Le seul confort
        JS est la réduction des photos avant l'envoi (photo_upload_controller).

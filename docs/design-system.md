@@ -491,7 +491,14 @@ Classes `.kd-*` dans `assets/styles/components.css`.
 - **Modale** : `<dialog>` natif, contour encre.
 - **Message flash** (`.kd-flash`) : succès par défaut, sur `--color-success-tint`
   (§2, Succès) ; `--error` en rouge du « manqué ». Les deux portent une icône,
-  pour ne pas reposer sur la seule couleur.
+  pour ne pas reposer sur la seule couleur. **Toujours en toast, jamais dans le
+  flux (#129)** : `base.html.twig` rend les flashes de toute page dans la pile
+  fixe `.kd-toasts` (bas droite, avec la pastille « Enregistré »), via
+  `components/_flash_toasts`. Un template ne boucle donc plus sur
+  `app.flashes('success'|'error')` : il consommerait le message avant la pile.
+  Le succès s'efface après 6 s, l'erreur reste jusqu'à sa croix. Une erreur
+  qui commente un formulaire de la page (aperçu de progression) reste, elle, à
+  côté de son formulaire : ce n'est pas un flash.
 - **Record : la couronne** (`lucide:crown`, classe `.kd-icon--solid`). Seule
   icône peinte **pleine** de l'app : le CSS remplit le tracé importé, le fichier
   reste celui de Lucide. Elle marque un record battu (historique d'exercice,

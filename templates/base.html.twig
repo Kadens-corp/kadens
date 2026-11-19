@@ -48,9 +48,16 @@
         <main id="main" class="{% block main_class %}kd-page{% endblock %}">
             {% block body %}{% endblock %}
         </main>
-        {% if app.user %}
-            {{ include('components/_save_status.html.twig', {}, with_context = false) }}
-        {% endif %}
+        {# Le coin des retours, en bas à droite : les messages flash de TOUTE page
+           (#129), puis la pastille « Enregistré ». Une seule pile, pour qu'ils
+           s'empilent au lieu de se recouvrir, et rien dans le flux de <main> :
+           un retour ne déplace jamais la page. #}
+        <div class="kd-toasts">
+            {{ include('components/_flash_toasts.html.twig', {}, with_context = false) }}
+            {% if app.user %}
+                {{ include('components/_save_status.html.twig', {}, with_context = false) }}
+            {% endif %}
+        </div>
 
         {# Un message programmé à lire aujourd'hui, sur la page où l'on arrive.
            Une modale à la fois : s'il y en a un, l'invitation à choisir un pseudo

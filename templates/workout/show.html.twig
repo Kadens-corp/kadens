@@ -7,11 +7,6 @@
 {% block body %}
     {% import 'components/_rating.html.twig' as ratings %}
 
-    {# Arrivée d'une copie depuis un lien partagé (#58), partage ouvert ou
-       arrêté (#61). #}
-    {% for message in app.flashes('success') %}
-        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
     {# Séance d'un athlète ouverte par son coach : à qui elle est (#64). #}
     {{ include('components/_owner_banner.html.twig', {owner: workout.owner, kind: 'Séance'}, with_context = false) }}
     {# Et dans l'autre sens, ce qui vient du coach, chez l'athlète (#80). #}

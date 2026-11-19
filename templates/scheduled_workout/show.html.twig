@@ -3,13 +3,6 @@
 {% block title %}{{ scheduled.displayTitle }} — {{ scheduled.scheduledDate|date('d/m/Y') }}{% endblock %}
 
 {% block body %}
-    {# Les retours des gestes qui redirigent ici (rattacher une activité,
-       effacer le réalisé) : sans eux, le message restait en session et surgissait
-       sur une autre page. #}
-    {% for message in app.flashes('success') %}
-        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-
     {# Séance datée d'un athlète ouverte par son coach : à qui elle est (#64). #}
     {{ include('components/_owner_banner.html.twig', {owner: scheduled.owner, kind: 'Séance'}, with_context = false) }}
     {# Et dans l'autre sens, ce qui vient du coach, chez l'athlète (#80) : posée

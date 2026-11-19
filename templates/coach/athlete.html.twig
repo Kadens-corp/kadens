@@ -3,9 +3,6 @@
 {% block title %}{{ athlete.displayName }} — Espace coach — Kadens{% endblock %}
 
 {% block body %}
-    {# En toast et non en tête : les poses gardent le défilement de la fiche (#125). #}
-    {{ include('components/_flash_toasts.html.twig', {}, with_context = false) }}
-
     {# ============================== EN-TÊTE ATHLÈTE ========================= #}
     <header class="kd-phero">
         <span class="kd-phero__avatar" aria-hidden="true">{{ athlete.displayName|first|upper }}</span>

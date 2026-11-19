@@ -16,13 +16,6 @@
              data-calview-media-value="(max-width: 560px)"></div>
     {% endif %}
 
-    {% for message in app.flashes('success') %}
-        <div data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }}{{ message }}</div>
-    {% endfor %}
-    {% for message in app.flashes('error') %}
-        <div data-turbo-temporary class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:calendar-x') }}{{ message }}</div>
-    {% endfor %}
-
     <div class="kd-pagehead kd-pagehead--cal">
         <div>
             <p class="kd-eyebrow">Planning</p>

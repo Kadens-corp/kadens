@@ -4,10 +4,6 @@
 {% block title %}Mes séances{% endblock %}
 
 {% block body %}
-    {% for message in app.flashes('success') %}
-        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-
     <div class="kd-pagehead">
         <div>
             <p class="kd-eyebrow">Planification</p>

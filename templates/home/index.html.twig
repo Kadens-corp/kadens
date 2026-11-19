@@ -15,10 +15,6 @@
     {% set monthNames = {1: 'janvier', 2: 'février', 3: 'mars', 4: 'avril', 5: 'mai', 6: 'juin', 7: 'juillet', 8: 'août', 9: 'septembre', 10: 'octobre', 11: 'novembre', 12: 'décembre'} %}
     {% set monthName = monthNames[today|date('n')] %}
 
-    {% for message in app.flashes('success') %}
-        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-
     <div class="kd-home">
         <div class="kd-home__head">
             <h1 class="kd-home__title">Salut {{ u.displayName }}</h1>

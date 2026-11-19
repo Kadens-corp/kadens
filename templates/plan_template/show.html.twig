@@ -3,12 +3,6 @@
 {% block title %}{{ flat.template.title }}{% endblock %}
 
 {% block body %}
-    {# Arrivée d'une copie depuis un lien partagé (#58), partage ouvert ou
-       arrêté (#61). #}
-    {% for message in app.flashes('success') %}
-        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-
     {# Vue de consultation auto-suffisante : aucun chargement AJAX post-rendu,
        condition du cache offline (Phase 9). Consomme la sortie de PlanFlattener. #}
     <div class="kd-actionbar">

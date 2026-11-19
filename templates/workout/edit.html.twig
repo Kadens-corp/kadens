@@ -7,10 +7,6 @@
 {% block body %}
     {% import 'components/_activity.html.twig' as activity %}
 
-    {% for message in app.flashes('success') %}
-        <p data-turbo-temporary class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-
     <div class="kd-actionbar">
         {{ include('components/_backlink.html.twig', {
             fallback: 'app_workout_index', kicker: 'Mes séances', owner: workout.owner

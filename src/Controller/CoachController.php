@@ -597,8 +597,8 @@ final class CoachController extends AbstractController
      *    placé ») suit ;
      *  - sans JS, la redirection vise l'ancre de la section, que le navigateur
      *    sait suivre seul (Turbo, lui, perd le fragment d'une redirection).
-     * Le message reste un flash ordinaire, que la fiche rend en toast en bas à
-     * droite (`components/_flash_toasts`) : en tête, il ne se lirait pas.
+     * Le message reste un flash ordinaire, rendu en toast en bas à droite comme
+     * sur toute page (`base.html.twig`, #129) : en tête, il ne se lirait pas.
      *
      * @param 'success'|'error' $tone
      */
