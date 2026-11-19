@@ -237,7 +237,12 @@ final class HomeControllerTest extends WebTestCase
         self::assertSelectorTextContains('.kd-home__nextlist', 'Mobilité');
     }
 
-    public function testACoachFindsTheirAthletesFromHome(): void
+    /**
+     * Pas de tuile « Mes athlètes » : l'entrée « Athlètes » de la barre de
+     * navigation y mène déjà. Le nombre d'athlètes ne sert plus qu'au
+     * démarrage, qu'un coach qui en suit déjà ne voit pas.
+     */
+    public function testACoachHasNoAthleteTileAndSkipsTheStartOnceCoaching(): void
     {
         $coach = $this->createUser('coach-home@example.com')->setRoles(['ROLE_COACH']);
         $this->em->flush();
@@ -245,9 +250,8 @@ final class HomeControllerTest extends WebTestCase
         $this->client->loginUser($coach);
         $crawler = $this->client->request('GET', '/');
 
-        self::assertSelectorTextContains('.kd-home__athletes', 'Mes athlètes');
-        self::assertSelectorTextContains('.kd-home__athletes', 'Invite ton premier athlète');
-        self::assertCount(1, $crawler->filter('a.kd-home__athletes[href="/coaching"]'));
+        self::assertCount(0, $crawler->filter('main a[href="/coaching"].kd-home__card'), 'Pas de tuile coach sur l\'accueil.');
+        self::assertStringNotContainsString('Mes athlètes', $crawler->filter('main')->text());
         // Sans athlète, il a encore son propre démarrage.
         self::assertCount(1, $crawler->filter('.kd-home__start'));
 
@@ -257,13 +261,7 @@ final class HomeControllerTest extends WebTestCase
         $this->em->flush();
         $crawler = $this->client->request('GET', '/');
 
-        self::assertSelectorTextContains('.kd-home__athletes', '1 athlète suivi');
         self::assertCount(0, $crawler->filter('.kd-home__start'), 'Son travail se fait chez ses athlètes.');
-
-        // Un athlète n'a pas de tuile coach.
-        $this->client->loginUser($athlete);
-        $crawler = $this->client->request('GET', '/');
-        self::assertCount(0, $crawler->filter('.kd-home__athletes'));
     }
 
     /**

@@ -2,8 +2,7 @@
 {% import 'components/_activity.html.twig' as activity %}
 
 {# Accueil : « où j'en suis ». Sur un agenda vide, le démarrage en trois
-   étapes ; sinon la prochaine séance. Puis l'espace coach, le prochain
-   objectif en aplat encre, les sept derniers jours (activités et muscles), le
+   étapes ; sinon la prochaine séance. Puis le prochain objectif en aplat encre, les sept derniers jours (activités et muscles), le
    mois en deux cartes (observance, répartition) et les raccourcis vers les
    pages de lecture. La fiche de l'athlète est sur /profile. #}
 
@@ -186,22 +185,6 @@
                     </a>
                 {% endif %}
             </section>
-        {% endif %}
-
-        {# ============================= ESPACE COACH ========================= #}
-        {# Seul le menu avatar menait à /coaching (C-01) : la tuile met l'espace
-           du coach à portée dès l'arrivée. #}
-        {% if athleteCount is not null %}
-            <a href="{{ path('app_coaching_index') }}" class="kd-home__card kd-home__athletes">
-                {{ ux_icon('lucide:users') }}
-                <span class="kd-home__athletesbody">
-                    <span class="kd-home__linklabel">Mes athlètes</span>
-                    <span class="kd-home__athletescount">
-                        {{- athleteCount == 0 ? 'Aucun athlète suivi pour l\'instant. Invite ton premier athlète.' : athleteCount ~ ' athlète' ~ (athleteCount > 1 ? 's') ~ ' suivi' ~ (athleteCount > 1 ? 's') -}}
-                    </span>
-                </span>
-                <span class="kd-home__linkarrow">{{ ux_icon('lucide:arrow-right') }}</span>
-            </a>
         {% endif %}
 
         {# ========================== PROCHAIN OBJECTIF ======================= #}

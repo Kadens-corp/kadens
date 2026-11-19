@@ -62,9 +62,9 @@ final class HomeController extends AbstractController
         $today = new \DateTimeImmutable('today');
         $month = $training->over($user, StatsPeriod::month((int) $today->format('Y'), (int) $today->format('n')));
 
-        // L'espace coach n'était joignable que par le menu avatar (C-01). La
-        // tuile s'affiche à tout ROLE_COACH, même sans athlète : c'est depuis
-        // cet espace qu'il les invite.
+        // Seulement pour le démarrage : un coach qui suit déjà des athlètes ne
+        // le voit pas. L'accueil n'a plus de tuile « Mes athlètes », l'entrée
+        // « Athlètes » de la barre de navigation y mène déjà.
         $athleteCount = $user->isCoach() ? \count($coachingRepository->findAcceptedAthletes($user)) : null;
 
         $onboarding = $this->onboarding($user, $athleteCount, $scheduledRepository, $workoutRepository, $planRepository);
@@ -88,7 +88,6 @@ final class HomeController extends AbstractController
             'coachAdded' => $coachContributions->recentFor($user),
             'nextSessions' => $scheduledRepository->findNextPlannedDay($user, $today),
             'onboarding' => $onboarding,
-            'athleteCount' => $athleteCount,
         ]);
     }
 

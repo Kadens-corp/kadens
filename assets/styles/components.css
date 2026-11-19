@@ -14061,33 +14061,6 @@ a.kd-coachitem__date:hover {
     height: 14px;
 }
 
-/* Tuile « Mes athlètes » du coach (C-01) : une carte du mois en ligne. */
-.kd-home__athletes {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--kd-space-5);
-}
-
-.kd-home__athletes > svg {
-    flex: none;
-    width: 20px;
-    height: 20px;
-    color: var(--color-text-secondary);
-}
-
-.kd-home__athletesbody {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--kd-space-2);
-}
-
-.kd-home__athletescount {
-    font-size: 14px;
-    color: var(--color-text-secondary);
-}
-
 @media (max-width: 900px) {
     .kd-home__steps {
         grid-template-columns: minmax(0, 1fr);
