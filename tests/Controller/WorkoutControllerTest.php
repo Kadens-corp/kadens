@@ -438,6 +438,39 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertStringContainsString('Fentes', $content);
     }
 
+    /**
+     * L'en-tête du compositeur suit les mutations (#118) : la page n'est jamais
+     * rechargée pendant l'édition, le compte « 0 bloc · 0 exercice » posé à
+     * l'ouverture d'une séance vide restait figé jusqu'au rechargement.
+     */
+    public function testQuickAddStreamRefreshesComposerMeta(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $exercise = $this->createExercise($user, 'Fentes');
+        $workout = $this->createWorkout($user, 'Séance');
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        self::assertSame('0 bloc · 0 exercice', trim($crawler->filter('#workout-meta')->text()));
+        $token = $crawler->filter('form[data-composer-target="quickAddForm"] input[name="_token"]')->attr('value');
+
+        // Séance vide : le premier exercice crée le premier bloc (#85).
+        $this->client->request(
+            'POST',
+            '/workout/'.$workout->getId().'/exercises/quick-add',
+            ['_token' => $token, 'exerciseId' => $exercise->getId()],
+            [],
+            ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html'],
+        );
+
+        self::assertResponseIsSuccessful();
+        $content = (string) $this->client->getResponse()->getContent();
+        self::assertMatchesRegularExpression(
+            '#<turbo-stream action="update" target="workout-meta">\s*<template>1 bloc · 1 exercice( · ≈ \d+ min estimées)?</template>#u',
+            $content,
+        );
+    }
+
     public function testShowRendersFlattenedSummary(): void
     {
         $user = $this->createUser('owner@example.com');

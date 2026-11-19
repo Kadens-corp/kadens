@@ -33,9 +33,6 @@
     {# Et dans l'autre sens, ce qui vient du coach, chez l'athlète (#80). #}
     {{ include('components/_added_by.html.twig', {by: workout.addedBy, banner: true, verb: 'Ajoutée par', on: workout.createdAt}, with_context = false) }}
 
-    {% set exCount = 0 %}
-    {% for b in workout.blocks %}{% set exCount = exCount + b.prescribedExercises|length %}{% endfor %}
-
     {# En-tête à édition en ligne : titre + description semi-invisibles (comme le
        plan). Cliquer le titre ou la description ouvre un champ, enregistré au blur
        ou à Entrée via le contrôleur `inline-edit` (aucun bouton). C'est le seul
@@ -55,9 +52,9 @@
                 data-action="click->inline-edit#start"
                 title="Cliquer pour renommer">{{ workout.title }}</h1>
 
-            <p class="kd-composer__meta">
-                {{ workout.blocks|length }} blocs · {{ exCount }} exercices
-                {%- if workout.estimatedDurationMinutes %} · ≈ {{ workout.estimatedDurationMinutes }} min estimées{% endif -%}
+            {# Cible d'un stream à chaque mutation (#118) : l'id porte la mise à jour. #}
+            <p class="kd-composer__meta" id="workout-meta">
+                {{- include('workout/_composer_meta.html.twig') -}}
             </p>
 
             <p class="kd-lead kd-inlineedit kd-inlineedit--desc{{ workout.description ? '' : ' kd-inlineedit--empty' }}"

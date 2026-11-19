@@ -1,0 +1,8 @@
+{# Remet à jour le compte de l'en-tête du compositeur (#118). Joint à toute
+   réponse qui change le contenu ou la durée estimée : mutation de blocs,
+   enregistrement de paramètres, mutation de séries. Hors du compositeur (édition
+   rapide d'une case), la cible n'existe pas et Turbo ignore le flux.
+   Contexte : workout. #}
+<turbo-stream action="update" target="workout-meta">
+    <template>{{ include('workout/_composer_meta.html.twig') }}</template>
+</turbo-stream>
