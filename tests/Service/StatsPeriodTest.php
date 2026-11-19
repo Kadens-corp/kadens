@@ -21,7 +21,7 @@ final class StatsPeriodTest extends TestCase
 
     public function testDefaultsToFourWeeksWhenNothingIsAsked(): void
     {
-        foreach ([null, '', '   ', 'lundi', '4W', '2026-13', 'all-time'] as $raw) {
+        foreach ([null, '', '   ', 'lundi', '4W', '2026-13', 'all-time', 'year', 'month', '20255', 'YTD'] as $raw) {
             $period = StatsPeriod::resolve($raw, $this->now());
 
             self::assertSame(
@@ -77,7 +77,7 @@ final class StatsPeriodTest extends TestCase
     {
         // Ce qui sort doit pouvoir rentrer : c'est ce qui permet au sélecteur
         // de se marquer actif, et à un lien de se partager.
-        foreach (['4w', '6m', 'all', '2026-02'] as $raw) {
+        foreach (['4w', '6m', 'ytd', 'all', '2026-02', '2025'] as $raw) {
             self::assertSame($raw, StatsPeriod::resolve($raw, $this->now())->queryValue);
         }
     }
@@ -87,6 +87,41 @@ final class StatsPeriodTest extends TestCase
         foreach (['4w', '6m', 'all'] as $raw) {
             self::assertNull(StatsPeriod::resolve($raw, $this->now())->monthKey());
         }
+    }
+
+    public function testOnlyAMonthOrAYearIsPickedFromTheList(): void
+    {
+        foreach (['4w', '6m', 'ytd', 'all'] as $raw) {
+            self::assertNull(StatsPeriod::resolve($raw, $this->now())->pickedKey());
+        }
+
+        self::assertSame('2026-02', StatsPeriod::resolve('2026-02', $this->now())->pickedKey());
+        self::assertSame('2025', StatsPeriod::resolve('2025', $this->now())->pickedKey());
+    }
+
+    public function testYearToDateRunsFromJanuaryFirstToToday(): void
+    {
+        $period = StatsPeriod::resolve('ytd', $this->now());
+
+        self::assertSame(StatsRange::YEAR_TO_DATE, $period->range);
+        self::assertSame('2026-01-01 00:00:00', $period->start?->format('Y-m-d H:i:s'));
+        // Aujourd'hui, pas le 31 décembre : la moyenne par semaine ne doit pas
+        // se diluer dans les semaines qui restent.
+        self::assertSame('2026-08-06 23:59:59', $period->end->format('Y-m-d H:i:s'));
+        self::assertSame(218, $period->dayCount());
+    }
+
+    public function testAYearIsRecognisedByItsShapeAndCoversTheWholeCalendarYear(): void
+    {
+        $period = StatsPeriod::resolve('2024', $this->now());
+
+        self::assertSame(StatsRange::YEAR, $period->range);
+        self::assertSame('2024-01-01 00:00:00', $period->start?->format('Y-m-d H:i:s'));
+        self::assertSame('2024-12-31 23:59:59', $period->end->format('Y-m-d H:i:s'));
+        // 2024 est bissextile.
+        self::assertSame(366, $period->dayCount());
+        self::assertSame('Année 2024', $period->label);
+        self::assertNull($period->monthKey());
     }
 
     public function testSixMonthsEndsTodayAndStartsSixMonthsBack(): void

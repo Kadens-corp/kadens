@@ -8,7 +8,6 @@ use App\Entity\Exercise;
 use App\Entity\User;
 use App\Enum\ActivityType;
 use App\Enum\Feeling;
-use App\Enum\StatsRange;
 use App\Repository\ExerciseRepository;
 use App\Repository\ImportedActivityRepository;
 use App\Repository\LoggedSetRepository;
@@ -159,13 +158,16 @@ final class TrainingStats
     }
 
     /**
-     * Les mois qui ont au moins un jour d'historique, le plus récent d'abord :
+     * Les mois de l'historique jusqu'au mois courant, le plus récent d'abord :
      * les options du sélecteur mensuel.
      *
      * Tous les mois de l'intervalle sont listés, y compris ceux sans séance —
      * un mois vide est une réponse (« je n'ai rien fait en août »), pas une
-     * option à masquer. La borne haute inclut le mois courant même s'il est
-     * encore vide, sinon la page n'aurait pas d'entrée pour « ce mois-ci ».
+     * option à masquer. La borne haute est **le mois courant, ni plus ni
+     * moins** (#119) : il est listé même vide, sinon la page n'aurait pas
+     * d'entrée pour « ce mois-ci », et rien au-delà, même si des séances y
+     * sont déjà posées. Un mois à venir n'a rien de fait à montrer, et le
+     * laisser en tête de liste en faisait l'option affichée par défaut.
      *
      * @return list<array{value: string, label: string}>
      */
@@ -174,8 +176,9 @@ final class TrainingStats
         $now = ($now ?? new \DateTimeImmutable())->setTime(0, 0);
         $bounds = $this->scheduled->dateBoundsForOwner($user);
 
-        $first = ($bounds['first'] ?? $now)->modify('first day of this month')->setTime(0, 0);
-        $last = max($bounds['last'] ?? $now, $now)->modify('first day of this month')->setTime(0, 0);
+        $last = $now->modify('first day of this month')->setTime(0, 0);
+        // Un historique qui ne contient que du futur commence au mois courant.
+        $first = min(($bounds['first'] ?? $now)->modify('first day of this month')->setTime(0, 0), $last);
 
         $months = [];
         for ($cursor = $last; $cursor >= $first; $cursor = $cursor->modify('-1 month')) {
@@ -183,6 +186,34 @@ final class TrainingStats
         }
 
         return $months;
+    }
+
+    /**
+     * Les années **révolues** de l'historique, la plus récente d'abord : les
+     * options annuelles du sélecteur.
+     *
+     * L'année en cours n'y figure pas : elle a sa fenêtre cliquable, « Cette
+     * année » (du 1er janvier à aujourd'hui). La lister ici aussi donnerait
+     * deux entrées presque identiques, l'une s'arrêtant aujourd'hui, l'autre au
+     * 31 décembre. Comme pour les mois, une année vide entre deux années
+     * actives reste listée : c'est une réponse.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    public function availableYears(User $user, ?\DateTimeImmutable $now = null): array
+    {
+        $bounds = $this->scheduled->dateBoundsForOwner($user);
+        if (null === $bounds) {
+            return [];
+        }
+
+        $current = (int) ($now ?? new \DateTimeImmutable())->format('Y');
+        $years = [];
+        for ($year = $current - 1; $year >= (int) $bounds['first']->format('Y'); --$year) {
+            $years[] = ['value' => (string) $year, 'label' => (string) $year];
+        }
+
+        return $years;
     }
 
     /**
@@ -727,7 +758,7 @@ final class TrainingStats
      */
     private function progression(array $byDate, StatsPeriod $period): array
     {
-        $weekly = \in_array($period->range, [StatsRange::FOUR_WEEKS, StatsRange::MONTH], true);
+        $weekly = $period->range->isWeekly();
 
         $totals = [];
         foreach ($byDate as $row) {
@@ -794,7 +825,7 @@ final class TrainingStats
      */
     private function feeling(array $rows, StatsPeriod $period): array
     {
-        $weekly = \in_array($period->range, [StatsRange::FOUR_WEEKS, StatsRange::MONTH], true);
+        $weekly = $period->range->isWeekly();
         $total = ['feeling' => [0, 0], 'rpe' => [0, 0]];
         $levels = array_fill(Feeling::VERY_WEAK->value, 5, 0);
         $buckets = [];
@@ -932,7 +963,7 @@ final class TrainingStats
      */
     private function enduranceProgression(array $byDate, StatsPeriod $period): array
     {
-        $weekly = \in_array($period->range, [StatsRange::FOUR_WEEKS, StatsRange::MONTH], true);
+        $weekly = $period->range->isWeekly();
 
         $first = null;
         $totals = [];

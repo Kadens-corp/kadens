@@ -278,6 +278,57 @@ final class TrainingHistoryTest extends KernelTestCase
     }
 
     /**
+     * #119 : la grille s'arrête au mois courant. Une séance posée en avance
+     * faisait entrer son mois en tête, vide et grisé, avant le mois courant.
+     */
+    public function testPlannedSessionsAheadDoNotExtendTheGridPastTheCurrentMonth(): void
+    {
+        $bench = $this->exercise('Développé couché', ActivityType::GYM, [TargetArea::CHEST]);
+        $workout = $this->workout($bench, 'Haut');
+        $this->schedule($workout, '2026-07-10', ScheduledStatus::DONE);
+        $this->schedule($workout, '2026-12-03', ScheduledStatus::PLANNED);
+        $this->em->flush();
+
+        $result = $this->history->calendar($this->user, $this->now);
+
+        self::assertSame('août 2026', $result['years'][0]['months'][0]['label']);
+    }
+
+    /**
+     * L'exception : une séance cochée faite à une date future reste visible.
+     * Elle compte au total, elle doit avoir sa case.
+     */
+    public function testADoneSessionDatedAheadStillGetsItsMonth(): void
+    {
+        $bench = $this->exercise('Développé couché', ActivityType::GYM, [TargetArea::CHEST]);
+        $workout = $this->workout($bench, 'Haut');
+        $this->schedule($workout, '2026-09-04', ScheduledStatus::DONE);
+        $this->schedule($workout, '2026-11-04', ScheduledStatus::PLANNED);
+        $this->em->flush();
+
+        $result = $this->history->calendar($this->user, $this->now);
+
+        self::assertSame('septembre 2026', $result['years'][0]['months'][0]['label']);
+        self::assertCount(1, $this->day($result, '2026-09-04')['sessions']);
+    }
+
+    /**
+     * Un historique qui ne contient que du futur commence au mois courant :
+     * la grille n'est pas vide, elle montre ce mois-ci.
+     */
+    public function testAHistoryMadeOnlyOfPlannedSessionsShowsTheCurrentMonth(): void
+    {
+        $bench = $this->exercise('Développé couché', ActivityType::GYM, [TargetArea::CHEST]);
+        $this->schedule($this->workout($bench, 'Haut'), '2026-10-01', ScheduledStatus::PLANNED);
+        $this->em->flush();
+
+        $result = $this->history->calendar($this->user, $this->now);
+
+        self::assertCount(1, $result['years']);
+        self::assertSame(['août 2026'], array_column($result['years'][0]['months'], 'label'));
+    }
+
+    /**
      * Les débords de grille (les jours du mois voisin qui complètent la première
      * et la dernière semaine) sont affichés pour garder les colonnes alignées,
      * mais ne comptent QUE pour leur propre mois. Sinon le total annuel

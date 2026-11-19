@@ -112,7 +112,7 @@ final class ProfileStatsPageTest extends WebTestCase
     {
         $this->client->loginUser($this->seedUser());
 
-        foreach (['4w' => '4 semaines', '6m' => '6 mois', 'all' => 'Tout'] as $range => $label) {
+        foreach (['4w' => '4 semaines', '6m' => '6 mois', 'ytd' => 'Cette année', 'all' => 'Tout'] as $range => $label) {
             $crawler = $this->client->request('GET', '/profile/stats?range='.$range);
 
             self::assertResponseIsSuccessful(sprintf('La fenêtre « %s » doit se rendre.', $range));
@@ -140,6 +140,40 @@ final class ProfileStatsPageTest extends WebTestCase
         self::assertSame('2026-07', $selected->attr('value'));
     }
 
+    /**
+     * #119 : hors fenêtre choisie dans la liste, c'est le mois courant qui y est
+     * marqué, même quand des séances sont posées plus loin. Les années révolues
+     * s'y ajoutent, l'année en cours restant au bouton « Cette année ».
+     * Les dates suivent l'horloge : c'est elle que la page lit.
+     */
+    public function testTheListDefaultsToTheCurrentMonthAndOffersPastYears(): void
+    {
+        $user = $this->seedUser();
+        $now = new \DateTimeImmutable();
+        $lastYear = (int) $now->format('Y') - 1;
+        foreach ([[sprintf('%d-03-10', $lastYear), ScheduledStatus::DONE], [$now->modify('+2 months')->format('Y-m-d'), ScheduledStatus::PLANNED]] as [$date, $status]) {
+            $this->em->persist((new ScheduledWorkout())
+                ->setOwner($user)
+                ->setTitle('Séance libre')
+                ->setScheduledDate(new \DateTimeImmutable($date))
+                ->setStatus($status));
+        }
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/profile/stats');
+
+        $select = $crawler->filter('.kd-rangepick__select');
+        self::assertSame($now->format('Y-m'), $select->filter('option[selected]')->attr('value'));
+        self::assertSame($now->format('Y-m'), $select->filter('option')->first()->attr('value'), 'Aucun mois à venir dans la liste.');
+        self::assertSame([(string) $lastYear], $select->filter('optgroup[label="Années"] option')->each(static fn ($o) => $o->attr('value')));
+
+        $crawler = $this->client->request('GET', '/profile/stats?range='.$lastYear);
+        self::assertResponseIsSuccessful();
+        self::assertStringContainsString('Année '.$lastYear, $crawler->filter('.kd-pagehead__lead')->text());
+        self::assertSame((string) $lastYear, $crawler->filter('.kd-rangepick__select option[selected]')->attr('value'));
+    }
+
     /** Un lien périmé ou trafiqué affiche des statistiques, jamais une erreur. */
     public function testAnUnknownWindowFallsBackInsteadOfFailing(): void
     {
@@ -163,7 +197,7 @@ final class ProfileStatsPageTest extends WebTestCase
         $crawler = $this->client->request('GET', '/profile/stats');
 
         self::assertCount(0, $crawler->filter('turbo-frame'));
-        self::assertCount(3, $crawler->filter('.kd-rangetab'));
+        self::assertCount(4, $crawler->filter('.kd-rangetab'));
         self::assertSame('get', strtolower((string) $crawler->filter('.kd-rangepick__month')->attr('method')));
     }
 

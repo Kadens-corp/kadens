@@ -78,7 +78,7 @@
     </div>
 
     {{ include('profile/_stats_tabs.html.twig', {tab: tab, tabs: tabs, period: period, subject: subject}) }}
-    {{ include('profile/_stats_range.html.twig', {period: period, ranges: ranges, months: months, subject: subject, tab: tab}) }}
+    {{ include('profile/_stats_range.html.twig', {period: period, ranges: ranges, months: months, years: years, subject: subject, tab: tab}) }}
 
     {% if tab.value == 'overview' %}
         {# ============================== BANDEAU DE TÊTE ========================= #}

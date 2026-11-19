@@ -106,8 +106,16 @@ final class TrainingHistory
         // La grille court du premier mois d'historique au mois courant inclus,
         // même si l'un et l'autre sont vides. Un compte qui n'a rien fait depuis
         // trois mois doit voir ses trois mois vides : c'est la réponse.
-        $first = $bounds['first']->modify('first day of this month')->setTime(0, 0);
-        $last = max($bounds['last'], $today)->modify('first day of this month')->setTime(0, 0);
+        //
+        // Elle ne va pas au-delà (#119). Les bornes viennent de TOUTES les
+        // séances datées, prévues comprises, alors que la grille ne montre que
+        // le fait : un mois posé en avance s'affichait vide en tête, avant le
+        // mois courant. Seule exception, une séance cochée faite à une date
+        // future (rare, mais rien ne l'interdit) : on la montre plutôt que de
+        // la compter au total sans case pour la voir.
+        $lastDone = [] !== $sessionsByDay ? new \DateTimeImmutable((string) max(array_keys($sessionsByDay))) : $today;
+        $last = max($lastDone, $today)->modify('first day of this month')->setTime(0, 0);
+        $first = min($bounds['first']->modify('first day of this month')->setTime(0, 0), $last);
 
         $months = [];
         for ($cursor = $last; $cursor >= $first; $cursor = $cursor->modify('-1 month')) {

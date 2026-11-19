@@ -1,15 +1,22 @@
 {# Sélecteur de fenêtre des statistiques.
 
-   Trois liens et un formulaire GET, rien d'autre : la fenêtre est un paramètre
+   Quatre liens et un formulaire GET, rien d'autre : la fenêtre est un paramètre
    d'URL (`?range=`), donc chaque vue a son lien, la page reste auto-suffisante
-   et le sélecteur fonctionne sans une ligne de JS. Le `<select>` de mois est
-   dans son propre formulaire parce qu'un mois ne se choisit pas d'un clic —
-   c'est la seule fenêtre paramétrée.
+   et le sélecteur fonctionne sans une ligne de JS. Le `<select>` est dans son
+   propre formulaire parce qu'un mois ou une année ne se choisit pas d'un clic.
+   Une seule liste porte les deux (groupes « Mois » puis « Années ») : deux
+   formulaires côte à côte doubleraient le bouton « Voir » pour une seule
+   valeur d'URL.
+
+   Hors fenêtre choisie dans la liste, c'est le mois courant qui y est marqué
+   (#119) : la liste est le raccourci vers « ce mois-ci », pas vers son premier
+   élément.
 
    Paramètres :
    - period : StatsPeriod courant (porte `range`, `queryValue`, `label`)
    - ranges : list de StatsRange cliquables (StatsRange::pickable())
-   - months : list de {value, label}, le plus récent d'abord
+   - months : list de {value, label}, le plus récent d'abord, mois courant en tête
+   - years  : list de {value, label}, années révolues, la plus récente d'abord
    - subject : l'athlète regardé, ou null pour soi — il décide de la route visée,
      sans quoi choisir une fenêtre depuis la page d'un athlète ramènerait le coach
      sur ses propres statistiques
@@ -27,6 +34,8 @@
 {% set statsParams = subject ? {id: subject.id} : {} %}
 {% set tab = tab|default(null) %}
 {% set tabParams = tab and tab.value != 'overview' ? {tab: tab.value} : {} %}
+{% set years = years|default([]) %}
+{% set picked = period.pickedKey ?? (months is not empty ? (months|first).value : null) %}
 
 <div class="kd-rangepick">
     <div class="kd-rangepick__tabs" role="group" aria-label="Fenêtre de temps">
@@ -39,14 +48,23 @@
         {% endfor %}
     </div>
 
-    {% if months|length > 1 %}
+    {% if months|length > 1 or years is not empty %}
         <form method="get" action="{{ path(statsRoute, statsParams) }}" class="kd-rangepick__month">
             {% if tabParams is not empty %}<input type="hidden" name="tab" value="{{ tabParams.tab }}">{% endif %}
-            <label class="kd-rangepick__label" for="stats-month">Un mois</label>
+            <label class="kd-rangepick__label" for="stats-month">{{ years is not empty ? 'Un mois, une année' : 'Un mois' }}</label>
             <select class="kd-rangepick__select" id="stats-month" name="range">
+                {% if years is not empty %}<optgroup label="Mois">{% endif %}
                 {% for month in months %}
-                    <option value="{{ month.value }}"{{ period.monthKey == month.value ? ' selected' }}>{{ month.label }}</option>
+                    <option value="{{ month.value }}"{{ picked == month.value ? ' selected' }}>{{ month.label }}</option>
                 {% endfor %}
+                {% if years is not empty %}
+                    </optgroup>
+                    <optgroup label="Années">
+                        {% for year in years %}
+                            <option value="{{ year.value }}"{{ picked == year.value ? ' selected' }}>{{ year.label }}</option>
+                        {% endfor %}
+                    </optgroup>
+                {% endif %}
             </select>
             <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">Voir</button>
         </form>

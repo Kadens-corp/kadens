@@ -109,6 +109,7 @@ final class ProfileController extends AbstractController
             'period' => $period,
             'ranges' => StatsRange::pickable(),
             'months' => $training->availableMonths($user),
+            'years' => $training->availableYears($user),
             'tab' => StatsTab::resolve($request->query->getString('tab')),
             'tabs' => StatsTab::cases(),
         ]);
@@ -145,6 +146,7 @@ final class ProfileController extends AbstractController
             'period' => $period,
             'ranges' => StatsRange::pickable(),
             'months' => $training->availableMonths($user),
+            'years' => $training->availableYears($user),
         ]);
     }
 

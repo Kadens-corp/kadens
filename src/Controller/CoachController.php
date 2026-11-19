@@ -209,6 +209,7 @@ final class CoachController extends AbstractController
             'period' => $period,
             'ranges' => StatsRange::pickable(),
             'months' => $training->availableMonths($athlete),
+            'years' => $training->availableYears($athlete),
             'tab' => StatsTab::resolve($request->query->getString('tab')),
             'tabs' => StatsTab::cases(),
             'subject' => $athlete,
@@ -301,6 +302,7 @@ final class CoachController extends AbstractController
             'period' => $period,
             'ranges' => StatsRange::pickable(),
             'months' => $training->availableMonths($athlete),
+            'years' => $training->availableYears($athlete),
             'subject' => $athlete,
         ]);
     }

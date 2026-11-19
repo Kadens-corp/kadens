@@ -12744,11 +12744,13 @@ a.kd-coachitem__date:hover {
         width: 100%;
     }
 
-    /* Trois cibles tactiles qui se partagent la largeur plutôt que de se
-       serrer à gauche. */
+    /* Les cibles tactiles se partagent la largeur plutôt que de se serrer à
+       gauche. À quatre (« Cette année »), un libellé peut passer sur deux
+       lignes à 375 px : il reste centré dans sa case. */
     .kd-rangetab {
         flex: 1 1 0;
         justify-content: center;
+        text-align: center;
         padding-inline: var(--kd-space-2);
     }
 

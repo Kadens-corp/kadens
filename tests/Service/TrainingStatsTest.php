@@ -725,6 +725,56 @@ final class TrainingStatsTest extends KernelTestCase
         self::assertSame('août 2026', $months[0]['label']);
     }
 
+    /**
+     * #119 : une séance posée en avance ne fait pas entrer son mois dans la
+     * liste. Il s'y plaçait en tête, donc en option affichée par défaut, et le
+     * sélecteur montrait décembre en novembre.
+     */
+    public function testAvailableMonthsStopAtTheCurrentMonthEvenWithPlannedSessionsAhead(): void
+    {
+        $this->scheduleFree('2026-10-15', ScheduledStatus::PLANNED);
+        $this->em->flush();
+
+        $months = $this->stats->availableMonths($this->user, new \DateTimeImmutable('2026-08-06'));
+
+        self::assertSame('2026-08', $months[0]['value'], 'Le mois courant ouvre la liste, pas octobre.');
+        self::assertNotContains('2026-10', array_column($months, 'value'));
+    }
+
+    /**
+     * Les années révolues seulement : l'année en cours a sa fenêtre cliquable
+     * (« Cette année »). Une année creuse entre deux années actives reste.
+     */
+    public function testAvailableYearsListPastYearsOnlyMostRecentFirst(): void
+    {
+        // Le seed ne couvre que 2026 : aucune année révolue.
+        $before = $this->stats->availableYears($this->user, new \DateTimeImmutable('2026-08-06'));
+        self::assertSame([], $before);
+
+        $this->scheduleFree('2024-03-12', ScheduledStatus::DONE);
+        $this->em->flush();
+
+        $years = $this->stats->availableYears($this->user, new \DateTimeImmutable('2026-08-06'));
+
+        self::assertSame(['2025', '2024'], array_column($years, 'value'));
+    }
+
+    /**
+     * Une année passée se lit par mois, sur ses douze mois : la rampe ne
+     * s'arrête pas au dernier mois actif.
+     */
+    public function testAPastYearIsReadMonthByMonthOverTwelveMonths(): void
+    {
+        $this->scheduleFree('2025-03-12', ScheduledStatus::DONE);
+        $this->em->flush();
+
+        $stats = $this->stats->over($this->user, StatsPeriod::year(2025));
+
+        self::assertSame(1, $stats['regularity']['sessions']);
+        self::assertSame('month', $stats['progression']['granularity']);
+        self::assertCount(12, $stats['progression']['points']);
+    }
+
     // ------------------------------------------------------------- fixtures
 
     /**
@@ -849,6 +899,21 @@ final class TrainingStatsTest extends KernelTestCase
         $this->em->persist($block);
 
         return $workout;
+    }
+
+    /**
+     * Une séance libre (sans programme), juste pour poser une date et un statut.
+     */
+    private function scheduleFree(string $date, ScheduledStatus $status): ScheduledWorkout
+    {
+        $scheduled = (new ScheduledWorkout())
+            ->setOwner($this->user)
+            ->setTitle('Séance libre')
+            ->setScheduledDate(new \DateTimeImmutable($date))
+            ->setStatus($status);
+        $this->em->persist($scheduled);
+
+        return $scheduled;
     }
 
     /**
