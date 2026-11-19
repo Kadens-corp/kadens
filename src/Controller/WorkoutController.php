@@ -208,8 +208,13 @@ final class WorkoutController extends AbstractController
      * post-chargement, c'est la condition de son cache offline.
      */
     #[Route('/{id}', name: 'app_workout_show', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function show(Workout $workout, PlanFlattener $planFlattener, WorkoutMetrics $metrics, ScheduledWorkoutRepository $scheduledRepository): Response
-    {
+    public function show(
+        Workout $workout,
+        PlanFlattener $planFlattener,
+        WorkoutMetrics $metrics,
+        ScheduledWorkoutRepository $scheduledRepository,
+        PlanTemplateRepository $planTemplateRepository,
+    ): Response {
         $this->denyAccessUnlessGranted(WorkoutVoter::VIEW, $workout);
 
         $user = $this->getUser();
@@ -226,6 +231,11 @@ final class WorkoutController extends AbstractController
             // Le ressenti de chaque réalisation, en une requête : la lignée se
             // lit comme « comment ça s'est passé », pas seulement « quand ».
             'instanceRatings' => null === $instances ? [] : $scheduledRepository->ratingsFor(array_map(static fn (\App\Entity\ScheduledWorkout $s): int => (int) $s->getId(), $instances)),
+            // « Supprimer » du menu (#116) : ses conséquences ne se comptent que
+            // pour qui peut supprimer, pas à chaque consultation.
+            'deletion' => $this->isGranted(WorkoutVoter::DELETE, $workout)
+                ? $this->deletionContext($workout, $planTemplateRepository, $scheduledRepository)
+                : null,
         ] + $this->volumePanel->for($workout, $user instanceof User ? $user : null));
     }
 
@@ -246,17 +256,36 @@ final class WorkoutController extends AbstractController
         /** @var User $user */
         $user = $this->getUser();
 
-        // Ce qui suit la séance et ce qui reste figé (#113). Une copie locale de
-        // plan n'est posée nulle part ailleurs que dans sa case : rien à dire.
-        $library = !$workout->isPlanLocal();
-
+        // Ce qui suit la séance et ce qui reste figé (#113), relu par la zone
+        // dangereuse pour dire ce que la suppression laisse (#116).
         return $this->render('workout/edit.html.twig', [
             'workout' => $workout,
             // Notes privées du coach sur l'athlète propriétaire (#65), null pour soi.
             'coachRelation' => $coachingRepository->findAcceptedRelation($user, $workout->getOwner()),
-            'usedInPlans' => $library ? $planTemplateRepository->findUsingLibraryWorkout($workout) : [],
-            'directPoses' => $library ? $scheduledRepository->directPoseCounts($workout) : ['total' => 0, 'done' => 0],
-        ] + $this->blocksContext($workout) + $this->libraryContext($workout));
+        ] + $this->deletionContext($workout, $planTemplateRepository, $scheduledRepository)
+            + $this->blocksContext($workout) + $this->libraryContext($workout));
+    }
+
+    /**
+     * Où la séance est posée : les plans dont une case en descend, les séances
+     * datées qui la référencent directement. Le compositeur le dit pour l'édition
+     * (#113), et la suppression le relit pour annoncer ce qui reste (#116).
+     *
+     * Une copie locale de plan n'est posée nulle part ailleurs que dans sa case :
+     * rien à compter (et elle ne se supprime pas d'ici, cf. `delete`).
+     *
+     * @return array{usedInPlans: list<\App\Entity\PlanTemplate>, directPoses: array{total: int, done: int}}
+     */
+    private function deletionContext(Workout $workout, PlanTemplateRepository $plans, ScheduledWorkoutRepository $scheduled): array
+    {
+        if ($workout->isPlanLocal()) {
+            return ['usedInPlans' => [], 'directPoses' => ['total' => 0, 'done' => 0]];
+        }
+
+        return [
+            'usedInPlans' => $plans->findUsingLibraryWorkout($workout),
+            'directPoses' => $scheduled->directPoseCounts($workout),
+        ];
     }
 
     /**
@@ -360,6 +389,18 @@ final class WorkoutController extends AbstractController
     public function delete(Request $request, Workout $workout): Response
     {
         $this->denyAccessUnlessGranted(WorkoutVoter::DELETE, $workout);
+
+        // Une copie de case se retire depuis son plan (#116). La supprimer d'ici
+        // emporterait la case (PlanItem en CASCADE) sans la règle de
+        // `PlanTemplateController::deleteItem`, qui retire avec elle ses séances
+        // datées prévues : elles resteraient au calendrier, vides.
+        $cell = $workout->isPlanLocal() ? $workout->getPlanItems()->first() : false;
+        $plan = false !== $cell ? $cell->getPlanTemplate() : null;
+        if (null !== $plan) {
+            $this->addFlash('error', 'Cette séance est une case du plan : elle se retire depuis la grille.');
+
+            return $this->redirectToRoute('app_plan_template_edit', ['id' => $plan->getId()]);
+        }
 
         if ($this->isCsrfTokenValid('delete'.$workout->getId(), $request->getPayload()->getString('_token'))) {
             $this->entityManager->remove($workout);

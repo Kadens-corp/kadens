@@ -24,7 +24,8 @@
        composant partagé, que la page publique laisse vide. #}
     {% embed 'components/_workout_read.html.twig' with {
         flat: flat, summary: summary, blockStats: blockStats,
-        volume: volume, load: load, plates: plates, endurance: endurance
+        volume: volume, load: load, plates: plates, endurance: endurance,
+        deletion: deletion
     } only %}
         {% block actions %}
             <div class="kd-wk__bar">
@@ -63,6 +64,14 @@
                                         {{ ux_icon('lucide:copy') }} Dupliquer la séance
                                     </button>
                                 </form>
+                            {% endif %}
+                            {# En dernier et en rouge, comme partout ailleurs (#116).
+                               Rien pour une copie de case : elle se retire depuis
+                               la grille de son plan. #}
+                            {% if deletion is not null and not flat.workout.planLocal %}
+                                {{ include('workout/_delete_form.html.twig', {
+                                    workout: flat.workout, menu: true
+                                }|merge(deletion)) }}
                             {% endif %}
                         </div>
                     </details>
