@@ -7,6 +7,7 @@ namespace App\Tests\Controller;
 use App\Entity\ImportedActivity;
 use App\Entity\IntervalsConnection;
 use App\Entity\User;
+use App\Entity\Workout;
 use App\Repository\IntervalsConnectionRepository;
 use App\Service\IntervalsAutoSync;
 use App\Service\IntervalsImporter;
@@ -122,6 +123,33 @@ final class CronControllerTest extends WebTestCase
         $queue = static::getContainer()->get(IntervalsConnectionRepository::class)->findForAutoSync();
 
         self::assertSame([$never->getId(), $old->getId(), $recent->getId()], array_map(static fn (IntervalsConnection $c): ?int => $c->getId(), $queue));
+    }
+
+    /** `/cron/drafts` (#115) : même garde que la synchro, puis le ménage des brouillons. */
+    public function testPurgesAbandonedDraftsBehindTheSameSecret(): void
+    {
+        $draft = (new Workout())
+            ->setOwner($this->createUser('athlete@example.com'))
+            ->setTitle(Workout::DRAFT_TITLE)
+            ->setSlug('nouvelle-seance');
+        $this->em->persist($draft);
+        $this->em->flush();
+        $this->em->getConnection()->executeStatement(
+            'UPDATE workout SET created_at = ? WHERE id = ?',
+            [(new \DateTimeImmutable('-2 days'))->format('Y-m-d H:i:s'), $draft->getId()],
+        );
+
+        $this->client->request('GET', '/cron/drafts?token=mauvais');
+        self::assertResponseStatusCodeSame(403);
+        self::assertSame(1, $this->em->getRepository(Workout::class)->count([]));
+
+        $this->client->request('GET', '/cron/drafts?token=test-cron-secret');
+        self::assertResponseIsSuccessful();
+        self::assertSame(
+            ['status' => 'ok', 'workouts' => 1, 'plans' => 0],
+            json_decode((string) $this->client->getResponse()->getContent(), true),
+        );
+        self::assertSame(0, $this->em->getRepository(Workout::class)->count([]));
     }
 
     private function createUser(string $email): User

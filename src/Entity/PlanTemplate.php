@@ -14,6 +14,13 @@ use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 #[UniqueEntity(fields: ['slug'], message: 'Ce slug est déjà utilisé.')]
 class PlanTemplate
 {
+    /**
+     * Titre d'un brouillon créé en un clic (« Nouveau plan »). Il sert aussi à
+     * reconnaître un brouillon abandonné (#115) : voir
+     * `PlanTemplateRepository::abandonedDraftCondition()`.
+     */
+    public const string DRAFT_TITLE = 'Nouveau plan';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]

@@ -63,7 +63,7 @@ final class WorkoutController extends AbstractController
     ];
 
     /** Titre d'un brouillon créé en un clic, que l'éditeur ouvre aussitôt en édition. */
-    public const DRAFT_WORKOUT_TITLE = 'Nouvelle séance';
+    public const DRAFT_WORKOUT_TITLE = Workout::DRAFT_TITLE;
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,

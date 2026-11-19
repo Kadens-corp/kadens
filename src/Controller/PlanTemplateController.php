@@ -57,7 +57,7 @@ final class PlanTemplateController extends AbstractController
     private const int PALETTE_RATINGS = 5;
 
     /** Titre d'un brouillon créé en un clic, que l'éditeur ouvre aussitôt en édition. */
-    public const DRAFT_PLAN_TITLE = 'Nouveau plan';
+    public const DRAFT_PLAN_TITLE = PlanTemplate::DRAFT_TITLE;
 
     /** Bloc de départ d'un nouveau plan : on ajoute ensuite semaine par semaine. */
     public const DRAFT_PLAN_WEEKS = 4;

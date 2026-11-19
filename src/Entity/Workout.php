@@ -14,6 +14,13 @@ use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 #[UniqueEntity(fields: ['slug'], message: 'Ce slug est déjà utilisé.')]
 class Workout
 {
+    /**
+     * Titre d'un brouillon créé en un clic (« Nouvelle séance »). Il sert aussi à
+     * reconnaître un brouillon abandonné (#115) : voir
+     * `WorkoutRepository::abandonedDraftCondition()`.
+     */
+    public const string DRAFT_TITLE = 'Nouvelle séance';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]

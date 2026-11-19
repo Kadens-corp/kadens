@@ -319,7 +319,7 @@ final class CoachController extends AbstractController
         $this->denyUnlessCoachOf($athlete);
         $this->denyUnlessCsrf($request, 'coach_workout_new'.$athlete->getId());
 
-        $title = trim($request->getPayload()->getString('title')) ?: 'Nouvelle séance';
+        $title = trim($request->getPayload()->getString('title')) ?: Workout::DRAFT_TITLE;
 
         $workout = (new Workout())
             ->setOwner($athlete)
@@ -479,7 +479,7 @@ final class CoachController extends AbstractController
         $this->denyUnlessCsrf($request, 'coach_plan_new'.$athlete->getId());
 
         $payload = $request->getPayload();
-        $title = trim($payload->getString('title')) ?: 'Nouveau plan';
+        $title = trim($payload->getString('title')) ?: PlanTemplate::DRAFT_TITLE;
         $weeks = max(1, min(52, $payload->getInt('durationWeeks', 4)));
 
         $template = (new PlanTemplate())

@@ -6,6 +6,7 @@ use App\Entity\PlanTemplate;
 use App\Entity\User;
 use App\Entity\Workout;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -49,6 +50,9 @@ class PlanTemplateRepository extends ServiceEntityRepository
      * athlètes suivis (cf. CoachedLibrary). Les sélecteurs qui posent un plan sur
      * son propre calendrier restent scopés sur l'utilisateur courant.
      *
+     * Les brouillons abandonnés n'y figurent pas (#115) : un « Nouveau plan » vide
+     * laissé par un retour arrière reste en base jusqu'à la purge.
+     *
      * @param list<User> $owners
      *
      * @return list<PlanTemplate>
@@ -59,7 +63,7 @@ class PlanTemplateRepository extends ServiceEntityRepository
             return [];
         }
 
-        return $this->createQueryBuilder('t')
+        $qb = $this->createQueryBuilder('t')
             ->addSelect('i', 'w', 'b', 'pe', 'ex')
             ->leftJoin('t.planItems', 'i')
             ->leftJoin('i.workout', 'w')
@@ -68,9 +72,56 @@ class PlanTemplateRepository extends ServiceEntityRepository
             ->leftJoin('pe.exercise', 'ex')
             ->andWhere('t.owner IN (:owners)')
             ->setParameter('owners', $owners)
-            ->addOrderBy('t.title', 'ASC')
+            ->addOrderBy('t.title', 'ASC');
+
+        return self::withoutAbandonedDrafts($qb, 't')->getQuery()->getResult();
+    }
+
+    /**
+     * Les brouillons abandonnés créés avant `$before`, tous propriétaires
+     * confondus : ce que la purge supprime (`DraftPurger`, #115).
+     *
+     * @return list<PlanTemplate>
+     */
+    public function findAbandonedDrafts(\DateTimeImmutable $before): array
+    {
+        return $this->createQueryBuilder('t')
+            ->andWhere(self::abandonedDraftCondition('t'))
+            ->andWhere('t.createdAt < :before')
+            ->setParameter('draftTitle', PlanTemplate::DRAFT_TITLE)
+            ->setParameter('before', $before)
             ->getQuery()
             ->getResult();
+    }
+
+    /**
+     * **Brouillon abandonné** (#115) : un « Nouveau plan » créé en un clic puis
+     * quitté sans rien y faire. Titre par défaut, et rien reçu : ni case, ni
+     * description, ni note, ni partage, ni objectif, ni instanciation. Le nombre
+     * de semaines n'entre pas en compte : une trame vide reste vide, qu'elle en
+     * compte quatre ou douze.
+     *
+     * C'est la seule écriture de la règle : le masquage de l'index et la purge
+     * la lisent ici. Le paramètre `draftTitle` est à lier par l'appelant.
+     */
+    private static function abandonedDraftCondition(string $alias): string
+    {
+        return strtr(<<<'DQL'
+            (a.title = :draftTitle
+             AND a.shareToken IS NULL
+             AND COALESCE(a.description, '') = ''
+             AND COALESCE(a.notes, '') = ''
+             AND a.planItems IS EMPTY
+             AND a.goals IS EMPTY
+             AND a.scheduledWorkouts IS EMPTY)
+            DQL, ['a.' => $alias.'.']);
+    }
+
+    private static function withoutAbandonedDrafts(QueryBuilder $qb, string $alias): QueryBuilder
+    {
+        return $qb
+            ->andWhere('NOT '.self::abandonedDraftCondition($alias))
+            ->setParameter('draftTitle', PlanTemplate::DRAFT_TITLE);
     }
 
     /**

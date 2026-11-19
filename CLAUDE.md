@@ -359,6 +359,14 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   Il n'y a plus de `WorkoutType` ni de `PlanTemplateType`. Le slug **suit le titre**
   à chaque renommage (aucun lien public n'en dépend depuis #61) ;
   `SlugGenerator::derivesFrom` évite seulement de le régénérer à titre inchangé.
+  **Corollaire (#115) : le brouillon abandonné.** Titre par défaut et aucune
+  trace d'intention (contenu, description, note, partage, pose, objectif) :
+  `abandonedDraftCondition()` de `WorkoutRepository` / `PlanTemplateRepository`
+  en est la seule écriture, à compléter si un nouveau champ de contenu apparaît.
+  Les listes et la palette le **masquent** tout de suite ; `DraftPurger` ne le
+  **supprime** qu'après 24 h (un onglet ou un préchargement Turbo peut encore le
+  tenir), via `/cron/drafts` (tâche quotidienne du Manager Infomaniak, même
+  secret que `/cron/intervals`) ou `app:drafts:purge`.
 - **Métadonnées : édition en ligne uniquement.** Titre, description et nombre de
   semaines n'ont plus de formulaire de repli — c'est un choix assumé : sans JS, ces
   trois champs ne sont pas modifiables (le reste des éditeurs garde son repli par

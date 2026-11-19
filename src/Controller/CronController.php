@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\DraftPurger;
 use App\Service\IntervalsAutoSync;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -33,5 +34,22 @@ final class CronController extends AbstractController
         }
 
         return $this->json(['status' => 'ok', ...$autoSync->run()]);
+    }
+
+    /**
+     * Ménage des brouillons abandonnés (#115), une fois par jour suffit : les
+     * listes les masquent déjà, la purge ne fait que vider la base.
+     */
+    #[Route('/cron/drafts', name: 'app_cron_drafts', methods: ['GET'])]
+    public function drafts(
+        DraftPurger $purger,
+        #[Autowire('%env(APP_CRON_SECRET)%')] string $secret,
+        #[MapQueryParameter] string $token = '',
+    ): JsonResponse {
+        if ('' === $secret || !hash_equals($secret, $token)) {
+            return $this->json(['error' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+        }
+
+        return $this->json(['status' => 'ok', ...$purger->purge()]);
     }
 }

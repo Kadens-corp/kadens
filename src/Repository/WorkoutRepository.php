@@ -5,6 +5,7 @@ namespace App\Repository;
 use App\Entity\User;
 use App\Entity\Workout;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -101,6 +102,10 @@ class WorkoutRepository extends ServiceEntityRepository
      * calendrier ou dans sa propre trame doivent rester sur la version à un seul
      * propriétaire, sinon on proposerait la séance d'un athlète à la pose.
      *
+     * Les brouillons abandonnés n'y figurent pas (#115) : ni l'index, ni la
+     * palette, ni le sélecteur du calendrier ne proposent une « Nouvelle séance »
+     * vide laissée par un retour arrière. Elle reste en base jusqu'à la purge.
+     *
      * @param list<User> $owners
      *
      * @return list<Workout>
@@ -111,7 +116,7 @@ class WorkoutRepository extends ServiceEntityRepository
             return [];
         }
 
-        return $this->createQueryBuilder('w')
+        $qb = $this->createQueryBuilder('w')
             ->addSelect('b', 'pe', 'ex')
             ->leftJoin('w.blocks', 'b')
             ->leftJoin('b.prescribedExercises', 'pe')
@@ -119,9 +124,57 @@ class WorkoutRepository extends ServiceEntityRepository
             ->andWhere('w.owner IN (:owners)')
             ->andWhere('w.planLocal = false')
             ->setParameter('owners', $owners)
-            ->addOrderBy('w.title', 'ASC')
+            ->addOrderBy('w.title', 'ASC');
+
+        return self::withoutAbandonedDrafts($qb, 'w')->getQuery()->getResult();
+    }
+
+    /**
+     * Les brouillons abandonnés créés avant `$before`, toutes bibliothèques
+     * confondues : ce que la purge supprime (`DraftPurger`, #115).
+     *
+     * @return list<Workout>
+     */
+    public function findAbandonedDrafts(\DateTimeImmutable $before): array
+    {
+        return $this->createQueryBuilder('w')
+            ->andWhere(self::abandonedDraftCondition('w'))
+            ->andWhere('w.createdAt < :before')
+            ->setParameter('draftTitle', Workout::DRAFT_TITLE)
+            ->setParameter('before', $before)
             ->getQuery()
             ->getResult();
+    }
+
+    /**
+     * **Brouillon abandonné** (#115) : une « Nouvelle séance » créée en un clic
+     * puis quittée sans rien y faire, typiquement par un retour arrière. Il a
+     * gardé le titre par défaut et n'a rien reçu : ni bloc, ni description, ni
+     * note, ni partage, ni pose au calendrier ou dans un plan. Une seule de ces
+     * traces suffit à le garder, parce qu'elle dit une intention.
+     *
+     * C'est la seule écriture de la règle : le masquage des listes et la purge
+     * la lisent ici. Le paramètre `draftTitle` est à lier par l'appelant.
+     */
+    private static function abandonedDraftCondition(string $alias): string
+    {
+        return strtr(<<<'DQL'
+            (a.title = :draftTitle
+             AND a.planLocal = false
+             AND a.shareToken IS NULL
+             AND COALESCE(a.description, '') = ''
+             AND COALESCE(a.notes, '') = ''
+             AND a.blocks IS EMPTY
+             AND a.planItems IS EMPTY
+             AND a.scheduledWorkouts IS EMPTY)
+            DQL, ['a.' => $alias.'.']);
+    }
+
+    private static function withoutAbandonedDrafts(QueryBuilder $qb, string $alias): QueryBuilder
+    {
+        return $qb
+            ->andWhere('NOT '.self::abandonedDraftCondition($alias))
+            ->setParameter('draftTitle', Workout::DRAFT_TITLE);
     }
 
     //    /**
