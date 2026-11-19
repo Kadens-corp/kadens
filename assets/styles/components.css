@@ -14278,6 +14278,64 @@ a.kd-coachitem__date:hover {
     text-align: right;
 }
 
+/* Les sept derniers jours (#131). Une section et non un lien comme les cartes
+   du mois : elle porte deux lectures (activités, muscles), et son seul lien,
+   vers l'historique, est écrit en pied. Deux colonnes dès qu'il y a la place,
+   empilées en dessous (flex-wrap, aucune media query à tenir). */
+.kd-home__week {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-6);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    padding: var(--kd-space-8) var(--kd-space-9);
+}
+
+.kd-home__weekbody {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--kd-space-8) var(--kd-space-10);
+}
+
+.kd-home__weekacts {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+.kd-home__weekmuscles {
+    flex: 2 1 420px;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--kd-space-8);
+}
+
+.kd-home__weeklegend {
+    flex: 1 1 200px;
+    min-width: 0;
+}
+
+.kd-home__weeknone {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__weeklink {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    font-size: 13px;
+}
+
+.kd-home__weeklink svg {
+    width: 14px;
+    height: 14px;
+}
+
 /* Raccourcis : un index à filets (fond = couleur du filet, `gap: 1px`), pas
    des cartes. Trois colonnes, deux sur téléphone. */
 .kd-home__index {

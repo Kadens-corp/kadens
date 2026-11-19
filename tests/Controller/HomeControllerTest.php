@@ -4,14 +4,23 @@ namespace App\Tests\Controller;
 
 use App\Entity\Coaching;
 use App\Entity\Exercise;
+use App\Entity\Block;
 use App\Entity\Goal;
+use App\Entity\LoggedExercise;
+use App\Entity\LoggedSet;
 use App\Entity\PlanItem;
 use App\Entity\PlanTemplate;
+use App\Entity\PrescribedExercise;
 use App\Entity\ScheduledWorkout;
 use App\Entity\User;
 use App\Entity\Workout;
+use App\Enum\ActivityType;
+use App\Enum\BlockRole;
 use App\Enum\CoachingStatus;
+use App\Enum\PrescriptionType;
 use App\Enum\ScheduledStatus;
+use App\Enum\SetType;
+use App\Enum\TargetArea;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -255,6 +264,141 @@ final class HomeControllerTest extends WebTestCase
         $this->client->loginUser($athlete);
         $crawler = $this->client->request('GET', '/');
         self::assertCount(0, $crawler->filter('.kd-home__athletes'));
+    }
+
+    /**
+     * Les sept derniers jours (#131) : J-6 → J, une séance = une nature, et les
+     * muscles lus sur le réalisé. La séance d'il y a sept jours sort de la
+     * fenêtre, l'échauffement et la série sans valeur sortent du dessin.
+     */
+    public function testTheLastSevenDaysCountSessionsAndPaintTheMusclesWorked(): void
+    {
+        $user = $this->createUser('week@example.com');
+        $today = new \DateTimeImmutable('today');
+
+        $bench = (new Exercise())->setOwner($user)->setName('Développé couché')
+            ->setActivity(ActivityType::GYM)->setTargetAreas([TargetArea::CHEST, TargetArea::TRICEPS]);
+        $squat = (new Exercise())->setOwner($user)->setName('Squat')
+            ->setActivity(ActivityType::GYM)->setTargetAreas([TargetArea::QUADRICEPS]);
+        $run = (new Exercise())->setOwner($user)->setName('Footing')->setActivity(ActivityType::RUNNING);
+        foreach ([$bench, $squat, $run] as $exercise) {
+            $this->em->persist($exercise);
+        }
+
+        // Deux séances de salle dans la fenêtre (aujourd'hui, J-6), une sortie à
+        // J-3, et une séance de salle à J-7, hors fenêtre.
+        $this->doneSession($user, $bench, $today, [[SetType::WARMUP, 10], [SetType::NORMAL, 8], [SetType::NORMAL, 8], [SetType::NORMAL, 0]]);
+        $this->doneSession($user, $squat, $today->modify('-6 days'), [[SetType::NORMAL, 5], [SetType::NORMAL, 5], [SetType::NORMAL, 5]]);
+        $this->doneSession($user, $run, $today->modify('-3 days'), []);
+        $this->doneSession($user, $squat, $today->modify('-7 days'), [[SetType::NORMAL, 5]]);
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/');
+
+        self::assertResponseIsSuccessful();
+        $week = $crawler->filter('.kd-home__week');
+        self::assertCount(1, $week);
+        self::assertStringContainsString('7 derniers jours · 3 séances faites', $week->filter('.kd-eyebrow')->text());
+
+        $acts = $week->filter('.kd-home__act');
+        self::assertCount(2, $acts, 'Une ligne par activité.');
+        self::assertStringContainsString('Salle de sport', $acts->eq(0)->text());
+        self::assertSame('2', $acts->eq(0)->filter('.kd-home__actcount')->text());
+        self::assertStringContainsString('Course à pied', $acts->eq(1)->text());
+        self::assertSame('1', $acts->eq(1)->filter('.kd-home__actcount')->text());
+
+        self::assertCount(2, $week->filter('.kd-bodymap__plate'), 'Face et dos.');
+        $areas = $week->filter('.kd-wkvol__area');
+        self::assertCount(3, $areas);
+        // 3 séries de squat (la séance de J-7 n'y est pas) ; 2 de développé,
+        // attribuées aux pectoraux ET aux triceps, sans l'échauffement ni la
+        // série à zéro répétition.
+        self::assertStringContainsString('Quadriceps', $areas->eq(0)->text());
+        self::assertStringContainsString('3 séries', $areas->eq(0)->text());
+        self::assertStringContainsString('Pectoraux', $areas->eq(1)->text());
+        self::assertStringContainsString('2 séries', $areas->eq(1)->text());
+        self::assertStringContainsString('Triceps', $areas->eq(2)->text());
+        self::assertGreaterThan(0, $week->filter('.kd-bodymap path[fill="var(--color-bodymap-3)"]')->count());
+        self::assertCount(1, $week->filter('a[href="/profile/history"]'));
+    }
+
+    /**
+     * Une séance cochée faite sans réalisé compte en séances et ne colore rien :
+     * le corps ne se remplit pas avec le prescrit (CLAUDE.md §3), et la carte
+     * dit pourquoi il reste nu.
+     */
+    public function testADoneSessionWithoutLogCountsButPaintsNothing(): void
+    {
+        $user = $this->createUser('unlogged@example.com');
+        $bench = (new Exercise())->setOwner($user)->setName('Développé couché')
+            ->setActivity(ActivityType::GYM)->setTargetAreas([TargetArea::CHEST]);
+        $this->em->persist($bench);
+        $this->doneSession($user, $bench, new \DateTimeImmutable('today'), []);
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/');
+
+        $week = $crawler->filter('.kd-home__week');
+        self::assertStringContainsString('1 séance faite', $week->filter('.kd-eyebrow')->text());
+        self::assertCount(0, $week->filter('.kd-bodymap'));
+        self::assertStringContainsString('Aucune série consignée', $week->text());
+    }
+
+    public function testAnIdleWeekSaysSo(): void
+    {
+        $user = $this->createUser('idle@example.com');
+        $this->em->persist((new ScheduledWorkout())->setOwner($user)->setTitle('Demain')
+            ->setScheduledDate(new \DateTimeImmutable('+1 day')));
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/');
+
+        self::assertStringContainsString('Aucune séance faite ces 7 derniers jours', $crawler->filter('.kd-home__week')->text());
+    }
+
+    public function testAStartingAccountHasNoWeekCard(): void
+    {
+        $this->client->loginUser($this->createUser('new@example.com'));
+        $crawler = $this->client->request('GET', '/');
+
+        self::assertCount(1, $crawler->filter('.kd-home__start'));
+        self::assertCount(0, $crawler->filter('.kd-home__week'), 'Rien de fait : les trois étapes suffisent.');
+    }
+
+    /**
+     * Une séance faite d'un exercice, et son réalisé.
+     *
+     * @param list<array{0: SetType, 1: int}> $sets type et répétitions de chaque série consignée
+     */
+    private function doneSession(User $user, Exercise $exercise, \DateTimeImmutable $date, array $sets): void
+    {
+        $workout = (new Workout())->setOwner($user)->setTitle($exercise->getName() ?? 'Séance')
+            ->setSlug('seance-'.bin2hex(random_bytes(4)));
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $block->addPrescribedExercise(
+            (new PrescribedExercise())->setExercise($exercise)->setPosition(0)
+                ->setPrescriptionType(PrescriptionType::SETS_REPS)->setSets(3)->setReps(8),
+        );
+        $workout->addBlock($block);
+        $this->em->persist($workout);
+        $this->em->persist($block);
+
+        $scheduled = (new ScheduledWorkout())->setOwner($user)->setWorkout($workout)
+            ->setScheduledDate($date)->setStatus(ScheduledStatus::DONE);
+
+        if ([] !== $sets) {
+            $logged = (new LoggedExercise())->setExerciseName((string) $exercise->getName())
+                ->setExercise($exercise)->setPosition(0);
+            foreach ($sets as $position => [$type, $reps]) {
+                $logged->addLoggedSet((new LoggedSet())->setPosition($position)->setSetType($type)->setReps($reps)->setWeightKg(60.0));
+            }
+            $scheduled->addLoggedExercise($logged);
+        }
+
+        $this->em->persist($scheduled);
     }
 
     private function createUser(string $email): User

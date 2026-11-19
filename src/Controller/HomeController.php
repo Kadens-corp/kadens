@@ -10,6 +10,7 @@ use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
 use App\Repository\WorkoutRepository;
 use App\Service\CoachContributions;
+use App\Service\LastSevenDays;
 use App\Service\StatsPeriod;
 use App\Service\TrainingStats;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -30,7 +31,9 @@ use Symfony\Component\Routing\Attribute\Route;
  *
  * Le mois se lit sur `TrainingStats`, le moteur unique : les chiffres de
  * l'accueil sont ceux de `/profile/stats?range=<mois>`, sur lequel la carte
- * renvoie.
+ * renvoie. Les sept derniers jours (#131) se lisent sur `LastSevenDays`, qui
+ * prend les mêmes sources sur une fenêtre glissante : séances par nature, et
+ * muscles travaillés sur le réalisé.
  */
 final class HomeController extends AbstractController
 {
@@ -49,6 +52,7 @@ final class HomeController extends AbstractController
         WorkoutRepository $workoutRepository,
         PlanTemplateRepository $planRepository,
         CoachContributions $coachContributions,
+        LastSevenDays $lastSevenDays,
     ): Response {
         $user = $this->getUser();
         if (!$user instanceof User) {
@@ -63,9 +67,14 @@ final class HomeController extends AbstractController
         // cet espace qu'il les invite.
         $athleteCount = $user->isCoach() ? \count($coachingRepository->findAcceptedAthletes($user)) : null;
 
+        $onboarding = $this->onboarding($user, $athleteCount, $scheduledRepository, $workoutRepository, $planRepository);
+
         return $this->render('home/index.html.twig', [
             'today' => $today,
             'month' => $month,
+            // Un compte qui démarre n'a rien fait : la carte serait vide sous les
+            // trois étapes qui disent déjà par où commencer.
+            'week' => null === $onboarding ? $lastSevenDays->for($user, $user, $today) : null,
             'goals' => $goalRepository->findUpcomingForOwner($user, self::UPCOMING_GOALS),
             // Découvrabilité : une demande reçue doit se voir dès l'arrivée, pas
             // seulement dans /coaching. Les relations actives, elles, n'appellent
@@ -78,7 +87,7 @@ final class HomeController extends AbstractController
             // cet encart, la seule trace était un « 7 prévues » au lieu de 6.
             'coachAdded' => $coachContributions->recentFor($user),
             'nextSessions' => $scheduledRepository->findNextPlannedDay($user, $today),
-            'onboarding' => $this->onboarding($user, $athleteCount, $scheduledRepository, $workoutRepository, $planRepository),
+            'onboarding' => $onboarding,
             'athleteCount' => $athleteCount,
         ]);
     }
