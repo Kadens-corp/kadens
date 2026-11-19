@@ -381,8 +381,9 @@ un jeu complet, **1 514 octets** pour un delta d'une heure.
 - **`Workout.notes` et `PlanTemplate.notes`** — le bloc-notes privé du
   propriétaire. Même garde que l'export Excel, le flux ICS et la page publique.
   Un test parcourt tous les endpoints et échoue si la chaîne apparaît quelque
-  part. La note d'un **exercice prescrit** (`blocks[].exercises[].notes`), elle,
-  sort : elle s'adresse à qui exécute.
+  part. La note d'un **exercice prescrit** (`blocks[].exercises[].notes`) et la
+  consigne de la case du plan (`planInstruction`), elles, sortent : elles
+  s'adressent à qui exécute.
 - **Le calendrier d'autrui.** La bibliothèque d'exercices est symétrique (soi,
   ses coachs, ses athlètes — une séance composée par le coach pose ses variantes
   maison, elles doivent être lisibles), mais `schedule` ne contient **que** les
@@ -738,6 +739,7 @@ $ curl -sk https://127.0.0.1:8000/api/schedule/019fc483-3f9d-76af-8d5f-f789cddf7
   "feeling": null,
   "sessionRpe": null,
   "plan": null,
+  "planInstruction": null,
   "blocks": [
     {
       "id": 136,
@@ -776,6 +778,7 @@ $ curl -sk https://127.0.0.1:8000/api/schedule/019fc483-3f9d-76af-8d5f-f789cddf7
 | `title` | Titre vivant de la séance source, ou snapshot si la source a été supprimée, ou « Séance libre ». Toujours rempli. |
 | `freeform` | `true` = séance sans programme (créée par le téléphone, ou source supprimée). `blocks` est alors `[]` — pas une erreur. |
 | `plan` | `{id, title}` si la séance vient d'un plan, sinon `null`. |
+| `planInstruction` | La **consigne de case** du plan (« descente lente en 3 s sur squat et fentes »), posée dans l'éditeur de plan sur la case S3 · mardi et adressée à l'athlète. Même source que le web (`PlanFlattener::planInstruction()`), texte brut sans espaces de bord. `null`, jamais `""`, quand la séance ne vient pas d'un plan, que la case a été retirée depuis ou que la note est vide. Ce n'est pas le bloc-notes privé du plan (§5), qui ne sort jamais. Champ **additif** (#128) : `minimumVersionCode` n'a pas bougé. Pas de cache à invalider : la fenêtre de séances datées part en entier à chaque bootstrap, une consigne retouchée sur le web arrive au pull suivant. |
 | `blocks[].rounds` | Tours du bloc entier (circuit). Le bloc est une **section** de la séance. |
 | `groupLabel` | `"A1"`, `"A2"`… pour les exercices **liés en superset** dans un bloc. Un libellé dérivé de l'ordre, jamais stocké : ne pas l'analyser pour en déduire une structure, se fier à l'égalité de préfixe. |
 | `summary` | La **seule** valeur pré-formatée de l'API (« 4 × 8 @ 80 kg · RPE 8 »). Le cardio ne se saisit pas sur le mobile et ne s'y affiche qu'en lecture : réécrire la mise en forme en TypeScript pour une chaîne qu'on ne fait que peindre serait une duplication sans contrepartie. Les séries, elles, partent en valeurs brutes. |

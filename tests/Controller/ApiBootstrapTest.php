@@ -8,6 +8,8 @@ use App\Entity\Coaching;
 use App\Entity\Exercise;
 use App\Entity\LoggedExercise;
 use App\Entity\LoggedSet;
+use App\Entity\PlanItem;
+use App\Entity\PlanTemplate;
 use App\Entity\PrescribedExercise;
 use App\Entity\ScheduledWorkout;
 use App\Entity\User;
@@ -224,6 +226,31 @@ final class ApiBootstrapTest extends WebTestCase
         self::assertNull($this->bootstrap($this->issueToken($user))['schedule'][0]['log']);
     }
 
+    /**
+     * La consigne de case (#128) descend avec la séance datée, lue par la même
+     * porte que le web (`PlanFlattener::planInstruction()`) : bords retirés, et
+     * `null` — jamais `""` — dès qu'il n'y a rien à lire. Hors plan, case retirée
+     * (SET NULL, donc même chose qu'une séance sans case) ou note blanche.
+     */
+    public function testThePlanInstructionTravelsWithTheSession(): void
+    {
+        $user = $this->createUser('athlete@example.com');
+        $plan = $this->createPlan($user);
+
+        [$withNote] = $this->createSession($user, new \DateTimeImmutable('+1 day'));
+        $this->placeInPlan($withNote, $plan, "  Descente lente en 3 s sur squat et fentes.\n");
+        [$blankNote] = $this->createSession($user, new \DateTimeImmutable('+2 days'));
+        $this->placeInPlan($blankNote, $plan, "  \n");
+        $this->createSession($user, new \DateTimeImmutable('+3 days'));
+        $this->em->flush();
+
+        $schedule = $this->bootstrap($this->issueToken($user))['schedule'];
+
+        self::assertSame('Descente lente en 3 s sur squat et fentes.', $schedule[0]['planInstruction']);
+        self::assertNull($schedule[1]['planInstruction'], 'Une note blanche ne sort pas en chaîne vide.');
+        self::assertNull($schedule[2]['planInstruction'], 'Une séance hors plan n\'a pas de consigne.');
+    }
+
     // --- Ce qui n'a pas sa place sur le téléphone -----------------------------
 
     /**
@@ -428,6 +455,10 @@ final class ApiBootstrapTest extends WebTestCase
 
         $scheduled->getWorkout()?->setNotes('Brouillon privé : penser à alléger la semaine 3.');
         $prescribed->setNotes('Coudes serrés.');
+        // Le plan a les deux : son bloc-notes privé, et la consigne d'une case,
+        // adressée à l'athlète (#128). Seule la seconde sort.
+        $plan = $this->createPlan($user)->setNotes('Bloc-notes du plan : il décroche en S4.');
+        $this->placeInPlan($scheduled, $plan, 'Descente lente en 3 s.');
         $this->em->flush();
 
         $this->client->request('GET', '/api/bootstrap', server: [
@@ -437,7 +468,9 @@ final class ApiBootstrapTest extends WebTestCase
         $raw = (string) $this->client->getResponse()->getContent();
 
         self::assertStringNotContainsString('Brouillon privé', $raw);
+        self::assertStringNotContainsString('Bloc-notes du plan', $raw);
         self::assertStringContainsString('Coudes serrés', $raw);
+        self::assertStringContainsString('Descente lente en 3 s.', $raw);
     }
 
     /**
@@ -539,14 +572,20 @@ final class ApiBootstrapTest extends WebTestCase
         }
         $this->em->flush();
 
+        // Toutes issues d'un plan, chacune avec sa consigne de case (#128) : la
+        // case est lue pour chaque séance, une jointure oubliée coûterait une
+        // requête par ligne de la fenêtre.
+        $plan = $this->createPlan($user);
+
         for ($day = -30; $day <= 14; $day += 3) {
-            $this->createSession(
+            [$scheduled] = $this->createSession(
                 $user,
                 new \DateTimeImmutable(sprintf('%+d days', $day)),
                 logged: $day < 0 ? [[SetType::NORMAL, 8, 80.0], [SetType::NORMAL, 8, 80.0], [SetType::NORMAL, 6, 82.5]] : [],
                 exercises: \array_slice($exercises, abs($day) % 100, 5),
                 flush: false,
             );
+            $this->placeInPlan($scheduled, $plan, sprintf('Consigne du jour %+d.', $day));
         }
         $this->em->flush();
 
@@ -656,6 +695,35 @@ final class ApiBootstrapTest extends WebTestCase
             ],
         );
         $this->em->clear();
+    }
+
+    private function createPlan(User $owner): PlanTemplate
+    {
+        $plan = (new PlanTemplate())
+            ->setOwner($owner)
+            ->setTitle('Force')
+            ->setDurationWeeks(8)
+            ->setSlug('force-'.bin2hex(random_bytes(4)));
+        $this->em->persist($plan);
+
+        return $plan;
+    }
+
+    /**
+     * Rattache une séance datée à une case de plan portant `$notes`, comme le
+     * fait `PlanScheduler` à l'instanciation. Ne flushe pas.
+     */
+    private function placeInPlan(ScheduledWorkout $scheduled, PlanTemplate $plan, ?string $notes): void
+    {
+        $item = (new PlanItem())
+            ->setWorkout($scheduled->getWorkout())
+            ->setWeekNumber(1)
+            ->setDayOfWeek(2)
+            ->setNotes($notes);
+        $plan->addPlanItem($item);
+        $this->em->persist($item);
+
+        $scheduled->setSourcePlanTemplate($plan)->setSourcePlanItem($item);
     }
 
     /**

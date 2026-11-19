@@ -166,11 +166,21 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
         ;
     }
 
-    /** La branche du PRESCRIT : une chaîne, donc aussi profonde qu'on veut. */
+    /**
+     * La branche du PRESCRIT : une chaîne, donc aussi profonde qu'on veut.
+     *
+     * La case et le plan d'origine (`pi`, `pt`) en font partie : la case porte la
+     * consigne que l'API sort (#128), le plan le `{id, title}` du payload. Deux
+     * ManyToOne, donc des colonnes en plus, jamais des lignes ; sans eux, le
+     * bootstrap paierait une requête par séance issue d'un plan pour la case, et
+     * une par plan distinct de la fenêtre pour le titre.
+     */
     private function withPrescribed(QueryBuilder $qb): QueryBuilder
     {
         return $qb
-            ->addSelect('w', 'b', 'pe', 'ps', 'e')
+            ->addSelect('w', 'b', 'pe', 'ps', 'e', 'pi', 'pt')
+            ->leftJoin('s.sourcePlanItem', 'pi')
+            ->leftJoin('s.sourcePlanTemplate', 'pt')
             ->leftJoin('s.workout', 'w')
             ->leftJoin('w.blocks', 'b')
             ->leftJoin('b.prescribedExercises', 'pe')
