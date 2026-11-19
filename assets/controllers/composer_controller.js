@@ -4,6 +4,40 @@ import Sortable from 'sortablejs';
 import { normalize, scoreElement, tokens } from 'search';
 import { ensureSaved, trackSave } from 'save-status';
 
+/** Champ que l'utilisateur tape ou choisit (ni caché, ni case, ni bouton). */
+function isTypedField(el) {
+    if (el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) return true;
+
+    return !['hidden', 'checkbox', 'radio', 'file', 'submit', 'button', 'reset', 'image'].includes(el.type);
+}
+
+/** La valeur affichée diffère de celle que le serveur a rendue. */
+function isDirty(el) {
+    if (el instanceof HTMLSelectElement) {
+        return [...el.options].some((option) => option.selected !== option.defaultSelected);
+    }
+
+    return el.value !== el.defaultValue;
+}
+
+/*
+ * Une valeur reportée par script ne déclenche pas de `change` natif au départ du
+ * champ si l'utilisateur n'y retouche pas : la saisie reportée ne partirait
+ * jamais. On émet donc ce `change` nous-mêmes en quittant le champ, sauf si le
+ * navigateur l'a fait (il précède `blur`) ou si la valeur est celle du serveur.
+ */
+function saveOnLeave(el) {
+    const onChange = () => el.removeEventListener('blur', onBlur);
+    const onBlur = () => {
+        el.removeEventListener('change', onChange);
+        if (el.isConnected && isDirty(el)) {
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    };
+    el.addEventListener('change', onChange, { once: true });
+    el.addEventListener('blur', onBlur, { once: true });
+}
+
 /*
  * Compositeur de séance (éditeur). La persistance reste 100 % côté serveur :
  * chaque mutation poste un formulaire qui renvoie un Turbo Stream mettant à jour
@@ -75,6 +109,9 @@ export default class extends Controller {
         this.knownBlockIds = null;
         this.sortables = new WeakMap();
         this.volumePending = false;
+        // Formulaires dont un enregistrement est parti sans réponse encore, par URL
+        // d'action (l'élément <form> ne survit pas à un re-rendu, son action si).
+        this.inFlight = new Map();
     }
 
     connect() {
@@ -95,7 +132,9 @@ export default class extends Controller {
             if (event.target.closest('.kd-composer__lib')) return;
             this.closeLib();
         };
+        this.onBeforeStreamRender = this.keepPendingInput.bind(this);
         this.element.addEventListener('submit', this.onSubmit);
+        document.addEventListener('turbo:before-stream-render', this.onBeforeStreamRender);
         document.addEventListener('keydown', this.onKey);
         document.addEventListener('click', this.onOutside);
         this.knownBlockIds = new Set(this.blockTargets.map((el) => el.dataset.blockId));
@@ -106,6 +145,7 @@ export default class extends Controller {
 
     disconnect() {
         this.element.removeEventListener('submit', this.onSubmit);
+        document.removeEventListener('turbo:before-stream-render', this.onBeforeStreamRender);
         document.removeEventListener('keydown', this.onKey);
         document.removeEventListener('click', this.onOutside);
         // Une navigation Turbo pendant que la feuille est ouverte laisserait la page
@@ -159,13 +199,22 @@ export default class extends Controller {
         const key = isParamSave ? form : Symbol('composer-mutation');
 
         trackSave(form, async () => {
-            const response = await ensureSaved(await fetch(action, {
-                method,
-                body,
-                headers: { Accept: 'text/vnd.turbo-stream.html' },
-                credentials: 'same-origin',
-            }));
-            renderStreamMessage(await response.text());
+            let html;
+            this.markInFlight(action, 1);
+            try {
+                const response = await ensureSaved(await fetch(action, {
+                    method,
+                    body,
+                    headers: { Accept: 'text/vnd.turbo-stream.html' },
+                    credentials: 'same-origin',
+                }));
+                html = await response.text();
+            } finally {
+                // Retiré AVANT le rendu : la réponse qu'on applique ne compte plus
+                // comme « en vol », seules les suivantes protègent leurs champs.
+                this.markInFlight(action, -1);
+            }
+            renderStreamMessage(html);
             // Le flux réécrit des lignes dont le serveur ignore l'état déplié. rAF :
             // `renderStreamMessage` rend de façon asynchrone, le DOM n'est pas encore
             // à jour au retour de l'appel (même raison que dans restoreFocus).
@@ -204,6 +253,86 @@ export default class extends Controller {
                     // Certains types d'input n'acceptent pas setSelectionRange : sans importance.
                 }
             }
+        });
+    }
+
+    // ---- Saisie en cours face au re-rendu (#121) ---------------------------
+
+    /*
+     * Un stream qui re-rend un panneau remplace ses champs par la valeur EN BASE au
+     * moment où le serveur a répondu. Si l'utilisateur a tapé entre-temps, sa saisie
+     * part avec l'ancien élément. Cas d'origine : passer une série en échauffement
+     * change le décompte de travail, le serveur re-rend tout le panneau, et le « 10 »
+     * tapé aussitôt dans les reps revient à 8, focus perdu.
+     *
+     * Règle : un champ dont la valeur diffère de celle que le serveur a rendue
+     * (`defaultValue`) est une saisie que la réponse ignore, si l'une de ces deux
+     * conditions tient :
+     *  - il a le focus : la saisie n'est pas finie, aucun `change` n'est parti ;
+     *  - son formulaire a un enregistrement en vol : la valeur est partie, mais la
+     *    réponse qu'on applique est plus ancienne qu'elle.
+     * On la reporte sur le nouvel élément (retrouvé par son nom, unique grâce aux
+     * formulaires nommés), avec le focus et le curseur. Hors de ces deux cas, le
+     * serveur fait foi : une valeur refusée ou normalisée réapparaît telle qu'en base.
+     *
+     * Enveloppe `detail.render` plutôt que d'agir avant `renderStreamMessage` :
+     * Turbo rend après une frame, l'état se lit donc au moment exact du remplacement.
+     */
+    keepPendingInput(event) {
+        const { render } = event.detail;
+        event.detail.render = async (stream) => {
+            const pending = this.pendingInput();
+            await render(stream);
+            this.restorePendingInput(pending);
+        };
+    }
+
+    markInFlight(action, delta) {
+        const count = (this.inFlight.get(action) ?? 0) + delta;
+        if (count > 0) {
+            this.inFlight.set(action, count);
+        } else {
+            this.inFlight.delete(action);
+        }
+    }
+
+    pendingInput() {
+        const active = document.activeElement;
+
+        return [...this.element.querySelectorAll('input[name], select[name], textarea[name]')]
+            .filter((el) => isTypedField(el) && isDirty(el)
+                && (el === active || (el.form !== null && this.inFlight.has(el.form.action))))
+            .map((el) => ({
+                el,
+                value: el.value,
+                focused: el === active,
+                caret: el === active && typeof el.selectionStart === 'number' ? el.selectionStart : null,
+            }));
+    }
+
+    restorePendingInput(pending) {
+        pending.forEach(({ el, value, focused, caret }) => {
+            // Le stream n'a pas touché ce champ : rien à reporter.
+            if (el.isConnected) return;
+
+            const next = this.element.querySelector(`[name="${CSS.escape(el.name)}"]`);
+            if (!next || next.tagName !== el.tagName) return;
+            if (next instanceof HTMLSelectElement && ![...next.options].some((o) => o.value === value)) return;
+
+            next.value = value;
+            if (!focused) return;
+
+            const row = next.closest('.kd-cexo__params')?.closest('.kd-cexo');
+            if (row) this.setParamsOpen(row, true);
+            next.focus();
+            if (caret !== null && typeof next.setSelectionRange === 'function') {
+                try {
+                    next.setSelectionRange(caret, caret);
+                } catch (error) {
+                    // Certains types d'input n'acceptent pas setSelectionRange : sans importance.
+                }
+            }
+            saveOnLeave(next);
         });
     }
 

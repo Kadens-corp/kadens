@@ -745,8 +745,10 @@ final class WorkoutController extends AbstractController
      * de résumé (pastille) : le champ en cours de saisie n'est pas re-rendu, le
      * focus reste. Exception : si le décompte de travail a bougé (une ligne est
      * passée en échauffement, ou en est sortie), le compteur `sets` affiché dans le
-     * panneau devient faux — on re-rend alors tout le panneau. Ça ne concerne que
-     * le `<select>` de type, jamais la saisie de reps/charge.
+     * panneau devient faux — on re-rend alors tout le panneau. Seul le `<select>`
+     * de type déclenche ce cas, mais le re-rendu emporte aussi les reps/charge
+     * qu'on tape juste après : c'est le compositeur (`keepPendingInput`) qui
+     * reporte cette saisie sur les nouveaux champs (#121).
      * Repli sans JS : redirection.
      */
     #[Route('/{id}/sets/{setId}', name: 'app_workout_set_edit', methods: ['POST'], requirements: ['id' => '\d+', 'setId' => '\d+'])]
