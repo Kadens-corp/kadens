@@ -20,6 +20,7 @@
     <div class="kd-exrow__head">
         {% if ex.groupLabel %}<span class="kd-exrow__rank">{{ ex.groupLabel }}</span>{% endif %}
         <span class="kd-exrow__name">{{ exercise_name(ex.exercise) }}</span>
+        {{ include('components/_exercise_eye.html.twig', {exercise: ex.exercise}, with_context = false) }}
 
         {# Dès qu'il y a un tableau de séries dessous, l'en-tête n'en donne que le
            compte : répéter « 3 × 15 @ 130 kg » juste au-dessus des trois lignes

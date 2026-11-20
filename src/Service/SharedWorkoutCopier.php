@@ -63,6 +63,7 @@ final class SharedWorkoutCopier implements ResetInterface
         private readonly WorkoutRepository $workoutRepository,
         private readonly EntityManagerInterface $entityManager,
         private readonly Security $security,
+        private readonly ExerciseImageStorage $images,
     ) {
     }
 
@@ -164,7 +165,11 @@ final class SharedWorkoutCopier implements ResetInterface
             ->setDescription($foreign->getDescription())
             ->setActivity($activity)
             ->setTargetAreas($foreign->getTargetAreas())
-            ->setMediaUrl($foreign->getMediaUrl());
+            ->setMediaUrl($foreign->getMediaUrl())
+            // Les images suivent, mais en fichiers neufs (#38) : partagé, un
+            // fichier partirait du disque avec le premier des deux exercices
+            // supprimé.
+            ->setImages(array_values(array_filter(array_map($this->images->duplicate(...), $foreign->getImages()))));
 
         $this->entityManager->persist($own);
 

@@ -11390,6 +11390,387 @@ textarea.kd-inlineedit__input {
     min-width: 0;
 }
 
+/* ---- Images d'un exercice (#38, components/_exercise_frames) ----
+   Des carrés déjà signés du logo, empilés dans une scène carrée. Fondu
+   enchaîné : l'image qui arrive (is-active, au-dessus) passe de transparent à
+   opaque pendant que la précédente (is-prev, dessous) reste opaque. Les deux se
+   superposent, on ne voit jamais le fond. is-entering fige l'opacité 0 sans
+   transition juste avant le fondu (cf. exercise_frames_controller.js). */
+.kd-exframes {
+    flex: 0 1 280px;
+    min-width: 0;
+    margin: 0;
+}
+
+.kd-exframes__stage {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+}
+
+.kd-exframes__frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    z-index: 0;
+}
+
+.kd-exframes__frame.is-prev {
+    opacity: 1;
+    z-index: 1;
+}
+
+.kd-exframes__frame.is-active {
+    opacity: 1;
+    z-index: 2;
+    transition: opacity .6s ease-in-out;
+}
+
+.kd-exframes__frame.is-entering {
+    opacity: 0;
+    z-index: 2;
+    transition: none;
+}
+
+.kd-exframes__controls {
+    display: none;
+    align-items: center;
+    gap: var(--kd-space-4);
+    margin-top: var(--kd-space-3);
+}
+
+.kd-exframes.is-live .kd-exframes__controls {
+    display: flex;
+}
+
+.kd-exframes__dots {
+    display: flex;
+    gap: var(--kd-space-2);
+}
+
+/* Cible tactile de 32 px, pastille visible de 10 px. */
+.kd-exframes__dot {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+.kd-exframes__dot::before {
+    content: "";
+    display: block;
+    width: 10px;
+    height: 10px;
+    margin: auto;
+    border: 1px solid var(--color-text-secondary);
+}
+
+.kd-exframes__dot[aria-current="true"]::before {
+    background: var(--color-text-strong);
+    border-color: var(--color-text-strong);
+}
+
+/* L'aperçu animé d'une bande (planche, éditeur) : de la taille d'une vignette,
+   un peu plus grand, sans commande. */
+.kd-exframes--mini {
+    flex: none;
+    width: 88px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .kd-exframes__frame.is-active {
+        transition: none;
+    }
+}
+
+@media (max-width: 559px) {
+    .kd-exframes--sheet {
+        flex-basis: 100%;
+    }
+}
+
+/* ---- L'œil d'un exercice illustré (components/_exercise_eye) ----
+   Discret à côté du nom : de l'encre secondaire, le rouge au survol seulement
+   (une action, pas une alerte). Cible de 32 px au doigt, dessin de 16. */
+.kd-exeye {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    margin: -6px 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: color .12s ease;
+}
+
+.kd-exeye svg {
+    width: 16px;
+    height: 16px;
+}
+
+.kd-exeye:hover,
+.kd-exeye:focus-visible {
+    color: var(--color-primary);
+}
+
+.kd-cexo__row > .kd-exeye {
+    align-self: center;
+    margin: 0;
+}
+
+/* ---- Visionneuse (components/_exercise_viewer) ---- */
+.kd-modal--exviewer {
+    width: min(520px, calc(100vw - 2 * var(--kd-space-8)));
+}
+
+.kd-exviewer__body {
+    margin: var(--kd-space-5) 0 var(--kd-space-3);
+}
+
+.kd-exframes--viewer {
+    width: 100%;
+}
+
+/* ---- Bande d'images d'un exercice (exercise/_image_strip) ----
+   Vignettes dans l'ordre de lecture, outils posés dessous, case d'ajout au
+   bout. Unité de remplacement des Turbo Streams. */
+.kd-imgstrip {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-5);
+    min-width: 0;
+}
+
+.kd-imgstrip__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--kd-space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    min-width: 0;
+}
+
+.kd-imgstrip__item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--kd-space-1);
+    width: 72px;
+}
+
+.kd-imgstrip__thumb {
+    display: block;
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border);
+}
+
+.kd-imgstrip__rank {
+    position: absolute;
+    top: 0;
+    left: 0;
+    min-width: 18px;
+    padding: 1px 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-align: center;
+    color: var(--color-on-ink);
+    background: var(--color-surface-ink);
+}
+
+.kd-imgstrip__tools {
+    display: flex;
+    justify-content: center;
+}
+
+.kd-imgstrip__tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+
+.kd-imgstrip__tool svg {
+    width: 14px;
+    height: 14px;
+}
+
+.kd-imgstrip__tool:hover {
+    color: var(--color-primary);
+}
+
+.kd-imgstrip__tool--danger:hover {
+    color: var(--color-status-missed);
+}
+
+.kd-imgstrip__add {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--kd-space-1);
+    width: 72px;
+    height: 72px;
+    padding: 0;
+    border: 1px dashed var(--color-border-strong);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-family: var(--font-display);
+    font-size: 11px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color .12s ease, color .12s ease;
+}
+
+.kd-imgstrip__add svg {
+    width: 18px;
+    height: 18px;
+}
+
+.kd-imgstrip__add:hover,
+.kd-imgstrip__add:focus-visible {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+/* ---- Planche des images (exercise/images) ---- */
+.kd-imgboard {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--color-border);
+}
+
+.kd-imgboard__row {
+    display: grid;
+    grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--kd-space-6);
+    padding: var(--kd-space-5) 0;
+    border-bottom: 1px solid var(--color-border);
+    scroll-margin-top: var(--kd-space-13);
+}
+
+.kd-imgboard__head {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-4);
+    min-width: 0;
+}
+
+.kd-imgboard .kd-libcard__icon {
+    background: var(--act, var(--color-fill));
+    color: var(--color-on-activity);
+}
+
+.kd-imgboard__title {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.kd-imgboard__name {
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+.kd-imgboard__name:hover {
+    color: var(--color-primary);
+}
+
+.kd-imgboard__meta {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+@media (max-width: 559px) {
+    .kd-imgboard__row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--kd-space-4);
+    }
+}
+
+/* Section Images de l'éditeur (exercise/_images) */
+.kd-eximages {
+    margin-top: var(--kd-space-8);
+}
+
+.kd-eximages__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--kd-space-4);
+    flex-wrap: wrap;
+}
+
+.kd-eximages .kd-help {
+    margin: var(--kd-space-3) 0 var(--kd-space-5);
+}
+
+/* ---- Modale de préparation (exercise/_image_dialog) ---- */
+.kd-modal--imgprep {
+    width: min(480px, calc(100vw - 2 * var(--kd-space-8)));
+}
+
+.kd-imgprep__stage {
+    aspect-ratio: 1 / 1;
+    margin: var(--kd-space-5) 0;
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border);
+}
+
+.kd-imgprep__preview {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.kd-imgprep__crop {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-2);
+    margin-bottom: var(--kd-space-4);
+}
+
+.kd-imgprep__crop[hidden] {
+    display: none;
+}
+
+.kd-segbtn[aria-pressed="true"] {
+    color: var(--color-text-strong);
+    border-color: var(--color-text);
+    background: var(--color-surface-raised);
+}
+
+.kd-modal--imgprep .kd-help {
+    min-height: 1.5em;
+    margin-bottom: var(--kd-space-4);
+}
+
 /* ---- Courbes de progression (components/_exercise_progress) ----
    Repères à gauche, tracé à droite. Le tracé est un SVG déformable dont le trait
    garde son épaisseur ; points et repères sont du HTML posé en % par-dessus, la

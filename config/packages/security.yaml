@@ -89,6 +89,9 @@ security:
         # poser son jeton sur une requête d'image. La signature fait office de
         # droit de lecture (cf. CustomMessageMediaController).
         - { path: ^/media/message, roles: PUBLIC_ACCESS }
+        # Les images d'un exercice pour le téléphone (#38), même principe : URL
+        # signée, sans date (cf. ExerciseImageUrls, ExerciseMediaController).
+        - { path: ^/media/exercise, roles: PUBLIC_ACCESS }
         # Le planificateur de tâches Infomaniak n'a pas de session : le secret
         # passé en ?token= fait office de droit (cf. CronController).
         - { path: ^/cron, roles: PUBLIC_ACCESS }

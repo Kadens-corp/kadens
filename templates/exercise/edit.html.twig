@@ -17,4 +17,6 @@
     <div class="kd-card" style="max-width:640px;">
         {{ include('exercise/_form.html.twig', {button_label: 'Mettre à jour'}) }}
     </div>
+
+    {{ include('exercise/_images.html.twig', {exercise: exercise}, with_context = false) }}
 {% endblock %}

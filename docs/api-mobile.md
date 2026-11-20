@@ -567,6 +567,7 @@ $ curl -sk "https://127.0.0.1:8000/api/bootstrap" -H "Authorization: Bearer $TOK
       "activity": "gym",
       "targetAreas": ["abs", "obliques"],
       "mediaUrl": null,
+      "images": [],
       "global": true,
       "updatedAt": "2026-07-22T14:43:19+00:00"
     }
@@ -606,6 +607,19 @@ L'uuid listé dans `deleted` est celui d'une séance libre supprimée juste avan
 déjà l'anglais (« Dips », « Fartlek »). Le champ est **additif** : un client qui
 l'ignore continue d'afficher `name`. Un client qui l'adopte doit garder le repli
 sur `name`, `nameEn` étant facultatif par construction.
+
+**`images`** (#38) : les images qui montrent le mouvement d'un exercice de salle,
+de mobilité ou « autre », dans l'ordre où elles se jouent (typiquement le
+début, puis la fin), `[]` sans image. Ce sont des carrés JPEG de 1080 px, logo
+Kadens compris. Chaque adresse est **absolue et signée** (`_hash`), **sans
+`_expiration`** : le téléphone garde la bibliothèque et ne la reçoit de nouveau
+que quand un exercice change, une URL qui expirerait mourrait chez lui sans
+qu'aucun pull ne la remplace. Ce qui la révoque, c'est l'exercice : elle ne sert
+que les images qu'il cite aujourd'hui (`404` sinon), et retirer ou ranger une
+image change la liste, donc `updatedAt`, donc le prochain `?since` renvoie la
+ligne. Elle se charge **sans** jeton (`GET /media/exercise/{id}/{file}`), comme
+l'image d'un message. Additif : un client qui l'ignore n'en souffre pas ; un
+client qui l'adopte tolère son absence (serveur pas encore à jour) comme `[]`.
 
 **`exerciseLanguage`** dit sous quelle langue le compte lit ces noms. Trois
 choses à savoir avant de s'en servir :

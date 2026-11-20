@@ -16,6 +16,9 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ORM\HasLifecycleCallbacks]
 class Exercise
 {
+    /** Au-delà, ce n'est plus un mouvement qu'on montre, c'est une galerie (#38). */
+    public const MAX_IMAGES = 6;
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -79,6 +82,22 @@ class Exercise
     #[Assert\Url(message: 'Le lien média doit être une URL valide.')]
     #[Assert\Length(max: 255)]
     private ?string $mediaUrl = null;
+
+    /**
+     * Les images qui montrent le mouvement (#38), dans l'ordre où elles se
+     * jouent : typiquement deux, le début puis la fin. Ce sont des **noms de
+     * fichiers** rangés par `ExerciseImageStorage`, jamais des URL : elles se
+     * servent par contrôleur, sous le droit de lecture de l'exercice.
+     *
+     * Une liste JSON plutôt qu'une entité : l'ordre est la seule chose qu'une
+     * image porte, et une image ne sert qu'à un exercice. Corollaire voulu :
+     * changer la liste touche une colonne d'`Exercise`, donc son `updatedAt`.
+     * Les fichiers suivent l'ORM (`ExerciseImageCleanupListener`).
+     *
+     * @var list<string>|null
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $images = null;
 
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
@@ -215,6 +234,70 @@ class Exercise
         $this->mediaUrl = $mediaUrl;
 
         return $this;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getImages(): array
+    {
+        return $this->images ?? [];
+    }
+
+    /**
+     * Vide, la colonne repasse à `null` : un exercice sans image reste lu comme
+     * avant le #38.
+     *
+     * @param list<string> $images
+     */
+    public function setImages(array $images): static
+    {
+        $images = array_values(array_unique($images));
+        $this->images = [] === $images ? null : $images;
+
+        return $this;
+    }
+
+    /**
+     * Peut-on lui ajouter des images (#38) ? Seulement salle, mobilité et autre
+     * (`ActivityType::takesImages`). Celles déjà posées restent lisibles et
+     * retirables si l'activité change ensuite.
+     */
+    public function acceptsImages(): bool
+    {
+        return true === $this->activity?->takesImages();
+    }
+
+    public function hasImage(string $file): bool
+    {
+        return \in_array($file, $this->getImages(), true);
+    }
+
+    public function removeImage(string $file): static
+    {
+        return $this->setImages(array_values(array_filter($this->getImages(), static fn (string $image): bool => $image !== $file)));
+    }
+
+    /**
+     * Échange une image avec sa voisine (`-1` : plus tôt, `+1` : plus tard).
+     * Sans effet en bout de liste.
+     */
+    public function moveImage(string $file, int $direction): static
+    {
+        $images = $this->getImages();
+        $from = array_search($file, $images, true);
+        if (false === $from) {
+            return $this;
+        }
+
+        $to = $from + ($direction < 0 ? -1 : 1);
+        if ($to < 0 || $to >= \count($images)) {
+            return $this;
+        }
+
+        [$images[$from], $images[$to]] = [$images[$to], $images[$from]];
+
+        return $this->setImages(array_values($images));
     }
 
     public function getCreatedAt(): ?\DateTimeImmutable

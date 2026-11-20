@@ -55,6 +55,10 @@ parameters:
     # emplacement, même raison, **même sauvegarde** que les photos de récit.
     app.message_media_dir: "%kernel.project_dir%/var/uploads/messages"
 
+    # #38 — les images des exercices (début et fin du mouvement). Même
+    # emplacement, même raison, **même sauvegarde** que les photos de récit.
+    app.exercise_images_dir: "%kernel.project_dir%/var/uploads/exercise-images"
+
 services:
     # default configuration for services in *this* file
     _defaults:
@@ -88,8 +92,13 @@ services:
         arguments:
             $directory: "%app.message_media_dir%"
 
+    App\Service\ExerciseImageStorage:
+        arguments:
+            $directory: "%app.exercise_images_dir%"
+
 # Les tests écrivent de vraies photos : jamais dans le dossier de dev.
 when@test:
     parameters:
         app.goal_photos_dir: "%kernel.project_dir%/var/test-uploads/goal-photos"
         app.message_media_dir: "%kernel.project_dir%/var/test-uploads/messages"
+        app.exercise_images_dir: "%kernel.project_dir%/var/test-uploads/exercise-images"

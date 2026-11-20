@@ -71,6 +71,10 @@
         <span class="kd-cexo__chev" aria-hidden="true">{{ ux_icon('lucide:chevron-down') }}</span>
     </button>
 
+    {# Hors du bouton de la ligne (un bouton dans un bouton n'est pas valide),
+       entre lui et le menu (#38). #}
+    {{ include('components/_exercise_eye.html.twig', {exercise: ex}, with_context = false) }}
+
     <details class="kd-kebab kd-kebab--row" data-controller="dismiss">
         <summary class="kd-kebab__trigger kd-kebab__trigger--plain" aria-label="Actions sur {{ ex ? exercise_name(ex) : 'l\'exercice' }}">
             {{ ux_icon('lucide:ellipsis') }}

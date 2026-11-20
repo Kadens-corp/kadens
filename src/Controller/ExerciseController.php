@@ -55,10 +55,22 @@ final class ExerciseController extends AbstractController
             }
         }
 
+        // La planche des images (#38) ne s'annonce qu'à qui a quelque chose à
+        // y illustrer : un admin (la globale), ou le propriétaire d'un exercice
+        // perso de salle, de mobilité ou « autre ».
+        $canIllustrate = false;
+        foreach ($exercises as $exercise) {
+            if ($exercise->acceptsImages() && $this->isGranted(ExerciseVoter::EDIT, $exercise)) {
+                $canIllustrate = true;
+                break;
+            }
+        }
+
         return $this->render('exercise/index.html.twig', [
             'exercises' => $exercises,
             'activityFacets' => $activityFacets,
             'usage' => $usage,
+            'canIllustrate' => $canIllustrate,
         ]);
     }
 

@@ -1,0 +1,24 @@
+{# L'œil d'un exercice illustré (#38) : ouvre la visionneuse commune de la page
+   (`components/_exercise_viewer`, posée par `base.html.twig`), qui joue ses
+   images en fondu enchaîné. Rien quand l'exercice n'a pas d'image ou que le
+   lecteur ne peut pas le lire (page publique, exercice perso d'un inconnu) :
+   l'image se sert sous `ExerciseVoter::VIEW`, un œil vers une 403 serait pire
+   que pas d'œil.
+
+   Les adresses des images partent dans l'attribut : la page reste
+   auto-suffisante, rien n'est demandé au serveur à l'ouverture que les images
+   elles-mêmes.
+
+   Paramètres : exercise (Exercise|null). #}
+{% if exercise is not null and exercise.images is not empty and is_granted('VIEW', exercise) %}
+    {% set name = exercise_name(exercise) %}
+    <button type="button" class="kd-exeye"
+            title="Voir le mouvement"
+            aria-label="Voir le mouvement : {{ name }}"
+            data-action="exercise-viewer#open"
+            data-exercise-viewer-name-param="{{ name }}"
+            data-exercise-viewer-url-param="{{ path('app_exercise_show', {id: exercise.id}) }}"
+            data-exercise-viewer-images-param="{{ exercise.images|map(file => path('app_exercise_image', {id: exercise.id, file: file}))|json_encode }}">
+        {{ ux_icon('lucide:eye') }}
+    </button>
+{% endif %}

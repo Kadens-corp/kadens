@@ -1,0 +1,56 @@
+{# La préparation d'une image d'exercice (#38), une seule modale par page, dans
+   le `data-controller="exercise-images"` qui la pilote. Le « + » d'une bande
+   ouvre le sélecteur de fichier ; le fichier choisi arrive ici, déjà mis en
+   forme (carré de 1080 px, logo Kadens en bas à droite) : on vérifie le cadrage,
+   on valide, la bande de l'exercice se met à jour sans recharger la page.
+
+   Le bouton « Ajouter » a le focus : Entrée valide. #}
+<dialog class="kd-modal kd-modal--imgprep" aria-labelledby="imgprep-title"
+        data-exercise-images-target="dialog"
+        data-action="close->exercise-images#closed click->exercise-images#backdrop">
+    <div class="kd-modal__card">
+        {# Dans la modale et non à côté : une fois ouverte, tout ce qui est hors
+           d'elle devient inerte, « Autre fichier » ne pourrait plus l'ouvrir. #}
+        <input type="file" hidden accept="image/jpeg,image/png,image/webp"
+               data-exercise-images-target="input" data-action="change->exercise-images#picked">
+        <div class="kd-modal__head">
+            <div>
+                <p class="kd-eyebrow kd-eyebrow--accent">Nouvelle image</p>
+                <h2 class="kd-modal__title" id="imgprep-title" data-exercise-images-target="name"></h2>
+            </div>
+            <button type="button" class="kd-modal__close" data-action="exercise-images#close" aria-label="Fermer">
+                {{ ux_icon('lucide:x') }}
+            </button>
+        </div>
+
+        <div class="kd-imgprep__stage">
+            <img alt="Aperçu de l'image telle qu'elle sera enregistrée" width="1080" height="1080"
+                 class="kd-imgprep__preview" data-exercise-images-target="preview" hidden>
+        </div>
+
+        {# Le cadrage ne vaut que pour l'axe long ; les libellés suivent
+           l'orientation de la photo, et le groupe disparaît pour un carré. #}
+        <div class="kd-imgprep__crop" role="group" aria-label="Cadrage" data-exercise-images-target="cropGroup" hidden>
+            <span class="kd-label">Cadrage</span>
+            <div class="kd-segmented">
+                {% for align in ['0', '0.5', '1'] %}
+                    <button type="button" class="kd-segbtn" aria-pressed="{{ align == '0.5' ? 'true' : 'false' }}"
+                            data-exercise-images-target="align"
+                            data-action="exercise-images#crop" data-exercise-images-align-param="{{ align }}"></button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <p class="kd-help" role="status" aria-live="polite" data-exercise-images-target="status"></p>
+
+        <div class="kd-formactions">
+            <button type="button" class="kd-btn kd-btn--primary" autofocus
+                    data-exercise-images-target="confirm" data-action="exercise-images#confirm">
+                {{ ux_icon('lucide:check') }} Ajouter
+            </button>
+            <button type="button" class="kd-btn kd-btn--ghost" data-action="exercise-images#repick">
+                Autre fichier
+            </button>
+        </div>
+    </div>
+</dialog>

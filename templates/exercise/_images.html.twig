@@ -1,0 +1,33 @@
+{# Les images d'un exercice dans son éditeur (#38) : la même bande que sur la
+   planche (`exercise/_image_strip`), la même modale de préparation. Rendue pour
+   la salle, la mobilité et « autre », ou quand des images restent d'une autre
+   activité (on peut alors les retirer, plus en ajouter).
+
+   Paramètres : exercise. #}
+{% if exercise.acceptsImages or exercise.images is not empty %}
+    <section class="kd-section kd-eximages" id="images" aria-labelledby="images-title"
+             data-controller="exercise-images"
+             data-exercise-images-logo-value="{{ asset('icons/kadens.png') }}"
+             data-exercise-images-from-value="edit">
+        <div class="kd-card" style="max-width:640px;">
+            <div class="kd-eximages__head">
+                <h2 class="kd-title kd-title--sm" id="images-title">Images</h2>
+                <a href="{{ path('app_exercise_images') }}#exercise-row-{{ exercise.id }}" class="kd-btn kd-btn--ghost kd-btn--sm">
+                    {{ ux_icon('lucide:image') }} Tous les exercices
+                </a>
+            </div>
+            <p class="kd-help">
+                Jouées en fondu sur la fiche, dans cet ordre, pour montrer le mouvement.
+                Typiquement deux : le début, puis la fin.
+            </p>
+
+            {{ include('exercise/_image_strip.html.twig', {exercise: exercise, from: 'edit'}, with_context = false) }}
+
+            {% if not exercise.acceptsImages %}
+                <p class="kd-help">Les images ne concernent que la salle, la mobilité et « autre » : retire celles-ci, ou repasse l'exercice dans une de ces activités.</p>
+            {% endif %}
+        </div>
+
+        {{ include('exercise/_image_dialog.html.twig', {}, with_context = false) }}
+    </section>
+{% endif %}

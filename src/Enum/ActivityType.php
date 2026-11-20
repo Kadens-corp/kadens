@@ -12,6 +12,19 @@ enum ActivityType: string
     case MOBILITY = 'mobility';
     case OTHER = 'other';
 
+    /**
+     * Les activités dont un exercice peut porter des images du mouvement (#38) :
+     * celles où l'on exécute un geste qu'une photo de début et de fin décrit. Une
+     * sortie course, vélo ou natation n'a pas de mouvement à montrer.
+     */
+    public function takesImages(): bool
+    {
+        return match ($this) {
+            self::GYM, self::MOBILITY, self::OTHER => true,
+            self::RUNNING, self::SWIMMING, self::CYCLING => false,
+        };
+    }
+
     public function getLabel(): string
     {
         return match($this) {
