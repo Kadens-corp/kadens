@@ -7,6 +7,7 @@ namespace App\Form;
 use App\Entity\CustomMessage;
 use App\Entity\User;
 use App\Enum\MessageAudience;
+use App\Enum\MessagePlatform;
 use App\Repository\UserRepository;
 use Doctrine\ORM\QueryBuilder;
 use Symfony\Bridge\Doctrine\Form\Type\EntityType;
@@ -75,6 +76,12 @@ class CustomMessageType extends AbstractType
                 'required' => false,
                 'choice_label' => fn (User $user): string => $user->getDisplayName(),
                 'query_builder' => fn (UserRepository $users): QueryBuilder => $users->createQueryBuilder('u')->orderBy('u.email', 'ASC'),
+            ])
+            ->add('platform', EnumType::class, [
+                'class' => MessagePlatform::class,
+                'label' => 'Où',
+                'choice_label' => fn (MessagePlatform $p): string => $p->getLabel(),
+                'expanded' => true,
             ])
             ->add('active', CheckboxType::class, [
                 'label' => 'Actif',

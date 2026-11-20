@@ -5,6 +5,7 @@ namespace App\Tests\Controller;
 use App\Entity\CustomMessage;
 use App\Entity\User;
 use App\Enum\MessageAudience;
+use App\Enum\MessagePlatform;
 use App\Service\CustomMessageInbox;
 use App\Tests\FindsEntities;
 use App\Tests\PurgesDatabase;
@@ -173,6 +174,32 @@ final class CustomMessageTest extends WebTestCase
         self::assertResponseRedirects('/workout?q=x');
 
         self::assertCount(0, $this->client->request('GET', '/workout')->filter(self::MODAL));
+    }
+
+    public function testAnAppOnlyMessageStaysOffTheWebsite(): void
+    {
+        $friend = $this->createUser('lea@example.com', [], 'Léa');
+        $this->createMessage(MessageAudience::ALL)->setPlatform(MessagePlatform::APP);
+        $this->em->flush();
+
+        $this->client->loginUser($friend);
+
+        self::assertCount(0, $this->client->request('GET', '/workout')->filter(self::MODAL));
+    }
+
+    public function testASuperAdminChoosesWhereTheMessageShows(): void
+    {
+        $this->client->loginUser($this->createUser('root@example.com', ['ROLE_SUPER_ADMIN'], 'Root'));
+        $message = $this->createMessage(MessageAudience::ALL);
+
+        $crawler = $this->client->request('GET', '/admin/messages/'.$message->getId().'/edit');
+        $form = $crawler->selectButton('Mettre à jour')->form();
+        $this->choice($form, 'custom_message[platform]')->select('web');
+        $this->client->submit($form);
+        self::assertResponseRedirects();
+
+        $this->em->clear();
+        self::assertSame(MessagePlatform::WEB, $this->mustFind(CustomMessage::class, $message->getId())->getPlatform());
     }
 
     public function testSomeoneElseDoesNotSeeIt(): void

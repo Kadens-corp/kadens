@@ -6,6 +6,7 @@ namespace App\Service;
 
 use App\Entity\CustomMessage;
 use App\Entity\User;
+use App\Enum\MessagePlatform;
 use App\Repository\CustomMessageRepository;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\UriSigner;
@@ -46,7 +47,7 @@ final class CustomMessageInbox
     {
         $today ??= new \DateTimeImmutable('today');
 
-        return $this->messages->findUnseenFor($user, $today, $today)[0] ?? null;
+        return $this->messages->findUnseenFor($user, $today, $today, MessagePlatform::WEB)[0] ?? null;
     }
 
     /**
@@ -56,7 +57,7 @@ final class CustomMessageInbox
      */
     public function upcomingFor(User $user, \DateTimeImmutable $today): array
     {
-        return $this->messages->findUnseenFor($user, $today, $today->add(new \DateInterval(self::MOBILE_HORIZON)));
+        return $this->messages->findUnseenFor($user, $today, $today->add(new \DateInterval(self::MOBILE_HORIZON)), MessagePlatform::APP);
     }
 
     /**
