@@ -7,12 +7,18 @@
     Optionnel :
       - `linkAthlete` : lie la carte à l'espace de travail de l'athlète (dashboard coach)
 
+    Côté athlète, la carte porte la liste des droits du coach (#66,
+    `_coaching_rights`).
+
     Le statut réutilise les tokens de statut de séance via CoachingStatus::modifier
     (done / planned / missed), comme GoalOutcome : pas de nouvelle famille de couleur.
 #}
 {% set other = relation.otherParty(me) %}
 {% set iAmCoach = relation.coach == me %}
-{% set canRespond = relation.status.value == 'pending' and relation.isRecipient(me) %}
+{% set pending = relation.status.value == 'pending' %}
+{% set ended = relation.status.value == 'ended' %}
+{% set canRespond = pending and relation.isRecipient(me) %}
+{% set canCancel = pending and relation.isRequester(me) %}
 {% set workspace = iAmCoach and relation.isActive and (linkAthlete ?? false) %}
 
 <article class="kd-coachcard{{ relation.isActive ? '' : ' is-muted' }}">
@@ -35,14 +41,47 @@
         <p class="kd-coachcard__role">
             {# Le coaching se noue par email : sous un pseudo, on le rappelle. #}
             {% if other and other.username %}{{ other.email }} · {% endif %}
-            {{ iAmCoach ? 'Tu entraînes cette personne' : 'Cette personne t\'entraîne' }}
-            {% if relation.status.value == 'pending' %}
-                · {{ relation.isRecipient(me) ? 'demande reçue' : 'demande envoyée' }}
-                le {{ relation.createdAt|date('d/m/Y') }}
-            {% elseif relation.respondedAt %}
-                · depuis le {{ relation.respondedAt|date('d/m/Y') }}
+            {# Tant qu'elle attend, la relation se dit comme une proposition (#79) :
+               « Tu entraînes » contredisait le badge En attente. La date est celle
+               de la demande : une ligne rouverte (refusée, terminée) garde son
+               `createdAt` d'origine, sa réouverture est sa dernière mise à jour. #}
+            {% if pending %}
+                {% if iAmCoach %}
+                    {{ canCancel ? 'Tu as proposé d\'entraîner cette personne' : 'Cette personne te demande de l\'entraîner' }}
+                {% else %}
+                    {{ canCancel ? 'Tu as demandé à cette personne de t\'entraîner' : 'Cette personne propose de t\'entraîner' }}
+                {% endif %}
+                · le {{ (relation.updatedAt ?? relation.createdAt)|date('d/m/Y') }}
+            {% elseif ended %}
+                {# Relation close (#81) : à l'imparfait, bornée par ses deux dates.
+                   Une ligne d'avant la date de fin n'a que son début. #}
+                {{ iAmCoach ? 'Tu entraînais cette personne' : 'Cette personne t\'entraînait' }}
+                {% if relation.respondedAt and relation.endedAt %}
+                    · du {{ relation.respondedAt|date('d/m/Y') }} au {{ relation.endedAt|date('d/m/Y') }}
+                {% elseif relation.endedAt %}
+                    · jusqu'au {{ relation.endedAt|date('d/m/Y') }}
+                {% elseif relation.respondedAt %}
+                    · depuis le {{ relation.respondedAt|date('d/m/Y') }}
+                {% endif %}
+            {% else %}
+                {{ iAmCoach ? 'Tu entraînes cette personne' : 'Cette personne t\'entraîne' }}
+                {% if relation.respondedAt %}
+                    · depuis le {{ relation.respondedAt|date('d/m/Y') }}
+                {% endif %}
             {% endif %}
         </p>
+
+        {# Ce que le coach voit et fait chez l'athlète (#66), montré à l'athlète
+           seul : en clair tant qu'il doit répondre, replié une fois la relation
+           active (il l'a déjà lu, la carte reste compacte). #}
+        {% if not iAmCoach and canRespond %}
+            {{ include('components/_coaching_rights.html.twig', {coach: other}) }}
+        {% elseif not iAmCoach and relation.isActive %}
+            <details class="kd-coachcard__rights">
+                <summary>{{ ux_icon('lucide:chevron-down') }} Ce que {{ other ? other.displayName : 'ton coach' }} peut faire</summary>
+                {{ include('components/_coaching_rights.html.twig', {coach: other, active: true, title: false}) }}
+            </details>
+        {% endif %}
     </div>
 
     <div class="kd-coachcard__actions">
@@ -61,14 +100,30 @@
                     {{ ux_icon('lucide:user-x') }} Refuser
                 </button>
             </form>
+        {% elseif canCancel %}
+            {# Seul moyen de corriger une faute dans l'email (#79). La demande
+               disparaît aussi chez l'autre : pas de confirmation, la renvoyer
+               suffit à revenir en arrière. #}
+            <form method="post" action="{{ path('app_coaching_cancel', {id: relation.id}) }}">
+                <input type="hidden" name="_token" value="{{ csrf_token('coaching_cancel' ~ relation.id) }}">
+                <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm">
+                    {{ ux_icon('lucide:x') }} Annuler la demande
+                </button>
+            </form>
         {% elseif relation.isActive %}
             {% if workspace %}
                 <a href="{{ path('app_coach_athlete', {id: other.id}) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
-                    {{ ux_icon('lucide:clipboard-list') }} Programmer
+                    {{ ux_icon('lucide:clipboard-list') }} Ouvrir la fiche
                 </a>
             {% endif %}
+            {# Le coach est prévenu que ses notes privées partent avec la relation
+               (#65). Jamais l'athlète : il ne sait pas qu'elles existent. #}
+            {% set endConfirm = 'Terminer cette relation ? Le contenu déjà créé reste chez son propriétaire.' %}
+            {% if iAmCoach and relation.coachNotes %}
+                {% set endConfirm = endConfirm ~ ' Tes notes privées sur ' ~ other.displayName ~ ' seront effacées.' %}
+            {% endif %}
             <form method="post" action="{{ path('app_coaching_end', {id: relation.id}) }}"
-                  onsubmit="return confirm('Terminer cette relation ? Le contenu déjà créé reste chez son propriétaire.');">
+                  onsubmit="return confirm({{ endConfirm|json_encode|e('html_attr') }});">
                 <input type="hidden" name="_token" value="{{ csrf_token('coaching_end' ~ relation.id) }}">
                 <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm">
                     {{ ux_icon('lucide:x') }} Terminer

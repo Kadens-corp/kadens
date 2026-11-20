@@ -12,12 +12,15 @@
    sans lui, on ne saurait plus si la séance a été tenue. Le NOM, lui, ne
    s'atténue pas : ce n'est pas un paramètre, c'est le sujet. #}
 {% import 'components/_log_deviation.html.twig' as dev %}
+{% import 'components/_set_type.html.twig' as settype %}
+{% import 'components/_term.html.twig' as terms %}
 {% set compared = compared|default(null) %}
 
 <li class="kd-exrow{{ compared ? ' kd-exrow--logged' }}">
     <div class="kd-exrow__head">
         {% if ex.groupLabel %}<span class="kd-exrow__rank">{{ ex.groupLabel }}</span>{% endif %}
         <span class="kd-exrow__name">{{ exercise_name(ex.exercise) }}</span>
+        {{ include('components/_exercise_eye.html.twig', {exercise: ex.exercise}, with_context = false) }}
 
         {# Dès qu'il y a un tableau de séries dessous, l'en-tête n'en donne que le
            compte : répéter « 3 × 15 @ 130 kg » juste au-dessus des trois lignes
@@ -30,14 +33,14 @@
            se lirait comme une erreur. #}
         {% if ex.setLines %}
             <span class="kd-exrow__flag">
-                {{- ex.setLines|length }} {{ compared ? 'prévue' : 'série' }}{{ ex.setLines|length > 1 ? 's' -}}
+                {{- settype.count(ex.setLines|map(l => l.type), compared ? 'prévue' : 'série') -}}
             </span>
         {% elseif ex.values %}
             <span class="kd-exrow__val">{{ ex.values }}</span>
         {% endif %}
 
         {% if ex.prescribed.rpe %}
-            <span class="kd-exrow__rpe{{ ex.prescribed.rpe >= 9 ? ' is-hard' }}">RPE {{ ex.prescribed.rpe }}</span>
+            <span class="kd-exrow__rpe{{ ex.prescribed.rpe >= 9 ? ' is-hard' }}">{{ terms.abbr('RPE') }} {{ ex.prescribed.rpe }}</span>
         {% endif %}
         {% if ex.rest %}
             <span class="kd-exrow__rest">repos {{ ex.rest }} s</span>

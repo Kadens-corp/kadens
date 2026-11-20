@@ -6,26 +6,33 @@ use App\Entity\Block;
 use App\Entity\Exercise;
 use App\Entity\PrescribedExercise;
 use App\Entity\PrescribedSet;
+use App\Entity\ScheduledWorkout;
 use App\Entity\User;
 use App\Entity\Workout;
 use App\Enum\ActivityType;
 use App\Enum\BlockRole;
 use App\Enum\PrescriptionType;
+use App\Enum\ScheduledStatus;
 use App\Form\BlockType;
 use App\Form\PrescribedExerciseType;
 use App\Form\PrescribedSetType;
+use App\Http\BackTarget;
+use App\Repository\CoachingRepository;
 use App\Repository\ExerciseRepository;
 use App\Repository\LoggedExerciseRepository;
+use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
 use App\Repository\WorkoutRepository;
 use App\Security\Voter\WorkoutVoter;
 use App\Service\CoachedLibrary;
 use App\Service\PerformanceHistory;
+use App\Service\LineageDivergence;
 use App\Service\LineageSeed;
 use App\Service\OffProgramRecap;
 use App\Service\PlanFlattener;
 use App\Service\SetSynchronizer;
 use App\Service\SharedWorkoutCopier;
+use App\Service\ShareLink;
 use App\Service\SlugGenerator;
 use App\Service\SupersetGrouper;
 use App\Service\VolumePanel;
@@ -55,11 +62,8 @@ final class WorkoutController extends AbstractController
         'elevationGainMeters',
     ];
 
-    /**
-     * Titre d'un brouillon créé en un clic. Sert aussi de repère pour savoir si le
-     * slug mérite d'être régénéré au premier vrai renommage (cf. updateMeta).
-     */
-    public const DRAFT_WORKOUT_TITLE = 'Nouvelle séance';
+    /** Titre d'un brouillon créé en un clic, que l'éditeur ouvre aussitôt en édition. */
+    public const DRAFT_WORKOUT_TITLE = Workout::DRAFT_TITLE;
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
@@ -73,6 +77,7 @@ final class WorkoutController extends AbstractController
         private readonly SupersetGrouper $supersets,
         private readonly VolumePanel $volumePanel,
         private readonly OffProgramRecap $offProgramRecap,
+        private readonly LineageDivergence $lineageDivergence,
     ) {
     }
 
@@ -141,6 +146,10 @@ final class WorkoutController extends AbstractController
      * (pas d'écran de formulaire intermédiaire : le titre s'édite en ligne, et
      * l'éditeur l'ouvre tout de suite grâce au paramètre `rename`). Même geste que
      * `CoachController::newWorkout`, qui procédait déjà ainsi.
+     *
+     * Avec `date` (Y-m-d), le brouillon est aussi posé ce jour-là dans l'agenda
+     * (« Nouvelle séance pour ce jour », #92) et `from` (jeton `BackTarget`) est
+     * reconduit au compositeur pour que son retour ramène au calendrier.
      */
     #[Route('/new', name: 'app_workout_new', methods: ['POST'])]
     public function new(Request $request, SlugGenerator $slugGenerator): Response
@@ -159,9 +168,34 @@ final class WorkoutController extends AbstractController
             ->setSlug($slugGenerator->generate($title, Workout::class));
 
         $this->entityManager->persist($workout);
+
+        // Depuis la modale d'un jour du calendrier (#92) : le brouillon est posé
+        // à ce jour dans le même geste, et le compositeur repart vers la vue
+        // quittée. Une date absente ou illisible garde le geste d'origine.
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $request->getPayload()->getString('date')) ?: null;
+        $back = [];
+
+        if (null !== $date) {
+            $this->entityManager->persist((new ScheduledWorkout())
+                ->setWorkout($workout)
+                ->setOwner($user)
+                ->setScheduledDate($date)
+                ->setStatus(ScheduledStatus::PLANNED));
+
+            $from = $request->getPayload()->getString('from');
+            $back = ['from' => null !== BackTarget::parse($from) ? $from : BackTarget::token(BackTarget::CAL_MONTH, $date->format('Y-m'))];
+
+            // Un jour passé, rien ne se planifie plus (#109) : elle y est ajoutée.
+            $this->addFlash('success', \sprintf(
+                '%s %s : compose-la ici, elle est déjà dans ton agenda.',
+                $date < new \DateTimeImmutable('today') ? 'Séance ajoutée au' : 'Séance planifiée le',
+                $date->format('d/m/Y'),
+            ));
+        }
+
         $this->entityManager->flush();
 
-        return $this->redirectToRoute('app_workout_edit', ['id' => $workout->getId(), 'rename' => 1]);
+        return $this->redirectToRoute('app_workout_edit', ['id' => $workout->getId(), 'rename' => 1] + $back);
     }
 
     /**
@@ -174,8 +208,13 @@ final class WorkoutController extends AbstractController
      * post-chargement, c'est la condition de son cache offline.
      */
     #[Route('/{id}', name: 'app_workout_show', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function show(Workout $workout, PlanFlattener $planFlattener, WorkoutMetrics $metrics, ScheduledWorkoutRepository $scheduledRepository): Response
-    {
+    public function show(
+        Workout $workout,
+        PlanFlattener $planFlattener,
+        WorkoutMetrics $metrics,
+        ScheduledWorkoutRepository $scheduledRepository,
+        PlanTemplateRepository $planTemplateRepository,
+    ): Response {
         $this->denyAccessUnlessGranted(WorkoutVoter::VIEW, $workout);
 
         $user = $this->getUser();
@@ -192,6 +231,11 @@ final class WorkoutController extends AbstractController
             // Le ressenti de chaque réalisation, en une requête : la lignée se
             // lit comme « comment ça s'est passé », pas seulement « quand ».
             'instanceRatings' => null === $instances ? [] : $scheduledRepository->ratingsFor(array_map(static fn (\App\Entity\ScheduledWorkout $s): int => (int) $s->getId(), $instances)),
+            // « Supprimer » du menu (#116) : ses conséquences ne se comptent que
+            // pour qui peut supprimer, pas à chaque consultation.
+            'deletion' => $this->isGranted(WorkoutVoter::DELETE, $workout)
+                ? $this->deletionContext($workout, $planTemplateRepository, $scheduledRepository)
+                : null,
         ] + $this->volumePanel->for($workout, $user instanceof User ? $user : null));
     }
 
@@ -201,13 +245,49 @@ final class WorkoutController extends AbstractController
      * métadonnées ici, donc plus de POST sur cette route.
      */
     #[Route('/{id}/edit', name: 'app_workout_edit', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function edit(Workout $workout): Response
-    {
+    public function edit(
+        Workout $workout,
+        CoachingRepository $coachingRepository,
+        PlanTemplateRepository $planTemplateRepository,
+        ScheduledWorkoutRepository $scheduledRepository,
+    ): Response {
         $this->denyAccessUnlessGranted(WorkoutVoter::EDIT, $workout);
 
+        /** @var User $user */
+        $user = $this->getUser();
+
+        // Ce qui suit la séance et ce qui reste figé (#113), relu par la zone
+        // dangereuse pour dire ce que la suppression laisse (#116).
         return $this->render('workout/edit.html.twig', [
             'workout' => $workout,
-        ] + $this->blocksContext($workout) + $this->libraryContext($workout));
+            // Notes privées du coach sur l'athlète propriétaire (#65), null pour soi.
+            'coachRelation' => $coachingRepository->findAcceptedRelation($user, $workout->getOwner()),
+            // Le bandeau de volume, rendu en esquisse pour réserver sa place (#125).
+            'volumePanel' => $this->volumeContext($workout),
+        ] + $this->deletionContext($workout, $planTemplateRepository, $scheduledRepository)
+            + $this->blocksContext($workout) + $this->libraryContext($workout));
+    }
+
+    /**
+     * Où la séance est posée : les plans dont une case en descend, les séances
+     * datées qui la référencent directement. Le compositeur le dit pour l'édition
+     * (#113), et la suppression le relit pour annoncer ce qui reste (#116).
+     *
+     * Une copie locale de plan n'est posée nulle part ailleurs que dans sa case :
+     * rien à compter (et elle ne se supprime pas d'ici, cf. `delete`).
+     *
+     * @return array{usedInPlans: list<\App\Entity\PlanTemplate>, directPoses: array{total: int, done: int}}
+     */
+    private function deletionContext(Workout $workout, PlanTemplateRepository $plans, ScheduledWorkoutRepository $scheduled): array
+    {
+        if ($workout->isPlanLocal()) {
+            return ['usedInPlans' => [], 'directPoses' => ['total' => 0, 'done' => 0]];
+        }
+
+        return [
+            'usedInPlans' => $plans->findUsingLibraryWorkout($workout),
+            'directPoses' => $scheduled->directPoseCounts($workout),
+        ];
     }
 
     /**
@@ -236,7 +316,7 @@ final class WorkoutController extends AbstractController
                     return new Response('Le titre ne peut pas être vide.', Response::HTTP_UNPROCESSABLE_ENTITY);
                 }
                 $workout->setTitle($value);
-                $this->refreshDraftSlug($workout, $value, $slugGenerator);
+                $this->slugFollowsTitle($workout, $value, $slugGenerator);
                 break;
             case 'description':
                 $workout->setDescription('' === $value ? null : $value);
@@ -259,22 +339,70 @@ final class WorkoutController extends AbstractController
     }
 
     /**
-     * Une séance créée en un clic naît avec un slug dérivé du titre par défaut
-     * (`nouvelle-seance-7`). On le régénère au premier renommage, mais UNIQUEMENT
-     * dans ce cas : une séance déjà nommée garde son slug, sinon chaque renommage
-     * casserait son lien de partage public.
+     * Le slug suit le titre : il ne nomme plus que le fichier d'export, aucune
+     * adresse publique n'en dépend depuis #61 (le lien de partage est un jeton).
+     * Un titre dont le slug dérive déjà ne le régénère pas : sans cette garde,
+     * réenregistrer le même titre le ferait glisser de `upper-a` à `upper-a-2`.
      */
-    private function refreshDraftSlug(Workout $workout, string $title, SlugGenerator $slugGenerator): void
+    private function slugFollowsTitle(Workout $workout, string $title, SlugGenerator $slugGenerator): void
     {
-        if ($slugGenerator->derivesFrom($workout->getSlug(), self::DRAFT_WORKOUT_TITLE)) {
+        if (!$slugGenerator->derivesFrom($workout->getSlug(), $title)) {
             $workout->setSlug($slugGenerator->generate($title, Workout::class));
         }
+    }
+
+    /**
+     * Ouvre ou arrête le partage par lien (#61). Geste de PROPRIÉTAIRE : l'attribut
+     * EDIT ne suffit pas, un coach accepté le porte aussi, et il ne publie pas le
+     * contenu de son athlète. Une case de plan se partage avec son plan.
+     */
+    #[Route('/{id}/share', name: 'app_workout_share', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function share(Request $request, Workout $workout, ShareLink $shareLink): Response
+    {
+        $this->denyAccessUnlessGranted(WorkoutVoter::EDIT, $workout);
+
+        /** @var User $user */
+        $user = $this->getUser();
+        if ($workout->getOwner()?->getId() !== $user->getId()) {
+            throw $this->createAccessDeniedException('Seul le propriétaire partage sa séance.');
+        }
+        if ($workout->isPlanLocal()) {
+            throw $this->createAccessDeniedException('Une séance de plan se partage avec son plan.');
+        }
+
+        if (!$this->isCsrfTokenValid('workout_share'.$workout->getId(), $request->getPayload()->getString('_token'))) {
+            throw $this->createAccessDeniedException('Jeton CSRF invalide.');
+        }
+
+        if ('close' === $request->getPayload()->getString('action')) {
+            $shareLink->close($workout);
+            $this->addFlash('success', 'Partage arrêté : le lien ne répond plus.');
+        } else {
+            $shareLink->open($workout);
+            $this->addFlash('success', 'Partage par lien activé. Copie le lien pour l\'envoyer.');
+        }
+
+        $this->entityManager->flush();
+
+        return $this->redirectToRoute('app_workout_show', ['id' => $workout->getId()]);
     }
 
     #[Route('/{id}/delete', name: 'app_workout_delete', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function delete(Request $request, Workout $workout): Response
     {
         $this->denyAccessUnlessGranted(WorkoutVoter::DELETE, $workout);
+
+        // Une copie de case se retire depuis son plan (#116). La supprimer d'ici
+        // emporterait la case (PlanItem en CASCADE) sans la règle de
+        // `PlanTemplateController::deleteItem`, qui retire avec elle ses séances
+        // datées prévues : elles resteraient au calendrier, vides.
+        $cell = $workout->isPlanLocal() ? $workout->getPlanItems()->first() : false;
+        $plan = false !== $cell ? $cell->getPlanTemplate() : null;
+        if (null !== $plan) {
+            $this->addFlash('error', 'Cette séance est une case du plan : elle se retire depuis la grille.');
+
+            return $this->redirectToRoute('app_plan_template_edit', ['id' => $plan->getId()]);
+        }
 
         if ($this->isCsrfTokenValid('delete'.$workout->getId(), $request->getPayload()->getString('_token'))) {
             $this->entityManager->remove($workout);
@@ -286,8 +414,22 @@ final class WorkoutController extends AbstractController
         return $this->redirectToRoute('app_workout_index');
     }
 
+    /**
+     * Duplique une séance de bibliothèque (planLocal = false) : réutilisable et listée.
+     *
+     * Par défaut, la copie appartient au propriétaire de la source, pas à
+     * l'utilisateur courant : un coach qui duplique la séance de son athlète (l'index
+     * les liste) obtient une variante DANS la bibliothèque de cet athlète, la seule
+     * qu'il puisse poser sur son calendrier ou dans son plan. Le libellé du bouton et
+     * le message le disent (#83), sans quoi le coach encombre en silence la
+     * bibliothèque de l'athlète.
+     *
+     * `target=mine` copie au contraire chez l'utilisateur courant, par
+     * `SharedWorkoutCopier` comme toute copie vers une autre bibliothèque : une séance
+     * pour soi, sans lien avec l'athlète, que ce dernier ne voit pas.
+     */
     #[Route('/{id}/duplicate', name: 'app_workout_duplicate', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function duplicate(Request $request, Workout $workout, WorkoutCloner $cloner): Response
+    public function duplicate(Request $request, Workout $workout, WorkoutCloner $cloner, SharedWorkoutCopier $copier): Response
     {
         $this->denyAccessUnlessGranted(WorkoutVoter::VIEW, $workout);
 
@@ -295,18 +437,26 @@ final class WorkoutController extends AbstractController
             return $this->redirectToRoute('app_workout_show', ['id' => $workout->getId()]);
         }
 
-        // Copie de bibliothèque (planLocal = false) : réutilisable et listée. Elle
-        // appartient au propriétaire de la source, pas à l'utilisateur courant : un
-        // coach qui duplique la séance de son athlète (l'index les liste désormais)
-        // obtient une variante DANS la bibliothèque de cet athlète. Chez le coach,
-        // elle serait inerte — il ne pourrait ni la poser sur le calendrier de
-        // l'athlète ni dans son plan, qui n'acceptent que du contenu de l'athlète.
-        /** @var User $owner */
-        $owner = $workout->getOwner() ?? $this->getUser();
+        /** @var User $user */
+        $user = $this->getUser();
+        $owner = $workout->getOwner() ?? $user;
+        $foreign = $owner->getId() !== $user->getId();
+
+        if ($foreign && 'mine' === $request->getPayload()->getString('target')) {
+            $copy = $copier->copyFor($workout, $user)->workout;
+            $this->entityManager->flush();
+
+            $this->addFlash('success', sprintf('Copie créée dans ta bibliothèque. Elle est à toi : %s ne la voit pas.', $owner->getDisplayName()));
+
+            return $this->redirectToRoute('app_workout_edit', ['id' => $copy->getId()]);
+        }
+
         $copy = $cloner->cloneWorkout($workout, $owner, $workout->getTitle().' (copie)', false);
         $this->entityManager->flush();
 
-        $this->addFlash('success', 'Séance dupliquée. Compose-la maintenant.');
+        $this->addFlash('success', $foreign
+            ? sprintf('Copie créée dans les séances de %s. Compose-la maintenant.', $owner->getDisplayName())
+            : 'Séance dupliquée. Compose-la maintenant.');
 
         return $this->redirectToRoute('app_workout_edit', ['id' => $copy->getId()]);
     }
@@ -314,26 +464,28 @@ final class WorkoutController extends AbstractController
     /**
      * Copie dans SA bibliothèque une séance reçue par son lien public (#58).
      *
-     * Le slug vaut droit de lecture (cf. `PublicShareController`), donc droit de
-     * copie : on ne passe pas par `WorkoutVoter`, qui refuserait la séance d'un
-     * inconnu. La copie appartient à l'utilisateur courant, sans lignée, et les
+     * Le jeton de partage vaut droit de lecture (cf. `PublicShareController`),
+     * donc droit de copie : on ne passe pas par `WorkoutVoter`, qui refuserait la
+     * séance d'un inconnu. Un partage arrêté ne se copie plus (le jeton n'existe
+     * plus, 404). La copie appartient à l'utilisateur courant, sans lignée, et les
      * exercices perso de l'auteur y sont recopiés chez lui (`SharedWorkoutCopier`).
      * Sur sa propre séance, rien à copier : on l'y renvoie.
      */
-    #[Route('/shared/{slug}/copy', name: 'app_workout_copy_shared', methods: ['POST'])]
+    #[Route('/shared/{token}/copy', name: 'app_workout_copy_shared', methods: ['POST'], requirements: ['token' => ShareLink::TOKEN])]
     public function copyShared(
         Request $request,
-        #[MapEntity(mapping: ['slug' => 'slug'])] Workout $workout,
+        #[MapEntity(mapping: ['token' => 'shareToken'])] Workout $workout,
         SharedWorkoutCopier $copier,
     ): Response {
-        if (!$this->isCsrfTokenValid('copy_shared'.$workout->getSlug(), $request->getPayload()->getString('_token'))) {
-            return $this->redirectToRoute('app_public_share', ['slug' => $workout->getSlug()]);
+        $token = (string) $workout->getShareToken();
+        if (!$this->isCsrfTokenValid('copy_shared'.$token, $request->getPayload()->getString('_token'))) {
+            return $this->redirectToRoute('app_public_share', ['token' => $token]);
         }
 
         /** @var User $user */
         $user = $this->getUser();
 
-        if ($workout->getOwner() === $user) {
+        if ($workout->getOwner()?->getId() === $user->getId()) {
             return $this->redirectToRoute('app_workout_show', ['id' => $workout->getId()]);
         }
 
@@ -358,10 +510,10 @@ final class WorkoutController extends AbstractController
      * Une copie ne se déclenche jamais en GET, et la cible ne transite jamais en
      * query : aucune redirection ouverte possible.
      */
-    #[Route('/shared/{slug}/copy', name: 'app_workout_copy_shared_entry', methods: ['GET'])]
-    public function copySharedEntry(#[MapEntity(mapping: ['slug' => 'slug'])] Workout $workout): Response
+    #[Route('/shared/{token}/copy', name: 'app_workout_copy_shared_entry', methods: ['GET'], requirements: ['token' => ShareLink::TOKEN])]
+    public function copySharedEntry(#[MapEntity(mapping: ['token' => 'shareToken'])] Workout $workout): Response
     {
-        return $this->redirectToRoute('app_public_share', ['slug' => $workout->getSlug()]);
+        return $this->redirectToRoute('app_public_share', ['token' => $workout->getShareToken()]);
     }
 
     // ---- Édition des blocs -------------------------------------------------
@@ -441,10 +593,12 @@ final class WorkoutController extends AbstractController
         $payload = $request->getPayload();
 
         if ($this->isCsrfTokenValid('prescribed_quick_add'.$workout->getId(), $payload->getString('_token'))) {
-            $block = $this->findBlock($workout, $payload->getInt('blockId'));
             $exercise = $this->findLibraryExercise($payload->getInt('exerciseId'), $workout);
 
             if (null !== $exercise) {
+                // Résolu APRÈS l'exercice : un ajout refusé ne doit pas laisser derrière
+                // lui un bloc vide créé pour rien.
+                $block = $this->quickAddTarget($workout, $payload->getInt('blockId'));
                 // Ajout express : type par défaut déduit de l'activité (distance ×
                 // allure pour course/vélo/natation, séries × répétitions sinon), à
                 // affiner ensuite via le panneau de paramètres. Aucune valeur n'est posée.
@@ -495,30 +649,7 @@ final class WorkoutController extends AbstractController
     {
         $this->denyAccessUnlessGranted(WorkoutVoter::EDIT, $workout);
         $prescribed = $this->findPrescribed($workout, $prescribedId);
-        $detailedBefore = $prescribed->hasDetailedSets();
-        $countBefore = $prescribed->getWorkingSetCount();
-
-        $form = $this->createPrescribedForm($prescribed);
-        $form->handleRequest($request);
-
-        $listChanged = false;
-        if ($form->isSubmitted() && $form->isValid()) {
-            // En mode détaillé, le compteur `sets` pilote la liste : le monter ou le
-            // descendre ajoute/retire des séries de travail en fin (l'échauffement
-            // n'est jamais touché). C'est l'autre sens de la synchro.
-            if ($detailedBefore && $prescribed->getSets() !== $countBefore) {
-                foreach ($this->setSynchronizer->applyScalarToDetailed($prescribed, (int) $prescribed->getSets()) as $created) {
-                    $this->entityManager->persist($created);
-                }
-                $this->setSynchronizer->syncScalarFromDetailed($prescribed);
-                $listChanged = true;
-            }
-
-            $this->clearIrrelevantFields($prescribed);
-            // La durée estimée dérive du contenu : on la recalcule à chaque save.
-            $workout->setEstimatedDurationMinutes($this->estimator->estimateMinutes($workout));
-            $this->entityManager->flush();
-        }
+        $listChanged = $this->savePrescribed($request, $workout, $prescribed, 'app_workout_prescribed_edit');
 
         // La liste de séries a changé : le panneau entier doit être re-rendu, sinon
         // les lignes ajoutées/retirées n'apparaissent qu'au rechargement.
@@ -616,8 +747,10 @@ final class WorkoutController extends AbstractController
      * de résumé (pastille) : le champ en cours de saisie n'est pas re-rendu, le
      * focus reste. Exception : si le décompte de travail a bougé (une ligne est
      * passée en échauffement, ou en est sortie), le compteur `sets` affiché dans le
-     * panneau devient faux — on re-rend alors tout le panneau. Ça ne concerne que
-     * le `<select>` de type, jamais la saisie de reps/charge.
+     * panneau devient faux — on re-rend alors tout le panneau. Seul le `<select>`
+     * de type déclenche ce cas, mais le re-rendu emporte aussi les reps/charge
+     * qu'on tape juste après : c'est le compositeur (`keepPendingInput`) qui
+     * reporte cette saisie sur les nouveaux champs (#121).
      * Repli sans JS : redirection.
      */
     #[Route('/{id}/sets/{setId}', name: 'app_workout_set_edit', methods: ['POST'], requirements: ['id' => '\d+', 'setId' => '\d+'])]
@@ -712,7 +845,9 @@ final class WorkoutController extends AbstractController
      * `composer`). Deux raisons qui vont dans le même sens : le contenu change à
      * chaque exercice posé, et les deux planches pèsent ~70 Ko de tracés — les
      * poser dans le HTML initial ralentirait l'ouverture du compositeur pour une
-     * information qu'on ne lit pas en premier.
+     * information qu'on ne lit pas en premier. La page rend quand même le bandeau
+     * en esquisse (chiffres complets, silhouettes sans tracés) : sa place est prise
+     * avant que cette route ne remplisse le dessin (#125).
      *
      * Cette route ne mute rien : c'est le pendant de `app_plan_template_grid`,
      * qui re-rend la trame du plan sans la toucher.
@@ -826,9 +961,9 @@ final class WorkoutController extends AbstractController
 
     /**
      * Enregistre les paramètres d'un exercice depuis la mini-modale. Même
-     * traitement que editPrescribed, mais renvoie le stream du panneau rapide
-     * (#quick-panel) et non celui du compositeur (#workout-blocks). Sans JS, repli
-     * par redirection vers le compositeur.
+     * traitement que editPrescribed (`savePrescribed`), mais renvoie la ligne de
+     * résumé du panneau rapide et non celle du compositeur. Sans JS, repli par
+     * redirection vers le compositeur.
      */
     #[Route('/{id}/exercises/{prescribedId}/quick-edit', name: 'app_workout_prescribed_quick_edit', methods: ['POST'], requirements: ['id' => '\d+', 'prescribedId' => '\d+'])]
     public function quickEditPrescribed(Request $request, Workout $workout, int $prescribedId): Response
@@ -836,21 +971,23 @@ final class WorkoutController extends AbstractController
         $this->denyAccessUnlessGranted(WorkoutVoter::EDIT, $workout);
         $prescribed = $this->findPrescribed($workout, $prescribedId);
 
-        $form = $this->createPrescribedForm($prescribed, 'app_workout_prescribed_quick_edit');
-        $form->handleRequest($request);
+        $this->savePrescribed($request, $workout, $prescribed, 'app_workout_prescribed_quick_edit');
 
-        if ($form->isSubmitted() && $form->isValid()) {
-            $this->clearIrrelevantFields($prescribed);
-            // La durée estimée dérive du contenu : on la recalcule (elle s'affiche
-            // sur la case du plan, rafraîchie à la fermeture de la modale).
-            $workout->setEstimatedDurationMinutes($this->estimator->estimateMinutes($workout));
-            $this->entityManager->flush();
-        }
-
+        // Enregistrement automatique (#86) : seule la ligne de résumé de l'exercice
+        // est re-rendue, le formulaire reste ouvert sous le curseur. La liste de
+        // séries détaillées n'est pas affichée dans la modale : même quand le
+        // compteur l'a fait bouger, le résumé suffit à le refléter.
         if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
             $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
 
-            return $this->render('workout/stream/quick_panel.stream.html.twig', $this->quickPanelContext($workout));
+            return $this->render('workout/stream/quick_exo_summary.stream.html.twig', [
+                'prescribed' => $prescribed,
+                'rank' => $this->supersetLabels($workout)[(int) $prescribed->getId()] ?? null,
+                'summary' => $this->prescribedSummaries($workout)[(int) $prescribed->getId()] ?? '',
+                // Le rappel du titre suit le contenu : il paraît dès qu'il s'écarte (#93).
+                'workout' => $workout,
+                'staleTitle' => $this->lineageDivergence->titleMayBeStale($workout),
+            ]);
         }
 
         return $this->redirectToRoute('app_workout_edit', ['id' => $workout->getId()]);
@@ -931,6 +1068,34 @@ final class WorkoutController extends AbstractController
         }
 
         throw $this->createNotFoundException('Bloc introuvable dans cette séance.');
+    }
+
+    /**
+     * Bloc d'arrivée d'un ajout depuis la bibliothèque (#85). Un id fourni désigne
+     * un bloc de la séance. Sans id (0), c'est le premier ajout d'une séance vide :
+     * la notion de bloc n'a pas à être imposée avant le premier exercice, on en crée
+     * un (corps de séance, 1 tour) comme le ferait « Ajouter un bloc ». Si la séance
+     * a déjà des blocs (un autre onglet en a créé un entre-temps), on prend le
+     * premier plutôt que d'en empiler un second.
+     */
+    private function quickAddTarget(Workout $workout, int $blockId): Block
+    {
+        if ($blockId > 0) {
+            return $this->findBlock($workout, $blockId);
+        }
+
+        $blocks = $workout->getBlocks()->toArray();
+        if ([] !== $blocks) {
+            usort($blocks, static fn (Block $a, Block $b): int => $a->getPosition() <=> $b->getPosition());
+
+            return $blocks[0];
+        }
+
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $workout->addBlock($block);
+        $this->entityManager->persist($block);
+
+        return $block;
     }
 
     private function findPrescribed(Workout $workout, int $prescribedId): PrescribedExercise
@@ -1162,6 +1327,47 @@ final class WorkoutController extends AbstractController
         ]);
     }
 
+    /**
+     * Traitement commun du formulaire d'un exercice prescrit, au compositeur comme
+     * dans l'édition rapide d'une case : deux écrans, un seul enregistrement.
+     *
+     * En mode détaillé, le compteur `sets` pilote la liste : le monter ou le
+     * descendre ajoute/retire des séries de travail en fin (l'échauffement n'est
+     * jamais touché). C'est l'autre sens de la synchro. L'édition rapide le
+     * sautait : un compteur changé là laissait la liste à son ancien nombre.
+     *
+     * @return bool vrai si la liste de séries détaillées a changé
+     */
+    private function savePrescribed(Request $request, Workout $workout, PrescribedExercise $prescribed, string $route): bool
+    {
+        $detailedBefore = $prescribed->hasDetailedSets();
+        $countBefore = $prescribed->getWorkingSetCount();
+
+        $form = $this->createPrescribedForm($prescribed, $route);
+        $form->handleRequest($request);
+
+        if (!$form->isSubmitted() || !$form->isValid()) {
+            return false;
+        }
+
+        $listChanged = false;
+        if ($detailedBefore && $prescribed->getSets() !== $countBefore) {
+            foreach ($this->setSynchronizer->applyScalarToDetailed($prescribed, (int) $prescribed->getSets()) as $created) {
+                $this->entityManager->persist($created);
+            }
+            $this->setSynchronizer->syncScalarFromDetailed($prescribed);
+            $listChanged = true;
+        }
+
+        $this->clearIrrelevantFields($prescribed);
+        // La durée estimée dérive du contenu : on la recalcule à chaque save (elle
+        // s'affiche aussi sur la case du plan, rafraîchie à la fermeture de la modale).
+        $workout->setEstimatedDurationMinutes($this->estimator->estimateMinutes($workout));
+        $this->entityManager->flush();
+
+        return $listChanged;
+    }
+
     /** @return FormInterface<PrescribedExercise> */
     private function createPrescribedForm(PrescribedExercise $prescribed, string $route = 'app_workout_prescribed_edit'): FormInterface
     {
@@ -1265,24 +1471,35 @@ final class WorkoutController extends AbstractController
             }
         }
 
-        // Rangs de superset : la mini-modale n'édite que des valeurs, mais il faut
-        // voir qu'un exercice est enchaîné avant de toucher à ses reps.
-        $supersetLabels = [];
-        foreach ($this->planFlattener->flattenWorkout($workout)['blocks'] as $flatBlock) {
-            foreach ($flatBlock['exercises'] as $flat) {
-                if (null !== $flat['groupLabel']) {
-                    $supersetLabels[(int) $flat['prescribed']->getId()] = $flat['groupLabel'];
-                }
-            }
-        }
-
         return [
             'workout' => $workout,
             'prescribedForms' => $prescribedForms,
             'summaries' => $this->prescribedSummaries($workout),
-            'supersetLabels' => $supersetLabels,
+            'supersetLabels' => $this->supersetLabels($workout),
             'offProgram' => $this->offProgramRecap->forWorkout($workout),
+            'staleTitle' => $this->lineageDivergence->titleMayBeStale($workout),
         ];
+    }
+
+    /**
+     * Rangs de superset (« A1 ») par id d'exercice prescrit, pour les seuls
+     * exercices enchaînés. La mini-modale n'édite que des valeurs, mais il faut
+     * voir qu'un exercice est enchaîné avant de toucher à ses reps.
+     *
+     * @return array<int, string>
+     */
+    private function supersetLabels(Workout $workout): array
+    {
+        $labels = [];
+        foreach ($this->planFlattener->flattenWorkout($workout)['blocks'] as $flatBlock) {
+            foreach ($flatBlock['exercises'] as $flat) {
+                if (null !== $flat['groupLabel']) {
+                    $labels[(int) $flat['prescribed']->getId()] = $flat['groupLabel'];
+                }
+            }
+        }
+
+        return $labels;
     }
 
     /**
@@ -1414,9 +1631,10 @@ final class WorkoutController extends AbstractController
         foreach ($this->planFlattener->flattenWorkout($workout)['blocks'] as $flatBlock) {
             foreach ($flatBlock['exercises'] as $flat) {
                 // On expose aussi le repos dans la pastille de l'éditeur : sans ça
-                // il n'apparaissait nulle part pendant la composition.
+                // il n'apparaissait nulle part pendant la composition. Sauf sur un
+                // membre enchaîné : sa légende dit déjà « sans repos » (#85).
                 $summary = $flat['summary'];
-                if (null !== $flat['rest']) {
+                if (null !== $flat['rest'] && !$flat['chained']) {
                     $rest = 'repos '.$flat['rest'].' s';
                     $summary = '' !== $summary ? $summary.' · '.$rest : $rest;
                 }

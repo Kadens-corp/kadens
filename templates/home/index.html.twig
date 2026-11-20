@@ -1,9 +1,10 @@
 {% extends 'base.html.twig' %}
 {% import 'components/_activity.html.twig' as activity %}
 
-{# Accueil : « où j'en suis ». Le prochain objectif en aplat encre, le mois en
-   deux cartes (observance, répartition), puis les raccourcis vers les pages de
-   lecture. La fiche de l'athlète est sur /profile. #}
+{# Accueil : « où j'en suis ». Sur un agenda vide, le démarrage en trois
+   étapes ; sinon la prochaine séance. Puis le prochain objectif en aplat encre, les sept derniers jours (activités et muscles), le
+   mois en deux cartes (observance, répartition) et les raccourcis vers les
+   pages de lecture. La fiche de l'athlète est sur /profile. #}
 
 {% block title %}Accueil — Kadens{% endblock %}
 
@@ -13,14 +14,10 @@
     {% set monthNames = {1: 'janvier', 2: 'février', 3: 'mars', 4: 'avril', 5: 'mai', 6: 'juin', 7: 'juillet', 8: 'août', 9: 'septembre', 10: 'octobre', 11: 'novembre', 12: 'décembre'} %}
     {% set monthName = monthNames[today|date('n')] %}
 
-    {% for message in app.flashes('success') %}
-        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-
     <div class="kd-home">
         <div class="kd-home__head">
             <h1 class="kd-home__title">Salut {{ u.displayName }}</h1>
-            <p class="kd-eyebrow">{{ dayNames[today|date('N')] }} {{ today|date('j') }} {{ monthName }} · S{{ today|date('W') }}</p>
+            <p class="kd-eyebrow">{{ dayNames[today|date('N')] }} {{ today|date('j') }} {{ monthName }} · semaine {{ today|date('W')|number_format }}</p>
         </div>
 
         {# ============================== COACHING ============================ #}
@@ -32,6 +29,11 @@
                     <strong>{{ other ? other.displayName : 'Quelqu\'un' }}</strong>
                     {{ relation.coach == u ? 'te demande de l\'entraîner' : 'propose de t\'entraîner' }}
                 </p>
+                {# L'athlète sait à quoi il donne accès avant d'accepter (#66).
+                   Le coach qui reçoit une demande n'ouvre rien : pas de liste. #}
+                {% if relation.athlete and relation.athlete.id == u.id %}
+                    {{ include('components/_coaching_rights.html.twig', {coach: other}) }}
+                {% endif %}
                 <div class="kd-home__coachacts">
                     <form method="post" action="{{ path('app_coaching_respond', {id: relation.id}) }}">
                         <input type="hidden" name="_token" value="{{ csrf_token('coaching_respond' ~ relation.id) }}">
@@ -47,6 +49,144 @@
             </div>
         {% endfor %}
 
+        {# La réponse à une demande qu'on a envoyée (#79), jusqu'à ce qu'on ferme
+           le bandeau. « Programmer » le ferme aussi, en ouvrant la fiche. #}
+        {% for relation in coachingAnswered %}
+            {% set other = relation.otherParty(u) %}
+            {% set name = other ? other.displayName : 'Quelqu\'un' %}
+            {% set iAmCoach = relation.coach and relation.coach.id == u.id %}
+            {% set accepted = relation.isActive %}
+            <div class="kd-home__coach">
+                {{ ux_icon(accepted ? 'lucide:user-check' : 'lucide:user-x') }}
+                <p class="kd-home__coachtext">
+                    <strong>{{ name }}</strong>
+                    {% if accepted %}
+                        {{ iAmCoach ? 'a accepté ton invitation. Tu peux programmer ses séances.' : 'a accepté de t\'entraîner.' }}
+                    {% else %}
+                        {{ iAmCoach ? 'a refusé ton invitation.' : 'a refusé ta demande de coaching.' }}
+                    {% endif %}
+                </p>
+                <form method="post" action="{{ path('app_coaching_acknowledge', {id: relation.id}) }}" class="kd-home__coachacts">
+                    <input type="hidden" name="_token" value="{{ csrf_token('coaching_acknowledge' ~ relation.id) }}">
+                    {% if accepted and iAmCoach and u.isCoach %}
+                        <button type="submit" name="then" value="athlete" class="kd-btn kd-btn--primary kd-btn--sm">Programmer</button>
+                    {% endif %}
+                    <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm kd-home__decline">Compris</button>
+                </form>
+            </div>
+        {% endfor %}
+
+        {# Ce que le coach a ajouté ces sept derniers jours (#80), par coach.
+           Rien à fermer : l'encart s'éteint quand la fenêtre glisse (cf.
+           CoachContributions). Chaque morceau mène là où le contenu se trouve,
+           et le badge « Coach » l'y désigne. #}
+        {% for added in coachAdded %}
+            {% set parts = [] %}
+            {% if added.scheduled %}
+                {% set parts = parts|merge([{n: added.scheduled, label: (added.scheduled > 1 ? 'séances' : 'séance') ~ ' à ton agenda', href: path('app_calendar_index')}]) %}
+            {% endif %}
+            {% if added.workouts %}
+                {% set parts = parts|merge([{n: added.workouts, label: (added.workouts > 1 ? 'séances' : 'séance') ~ ' dans « Mes séances »', href: path('app_workout_index')}]) %}
+            {% endif %}
+            {% if added.plans %}
+                {% set parts = parts|merge([{n: added.plans, label: added.plans > 1 ? 'plans' : 'plan', href: path('app_plan_template_index')}]) %}
+            {% endif %}
+            <div class="kd-home__coach kd-home__coachadded">
+                {{ ux_icon('lucide:user-check') }}
+                <p class="kd-home__coachtext">
+                    <strong>{{ added.coach.displayName }}</strong> a ajouté ces 7 derniers jours :
+                    {% for part in parts -%}
+                        <a href="{{ part.href }}">{{ part.n }} {{ part.label }}</a>{{ loop.last ? '.' : (loop.revindex == 2 ? ' et ' : ', ') }}
+                    {%- endfor %}
+                </p>
+            </div>
+        {% endfor %}
+
+        {# ============================== DÉMARRAGE =========================== #}
+        {# Un compte qui n'a rien dans son agenda ne sait pas par où commencer
+           (A-01). Les étapes se cochent sur l'état réel des données, la
+           première non faite est mise en avant. Le bloc disparaît dès qu'une
+           séance est dans l'agenda (cf. HomeController::onboarding). #}
+        {% if onboarding %}
+            {% set placeTarget = onboarding.filledPlan
+                ? path('app_calendar_index', {place: onboarding.filledPlan.id})
+                : path('app_calendar_index') %}
+            {% set steps = [
+                { done: onboarding.workout, icon: 'lucide:dumbbell', title: 'Crée une séance',
+                  text: 'Choisis tes exercices et règle séries, charges ou distances.',
+                  href: path('app_workout_index') },
+                { done: onboarding.plan, icon: 'lucide:layers', title: 'Assemble-la dans un plan',
+                  text: 'Répartis tes séances sur les jours de la semaine, pour plusieurs semaines.',
+                  href: path('app_plan_template_index') },
+                { done: false, icon: 'lucide:calendar-plus', title: 'Place le plan dans ton agenda',
+                  text: 'Choisis une date de départ : chaque séance prend sa date.',
+                  href: placeTarget },
+            ] %}
+            {% set current = null %}
+            {% for step in steps %}{% if current is null and not step.done %}{% set current = loop.index %}{% endif %}{% endfor %}
+            <section class="kd-home__start" aria-labelledby="home-start-title">
+                <div class="kd-home__starthead">
+                    <h2 id="home-start-title" class="kd-home__starttitle">Par où commencer</h2>
+                    <p class="kd-home__startlead">Kadens sert à préparer tes entraînements : tu composes tes séances, tu les assembles en plans, puis tu les suis dans ton agenda.</p>
+                </div>
+                <ol class="kd-home__steps">
+                    {% for step in steps %}
+                        <li class="kd-home__step{{ step.done ? ' kd-home__step--done' }}{{ loop.index == current ? ' kd-home__step--current' }}">
+                            <a href="{{ step.href }}" class="kd-home__steplink">
+                                <span class="kd-home__stepmark" aria-hidden="true">
+                                    {{ ux_icon(step.done ? 'lucide:circle-check' : step.icon) }}
+                                </span>
+                                <span class="kd-home__stepbody">
+                                    <span class="kd-eyebrow kd-home__stepnum">Étape {{ loop.index }}{{ step.done ? ' · faite' }}</span>
+                                    <span class="kd-home__steptitle">{{ step.title }}</span>
+                                    <span class="kd-home__steptext">{{ step.text }}</span>
+                                </span>
+                                <span class="kd-home__linkarrow">{{ ux_icon('lucide:arrow-right') }}</span>
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ol>
+            </section>
+        {% else %}
+            {# ========================= PROCHAINE SÉANCE ===================== #}
+            {# La séance qu'il reste à faire, le jour qui en porte une : toutes
+               celles du jour s'il y en a plusieurs (séance double). Chaque ligne
+               ouvre la séance datée. #}
+            {% set first = nextSessions|first %}
+            <section class="kd-home__next" aria-labelledby="home-next-title">
+                {% if first %}
+                    {% set day = first.scheduledDate %}
+                    {% set gap = day.diff(today).days %}
+                    <p id="home-next-title" class="kd-eyebrow kd-home__nexteyebrow">
+                        {%- if gap == 0 -%}
+                            Aujourd'hui
+                        {%- else -%}
+                            Ta prochaine séance · {{ gap == 1 ? 'demain' : dayNames[day|date('N')]|lower ~ ' ' ~ day|date('j') ~ ' ' ~ monthNames[day|date('n')] }}
+                        {%- endif -%}
+                    </p>
+                    <ul class="kd-home__nextlist">
+                        {% for session in nextSessions %}
+                            <li>
+                                <a href="{{ path('app_scheduled_workout_show', {id: session.id}) }}" class="kd-home__nextitem">
+                                    <span class="kd-home__nexttitle">{{ session.displayTitle }}</span>
+                                    {% if session.sourcePlanTemplate %}
+                                        <span class="kd-home__nextplan">{{ ux_icon('lucide:layers') }} {{ session.sourcePlanTemplate.title }}</span>
+                                    {% endif %}
+                                    <span class="kd-home__linkarrow">{{ ux_icon('lucide:arrow-right') }}</span>
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p id="home-next-title" class="kd-eyebrow kd-home__nexteyebrow">Ta prochaine séance</p>
+                    <a href="{{ path('app_calendar_index') }}" class="kd-home__nextitem">
+                        <span class="kd-home__nexttitle kd-home__nexttitle--empty">Rien de prévu pour l'instant. Ouvre ton agenda pour placer ta prochaine séance.</span>
+                        <span class="kd-home__linkarrow">{{ ux_icon('lucide:arrow-right') }}</span>
+                    </a>
+                {% endif %}
+            </section>
+        {% endif %}
+
         {# ========================== PROCHAIN OBJECTIF ======================= #}
         {% set goal = goals|first %}
         {% if goal %}
@@ -59,7 +199,7 @@
                         <h2 class="kd-home__goaltitle">{{ goal.title }}</h2>
                         <div class="kd-home__goalmeta">
                             {% if goal.activity %}{{ activity.badge(goal.activity) }}{% endif %}
-                            <span class="kd-home__goalprio" title="{{ goal.priority.label }}">Priorité {{ goal.priority.shortLabel }}</span>
+                            <span class="kd-home__goalprio" title="Priorité : {{ goal.priority.label|lower }}">Priorité {{ goal.priority.shortLabel }}</span>
                             {% if goal.targetValue %}
                                 <span class="kd-home__goaltarget">{{ ux_icon('lucide:target') }} {{ goal.targetValue }}</span>
                             {% endif %}
@@ -75,7 +215,9 @@
                     </div>
                 {% endif %}
             </a>
-        {% else %}
+        {% elseif not onboarding %}
+            {# Pas d'objectif : une invitation discrète, mais pas sur un compte
+               qui démarre, où elle doublerait les étapes (A-01). #}
             <div class="kd-card">
                 <div class="kd-empty">
                     {{ ux_icon('lucide:target') }}
@@ -84,16 +226,86 @@
             </div>
         {% endif %}
 
+        {# =========================== 7 DERNIERS JOURS ======================= #}
+        {# Ce qu'on vient de faire, d'un coup d'œil (#131) : les séances faites par
+           activité (une séance = une nature, la somme vaut le total), et les
+           muscles travaillés sur le réalisé. Fenêtre glissante J-6 → J, cf.
+           LastSevenDays. Le dessin ne porte rien seul : chaque zone est reprise
+           chiffrée dans la légende, comme le bandeau de volume d'une séance. #}
+        {% if week %}
+            {% set load = week.load %}
+            {% set weekMax = week.activities|reduce((m, r) => max(m, r.sessions), 0) %}
+            {% set hasGym = load.areas is not empty or load.fullBody > 0 or load.unmapped > 0 %}
+            <section class="kd-home__week" aria-labelledby="home-week-title">
+                <p id="home-week-title" class="kd-eyebrow">
+                    7 derniers jours{{ week.done > 0 ? ' · ' ~ week.done ~ ' séance' ~ (week.done > 1 ? 's') ~ ' faite' ~ (week.done > 1 ? 's') }}
+                </p>
+
+                {% if week.done == 0 and not hasGym %}
+                    <p class="kd-observance__empty">{{ ux_icon('lucide:activity') }} Aucune séance faite ces 7 derniers jours.</p>
+                {% else %}
+                    <div class="kd-home__weekbody">
+                        <ul class="kd-home__acts kd-home__weekacts">
+                            {% for row in week.activities %}
+                                <li class="kd-home__act{{ row.activity ? ' kd-act--' ~ activity.modifier(row.activity) }}">
+                                    <span class="kd-home__actname">{{ ux_icon(activity.icon(row.activity)|trim) }} {{ activity.label(row.activity) }}</span>
+                                    <span class="kd-home__acttrack"><span class="kd-home__actfill" style="width:{{ (row.sessions / weekMax * 100)|round }}%"></span></span>
+                                    <span class="kd-home__actcount">{{ row.sessions }}</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+
+                        <div class="kd-home__weekmuscles">
+                            {% if hasGym %}
+                                {{ include('components/_body_map.html.twig', {plates: week.plates, levels: load.levels, height: 200}, with_context = false) }}
+                                <div class="kd-home__weeklegend">
+                                    <h2 class="kd-wkvol__title">Muscles travaillés</h2>
+                                    {% if load.areas is not empty %}
+                                        <ul class="kd-wkvol__areas">
+                                            {% for item in load.areas %}
+                                                <li class="kd-wkvol__area">
+                                                    <span class="kd-wkvol__dot kd-wkvol__dot--{{ item.level }}" aria-hidden="true"></span>
+                                                    <span class="kd-wkvol__areaname">{{ item.area.label }}</span>
+                                                    <span class="kd-wkvol__areasets">{{ item.sets }} série{{ item.sets > 1 ? 's' }}</span>
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% endif %}
+                                    {% if load.fullBody > 0 or load.unmapped > 0 %}
+                                        <p class="kd-wkvol__aside">
+                                            {%- if load.fullBody > 0 %}{{ load.fullBody }} série{{ load.fullBody > 1 ? 's' }} « corps entier », hors du dessin{% endif -%}
+                                            {%- if load.fullBody > 0 and load.unmapped > 0 %} · {% endif -%}
+                                            {%- if load.unmapped > 0 %}{{ load.unmapped }} série{{ load.unmapped > 1 ? 's' }} sans zone déclarée{% endif -%}
+                                        </p>
+                                    {% endif %}
+                                    <p class="kd-wkvol__hint">D'après les séries de travail consignées. Une série compte pour chaque zone de l'exercice.</p>
+                                </div>
+                            {% else %}
+                                {# Des séances faites sans une série consignée :
+                                   une sortie, ou de la muscu cochée sans réalisé.
+                                   Le corps reste nu, et la carte dit pourquoi. #}
+                                <p class="kd-home__weeknone">Aucune série consignée sur la période : les muscles se lisent sur le réalisé.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+
+                <a href="{{ path('app_profile_history') }}" class="kd-home__weeklink">Voir l'historique {{ ux_icon('lucide:arrow-right') }}</a>
+            </section>
+        {% endif %}
+
         {# =============================== LE MOIS ============================ #}
         {# Les deux cartes ouvrent les statistiques sur le mois courant : ce sont
-           les mêmes chiffres (TrainingStats, même fenêtre). #}
+           les mêmes chiffres (TrainingStats, même fenêtre). Chaque séance faite
+           compte UNE fois, sous sa nature (SessionNature) : le total vaut le
+           nombre de séances faites de l'observance (#62). #}
         {% set monthStats = path('app_profile_stats', {range: month.period.queryValue}) %}
         {% set acts = month.activityCounts %}
         {% set actTotal = acts|reduce((sum, r) => sum + r.sessions, 0) %}
         {% set actMax = acts|reduce((m, r) => max(m, r.sessions), 0) %}
         <div class="kd-grid kd-grid--2">
             <a href="{{ monthStats }}" class="kd-home__card">
-                <p class="kd-eyebrow">{{ monthName|capitalize }} · observance</p>
+                <p class="kd-eyebrow">{{ monthName|capitalize }} · assiduité</p>
                 {{ include('components/_status_stats.html.twig', {stats: month.adherence, hero: true}) }}
             </a>
             <a href="{{ monthStats }}" class="kd-home__card">
@@ -103,8 +315,8 @@
                 {% else %}
                     <ul class="kd-home__acts">
                         {% for row in acts %}
-                            <li class="kd-home__act kd-act--{{ activity.modifier(row.activity) }}">
-                                <span class="kd-home__actname">{{ ux_icon(activity.icon(row.activity)|trim) }} {{ row.activity.label }}</span>
+                            <li class="kd-home__act{{ row.activity ? ' kd-act--' ~ activity.modifier(row.activity) }}">
+                                <span class="kd-home__actname">{{ ux_icon(activity.icon(row.activity)|trim) }} {{ activity.label(row.activity) }}</span>
                                 <span class="kd-home__acttrack"><span class="kd-home__actfill" style="width:{{ (row.sessions / actMax * 100)|round }}%"></span></span>
                                 <span class="kd-home__actcount">{{ row.sessions }}</span>
                             </li>

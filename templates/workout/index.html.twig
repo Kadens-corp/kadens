@@ -4,14 +4,10 @@
 {% block title %}Mes séances{% endblock %}
 
 {% block body %}
-    {% for message in app.flashes('success') %}
-        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-
     <div class="kd-pagehead">
         <div>
-            <p class="kd-eyebrow">Bibliothèque</p>
-            <h1 class="kd-title">Séances</h1>
+            <p class="kd-eyebrow">Planification</p>
+            <h1 class="kd-title">Mes séances</h1>
             <p class="kd-lead">Tes séances : blocs, exercices et paramètres. La brique assemblée dans les plans et le calendrier.</p>
         </div>
         {{ include('components/_create_button.html.twig', {
@@ -73,6 +69,7 @@
                                     {% endif %}
                                 </div>
                                 {{ include('components/_owner_badge.html.twig', {owner: workout.owner}) }}
+                                {{ include('components/_added_by.html.twig', {by: workout.addedBy}, with_context = false) }}
                             </div>
                         </div>
 
@@ -89,21 +86,40 @@
                             <a href="{{ path('app_workout_edit', {id: workout.id}) }}" class="kd-btn kd-btn--ghost kd-btn--sm kd-libcard__foot-sep">
                                 {{ ux_icon('lucide:square-pen') }} Éditer
                             </a>
-                            <form method="post" action="{{ path('app_workout_duplicate', {id: workout.id}) }}" style="margin:0;">
-                                <input type="hidden" name="_token" value="{{ csrf_token('duplicate' ~ workout.id) }}">
-                                <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm" title="Dupliquer" aria-label="Dupliquer">
-                                    {{ ux_icon('lucide:copy') }}
-                                </button>
-                            </form>
+                            {# La séance d'un athlète (#83) : dupliquer la copie chez lui, ce
+                               que le coach ne devine pas, ou chez soi. Le choix se fait avant
+                               le clic, dans un menu, plutôt qu'en silence. #}
+                            {% if workout.owner and workout.owner.id != app.user.id %}
+                                <details class="kd-kebab kd-kebab--row" data-controller="dismiss">
+                                    <summary class="kd-kebab__trigger kd-kebab__trigger--plain"
+                                             title="Dupliquer chez {{ workout.owner.displayName }} ou chez moi"
+                                             aria-label="Dupliquer {{ workout.title }} : chez {{ workout.owner.displayName }} ou chez moi">
+                                        {{ ux_icon('lucide:copy') }}
+                                    </summary>
+                                    <div class="kd-kebab__panel">
+                                        {{ include('workout/_duplicate_items.html.twig', {workout: workout}, with_context = false) }}
+                                    </div>
+                                </details>
+                            {% else %}
+                                <form method="post" action="{{ path('app_workout_duplicate', {id: workout.id}) }}" style="margin:0;">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('duplicate' ~ workout.id) }}">
+                                    <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm" title="Dupliquer" aria-label="Dupliquer">
+                                        {{ ux_icon('lucide:copy') }}
+                                    </button>
+                                </form>
+                            {% endif %}
                         </div>
                     </article>
                 {% endfor %}
             </div>
 
-            <div class="kd-card kd-empty" data-filter-target="empty" hidden>
-                {{ ux_icon('lucide:search') }}
-                <div>Aucune séance ne correspond à ta recherche.</div>
-            </div>
+            {{ include('components/_filter_empty.html.twig', {
+                search: 'Aucune séance ne correspond à ta recherche.',
+                filters: 'Aucune séance ne correspond à ces filtres.',
+                ownerFacets: ownerFacets,
+                mine: 'Tu n\'as pas encore de séance à toi.',
+                theirs: 'Celles de',
+            }) }}
         {% endif %}
     </div>
 {% endblock %}

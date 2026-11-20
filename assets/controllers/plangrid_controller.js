@@ -1,6 +1,8 @@
 import { Controller } from '@hotwired/stimulus';
 import { renderStreamMessage } from '@hotwired/turbo';
 import Sortable from 'sortablejs';
+import HoverPreview from 'hover-preview';
+import { SAVE_EVENT, ensureSaved, resetSaveStatus, trackSave } from 'save-status';
 
 /*
  * Éditeur de trame de plan. Deux responsabilités, toutes deux en amélioration
@@ -28,8 +30,11 @@ import Sortable from 'sortablejs';
  *
  * 2. Édition rapide : cliquer une séance ouvre une mini-modale. On charge en `fetch`
  *    le panneau de ses exercices (`app_workout_quick_panel`) dans #quick-panel, où
- *    chaque paramètre (reps/séries/repos…) est éditable. Enregistrer un exercice
- *    poste en `fetch` (format stream) et met à jour #quick-panel, sans recharger.
+ *    chaque paramètre (reps/séries/repos…) est éditable. Chaque champ s'enregistre
+ *    seul au changement, comme au compositeur (#86) : un seul mode d'enregistrement
+ *    dans toute l'app, plus de bouton par exercice qu'on oublie avant de fermer.
+ *    Le serveur ne renvoie que la ligne de résumé de l'exercice, le formulaire
+ *    reste ouvert. L'indicateur `save-status` de la modale dit où on en est.
  *    La modale porte `data-turbo="false"` : Turbo n'intercepte rien, on applique
  *    nous-mêmes les streams (comme le compositeur). Le lien « Édition complète »
  *    renvoie au compositeur pour la structure (blocs, ordre). À la fermeture, si un
@@ -38,7 +43,7 @@ import Sortable from 'sortablejs';
  *    ferait remonter en haut au moindre ajustement.
  */
 export default class extends Controller {
-    static targets = ['cell', 'dialog', 'panel', 'fullLink', 'palette', 'paletteList', 'palettecard',
+    static targets = ['cell', 'dialog', 'heading', 'headingTitle', 'panel', 'fullLink', 'palette', 'paletteList', 'palettecard',
         'sheet', 'search', 'targetLabel'];
 
     static values = { gridUrl: String };
@@ -54,6 +59,9 @@ export default class extends Controller {
     initialize() {
         this.sortables = new WeakMap();
         this.dirty = false;
+        // Enregistrements de la modale encore en vol : la trame ne se rafraîchit
+        // qu'une fois tous revenus, sinon elle relirait l'état d'avant.
+        this.saving = new Set();
         // Palette : filtre client + mode tampon (une séance « armée » se pose au clic
         // sur les cases). L'état survit aux re-render de #plan-grid (porté ici).
         this.libQuery = '';
@@ -65,6 +73,7 @@ export default class extends Controller {
         // carte pose directement, sans armer.
         this.targetWeek = null;
         this.targetDay = null;
+        this.hoverPreview = new HoverPreview();
     }
 
     connect() {
@@ -100,6 +109,7 @@ export default class extends Controller {
         this.element.removeEventListener('submit', this.onPanelSubmit);
         document.removeEventListener('keydown', this.onKeydown);
         document.removeEventListener('click', this.onOutside);
+        this.hoverPreview.hide();
         // Une navigation Turbo pendant que la feuille est ouverte laisserait la page
         // suivante figée : l'état vit sur <body>, il ne part pas avec le contrôleur.
         document.body.classList.remove('kd-noscroll');
@@ -180,12 +190,29 @@ export default class extends Controller {
     // ---- Mini-modale d'édition rapide -------------------------------------
 
     dialogTargetConnected(el) {
+        // Échap ferme le <dialog> sans forcément faire quitter le champ en cours :
+        // on le quitte nous-mêmes, pour que son `change` parte (et s'enregistre)
+        // avant la fermeture. Le bouton et le voile, eux, prennent le focus au clic.
+        el.addEventListener('cancel', () => {
+            if (el.contains(document.activeElement)) document.activeElement.blur();
+        });
         // ESC / bouton / backdrop ferment le <dialog> et déclenchent l'event `close`.
         // Un enregistrement change la durée estimée affichée sur la case et les
         // volumes de la semaine : on re-rend la trame seule, sans toucher au reste
         // de la page (donc sans perdre la position de défilement).
-        el.addEventListener('close', () => {
-            if (this.dirty) this.refreshGrid();
+        el.addEventListener('close', async () => {
+            if (!this.dirty) return;
+            await Promise.all([...this.saving]);
+            this.refreshGrid();
+        });
+        // Tout enregistrement réussi dans la modale salit la trame, y compris ceux
+        // qui ne passent pas par `onPanelSubmit` : le titre de la case, renommé en
+        // ligne (#93). Un renommage validé par la fermeture même (Échap quitte le
+        // champ, cf. `cancel`) aboutit modale déjà fermée : on re-rend alors ici.
+        el.addEventListener(SAVE_EVENT, (event) => {
+            if (event.detail?.state !== 'saved') return;
+            this.dirty = true;
+            if (!el.open && this.saving.size === 0) this.refreshGrid();
         });
     }
 
@@ -212,7 +239,9 @@ export default class extends Controller {
         if (!panelUrl || !this.hasPanelTarget || !this.hasDialogTarget) return;
 
         this.dirty = false;
+        resetSaveStatus(this.dialogTarget);
         if (this.hasFullLinkTarget && fullUrl) this.fullLinkTarget.href = fullUrl;
+        this.renderHeading(button);
         this.panelTarget.innerHTML = '<p class="kd-quickedit__loading">Chargement…</p>';
         this.dialogTarget.showModal();
 
@@ -225,8 +254,36 @@ export default class extends Controller {
         }
     }
 
-    /** Enregistrement d'un exercice depuis le panneau : fetch + Turbo Stream appliqué. */
-    async onPanelSubmit(event) {
+    /**
+     * Titre de la modale : la case éditée, « S2 · mardi · Fractionné 6 x 400 m »
+     * (#94), posé avant le chargement du panneau. Le titre de la séance est aussi
+     * le champ de renommage (`inline-edit`, #93) : on lui donne l'adresse et le
+     * jeton de CETTE case, et la valeur de départ qu'il relit à l'ouverture.
+     */
+    renderHeading(button) {
+        if (!this.hasHeadingTarget || !this.hasHeadingTitleTarget) return;
+        const title = button.querySelector('.kd-planitem__title')?.textContent.trim() ?? '';
+        const el = this.headingTitleTarget;
+
+        this.headingTarget.textContent = button.dataset.cellLabel ?? '';
+        el.textContent = title;
+        el.dataset.value = title;
+        el.dataset.inlineEditUrlValue = button.dataset.metaUrl ?? '';
+        el.dataset.inlineEditTokenValue = button.dataset.metaToken ?? '';
+    }
+
+    /** Un champ du panneau a changé : on enregistre son exercice (cf. onPanelSubmit). */
+    submitForm(event) {
+        event.target.closest('form')?.requestSubmit();
+    }
+
+    /**
+     * Enregistrement depuis le panneau : fetch + Turbo Stream appliqué, suivi par
+     * l'indicateur de la modale. Ce qui part est figé au premier essai, pour que
+     * « Réessayer » renvoie la même chose. Un échec ne recharge plus la page : ça
+     * fermait la modale et emportait la saisie.
+     */
+    onPanelSubmit(event) {
         const form = event.target;
         if (!(form instanceof HTMLFormElement)) return;
         if (!this.hasPanelTarget || !this.panelTarget.contains(form)) return;
@@ -234,18 +291,28 @@ export default class extends Controller {
         event.preventDefault();
         this.dirty = true;
 
-        try {
-            const response = await fetch(form.action, {
-                method: (form.getAttribute('method') || 'post').toUpperCase(),
-                body: new FormData(form),
-                headers: { Accept: 'text/vnd.turbo-stream.html' },
-                credentials: 'same-origin',
-            });
-            renderStreamMessage(await response.text());
-        } catch (error) {
-            console.error('Quick edit failed:', error);
-            window.location.reload();
-        }
+        const method = (form.getAttribute('method') || 'post').toUpperCase();
+        const { action } = form;
+        const body = new FormData(form);
+
+        const run = () => {
+            const request = (async () => {
+                const response = await ensureSaved(await fetch(action, {
+                    method,
+                    body,
+                    headers: { Accept: 'text/vnd.turbo-stream.html' },
+                    credentials: 'same-origin',
+                }));
+                renderStreamMessage(await response.text());
+            })();
+            const settled = request.catch(() => {});
+            this.saving.add(settled);
+            settled.then(() => this.saving.delete(settled));
+
+            return request;
+        };
+
+        trackSave(form, run);
     }
 
     close() {
@@ -331,7 +398,7 @@ export default class extends Controller {
     /** Rappelle la case visée en tête de palette (la feuille masque la trame). */
     showTargetLabel(label) {
         if (!this.hasTargetLabelTarget) return;
-        this.targetLabelTarget.textContent = label ? `Poser dans ${label}` : '';
+        this.targetLabelTarget.textContent = label ? `Ajouter en ${label}` : '';
         this.targetLabelTarget.hidden = label === '';
     }
 
@@ -434,44 +501,14 @@ export default class extends Controller {
     showPreview(event) {
         // Pas d'aperçu pendant qu'une séance est armée (les cases sont en mode pose).
         if (this.armedWorkoutId) return;
-        // Souris uniquement : au doigt, un tap émet un `mouseenter` synthétique
-        // qui ouvrirait un popover `manual` que plus rien ne referme.
-        if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
         const entry = event.currentTarget;
-        const preview = entry.querySelector('.kd-planpreview');
-        if (!preview || typeof preview.showPopover !== 'function') return;
-
-        this.hidePreview();
-        try {
-            preview.showPopover();
-        } catch (error) {
-            return;
-        }
-
-        // Positionnement manuel près de la case (le popover est en top-layer, donc
-        // non rogné par l'overflow de la grille).
-        const rect = entry.getBoundingClientRect();
-        const pw = preview.offsetWidth;
-        const ph = preview.offsetHeight;
-        let left = rect.right + 8;
-        if (left + pw > window.innerWidth - 8) left = rect.left - pw - 8;
-        if (left < 8) left = 8;
-        let top = rect.top;
-        if (top + ph > window.innerHeight - 8) top = window.innerHeight - ph - 8;
-        if (top < 8) top = 8;
-        preview.style.left = `${left}px`;
-        preview.style.top = `${top}px`;
-        this.openPreview = preview;
+        // Mécanique partagée avec `preview` (souris seulement, délai, placement qui
+        // ne recouvre jamais la case, fermeture au clic et au défilement) : #69.
+        this.hoverPreview.schedule(entry, entry.querySelector('.kd-planpreview'), event);
     }
 
     hidePreview() {
-        if (!this.openPreview) return;
-        try {
-            this.openPreview.hidePopover();
-        } catch (error) {
-            // Déjà retiré du DOM (re-render de grille) : rien à faire.
-        }
-        this.openPreview = null;
+        this.hoverPreview.hide();
     }
 
     placeWorkout(workoutId, week, day) {

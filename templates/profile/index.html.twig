@@ -7,10 +7,6 @@
 {% block title %}Profil — Kadens{% endblock %}
 
 {% block body %}
-    {% for message in app.flashes('success') %}
-        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-
     {% set u = app.user %}
     <div class="kd-pfile">
         {{ include('profile/_hero.html.twig', {athlete: u, stats: stats, own: true}) }}

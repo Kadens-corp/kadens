@@ -97,7 +97,8 @@
   .kd-kebab__trigger,
   .kd-usermenu__trigger,
   .kd-calevent__toggle,
-  .kd-calevent__eye {
+  .kd-calevent__eye,
+  .kd-statusmenu__item {
     min-width: 44px;
     min-height: 44px;
   }
@@ -121,6 +122,7 @@
 @media print {
   .kd-header,
   .kd-skip,
+  .kd-toasts,
   .kd-wk__bar,
   .kd-wk__tablist { display: none !important; }
 

@@ -3,13 +3,6 @@
 {% block title %}{{ athlete.displayName }} — Espace coach — Kadens{% endblock %}
 
 {% block body %}
-    {% for message in app.flashes('success') %}
-        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-    {% for message in app.flashes('error') %}
-        <p class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ message }}</p>
-    {% endfor %}
-
     {# ============================== EN-TÊTE ATHLÈTE ========================= #}
     <header class="kd-phero">
         <span class="kd-phero__avatar" aria-hidden="true">{{ athlete.displayName|first|upper }}</span>
@@ -19,7 +12,7 @@
             {% set vitals = [
                 athlete.age is not null ? athlete.age ~ ' ans',
                 athlete.sex ? athlete.sex.label,
-                athlete.weightKg is not null ? (athlete.weightKg|number_format(athlete.weightKg == athlete.weightKg|round ? 0 : 1, ',', ' ')) ~ ' kg',
+                athlete.weightKg is not null ? athlete.weightKg|weight,
                 athlete.mainGoal ? athlete.mainGoal.label,
                 athlete.trainingYears is not null ? athlete.trainingYears ~ ' an' ~ (athlete.trainingYears > 1 ? 's') ~ ' de pratique',
             ]|filter(v => v) %}
@@ -43,15 +36,20 @@
             <a href="{{ path('app_coaching_index') }}#athletes" class="kd-btn kd-btn--ghost">
                 {{ ux_icon('lucide:arrow-left') }} Mes athlètes
             </a>
+            {{ include('components/_help.html.twig', {topic: 'athlete', title: 'Comment marche cette fiche', athlete: athlete}, with_context = false) }}
         </div>
     </header>
+
+    {# Tes notes sur lui (#65) : la seule chose de la fiche qu'il ne verra jamais.
+       Aussi rappelées en tête du compositeur et de l'éditeur de plan. #}
+    {{ include('components/_coach_notes.html.twig', {coaching: coaching}, with_context = false) }}
 
     {# ------------------------------ SES OBJECTIFS --------------------------- #}
     {% if goals is not empty %}
         <section class="kd-section">
             <div class="kd-pagehead kd-pagehead--sub">
                 <div>
-                    <p class="kd-eyebrow kd-eyebrow--accent">Cap</p>
+                    <p class="kd-eyebrow kd-eyebrow--accent">Ses objectifs</p>
                     <h2 class="kd-title kd-title--sm">Ses prochaines échéances</h2>
                 </div>
             </div>
@@ -69,7 +67,7 @@
             <div>
                 <p class="kd-eyebrow kd-eyebrow--accent">Créer</p>
                 <h2 class="kd-title kd-title--sm">Programmer pour {{ athlete.displayName }}</h2>
-                <p class="kd-lead">Ce que tu crées ici lui appartient : tu ouvres ensuite le compositeur habituel pour le composer.</p>
+                <p class="kd-lead">Ce que tu crées ici lui appartient : tu le remplis ensuite dans l'éditeur habituel.</p>
             </div>
         </div>
 
@@ -84,31 +82,43 @@
                                placeholder="Sortie longue en Z2" required>
                     </div>
                     <button type="submit" class="kd-btn kd-btn--primary">
-                        {{ ux_icon('lucide:plus') }} Créer et composer
+                        {{ ux_icon('lucide:plus') }} Créer et ouvrir
                     </button>
                 </form>
             </section>
 
             {# Une séance de SA bibliothèque à lui, copiée chez l'athlète : l'original
-               reste intact, la copie appartient à l'athlète (#58). #}
-            <section class="kd-card">
+               reste intact, la copie appartient à l'athlète (#58). Le dire avant
+               l'envoi, et prévenir le doublon quand il en a déjà une copie (#82). #}
+            <section class="kd-card" id="une-de-mes-seances">
                 <h3 class="kd-card__title">{{ ux_icon('lucide:copy') }} Une de mes séances</h3>
                 {% if coachWorkouts is empty %}
-                    <p class="kd-lead">Ta bibliothèque est vide : compose d'abord une séance dans « Mes séances ».</p>
+                    <p class="kd-lead">Tu n'as pas encore de séance : crée-en une dans « Mes séances ».</p>
                 {% else %}
-                    <form method="post" action="{{ path('app_coach_workout_copy', {id: athlete.id}) }}" class="kd-coachform">
+                    <p class="kd-coachform__hint">Une copie indépendante sera créée chez {{ athlete.displayName }}. Tes modifications futures ne la toucheront pas.</p>
+                    <form method="post" action="{{ path('app_coach_workout_copy', {id: athlete.id}) }}" class="kd-coachform"
+                          data-controller="copy-notice"
+                          data-copy-notice-copies-value="{{ existingCopies|json_encode(constant('JSON_FORCE_OBJECT')) }}"
+                          data-copy-notice-name-value="{{ athlete.displayName }}"
+                          data-action="change->copy-notice#update">
                         <input type="hidden" name="_token" value="{{ csrf_token('coach_workout_copy' ~ athlete.id) }}">
                         <div class="kd-field kd-coachform__field">
                             <label class="kd-label" for="coach_workout_copy">Séance à lui donner</label>
-                            <select class="kd-input" id="coach_workout_copy" name="workout" required>
+                            <select class="kd-input" id="coach_workout_copy" name="workout" required
+                                    data-copy-notice-target="workout">
                                 {% for workout in coachWorkouts %}
                                     <option value="{{ workout.id }}">{{ workout.title }}</option>
                                 {% endfor %}
                             </select>
                         </div>
                         <button type="submit" class="kd-btn kd-btn--primary">
-                            {{ ux_icon('lucide:plus') }} Ajouter à sa bibliothèque
+                            {{ ux_icon('lucide:plus') }} <span data-copy-notice-target="label">Lui donner une copie</span>
                         </button>
+                        <p class="kd-coachform__notice" data-copy-notice-target="notice" role="status" hidden>
+                            {{ ux_icon('lucide:copy') }}
+                            <span data-copy-notice-target="text"></span>
+                            <a href="#" class="kd-btn kd-btn--ghost kd-btn--sm" data-copy-notice-target="open">L'ouvrir</a>
+                        </p>
                     </form>
                 {% endif %}
             </section>
@@ -128,14 +138,14 @@
                                value="4" min="1" max="52">
                     </div>
                     <button type="submit" class="kd-btn kd-btn--primary">
-                        {{ ux_icon('lucide:plus') }} Créer et composer
+                        {{ ux_icon('lucide:plus') }} Créer et ouvrir
                     </button>
                 </form>
             </section>
 
             {# Un plan de SA bibliothèque, copié chez l'athlète avec ses séances (#58).
                Pour lui donner le plan lui-même : « Donner ce plan à », dans l'éditeur. #}
-            <section class="kd-card">
+            <section class="kd-card" id="un-de-mes-plans">
                 <h3 class="kd-card__title">{{ ux_icon('lucide:copy') }} Un de mes plans</h3>
                 {% if coachPlans is empty %}
                     <p class="kd-lead">Tu n'as pas encore de plan : compose-en un dans « Mes plans ».</p>
@@ -163,7 +173,7 @@
     <section class="kd-section">
         <div class="kd-pagehead kd-pagehead--sub">
             <div>
-                <p class="kd-eyebrow kd-eyebrow--accent">Bibliothèque</p>
+                <p class="kd-eyebrow kd-eyebrow--accent">Séances</p>
                 <h2 class="kd-title kd-title--sm">Ses séances</h2>
             </div>
         </div>
@@ -172,7 +182,7 @@
             <div class="kd-card kd-section__block">
                 <div class="kd-empty">
                     {{ ux_icon('lucide:clipboard-list') }}
-                    <div>Sa bibliothèque est vide. Crée-lui une séance ci-dessus.</div>
+                    <div>Aucune séance. Crée-lui une séance ci-dessus.</div>
                 </div>
             </div>
         {% else %}
@@ -180,9 +190,9 @@
                 <ul class="kd-coachitems">
                     {% for workout in workouts %}
                         <li class="kd-coachitem">
-                            <a href="{{ path('app_workout_show', {id: workout.id}) }}" class="kd-coachitem__name">{{ workout.title }}</a>
-                            <a href="{{ path('app_workout_edit', {id: workout.id}) }}" class="kd-btn kd-btn--ghost kd-btn--sm">
-                                {{ ux_icon('lucide:square-pen') }} Composer
+                            <a href="{{ path('app_workout_show', {id: workout.id}|merge(back_to('athlete', athlete.id))) }}" class="kd-coachitem__name">{{ workout.title }}</a>
+                            <a href="{{ path('app_workout_edit', {id: workout.id}|merge(back_to('athlete', athlete.id))) }}" class="kd-btn kd-btn--ghost kd-btn--sm">
+                                {{ ux_icon('lucide:square-pen') }} Modifier
                             </a>
                         </li>
                     {% endfor %}
@@ -190,8 +200,9 @@
             </div>
 
             {# Pose directe sur son calendrier : le contrôleur refuse toute séance
-               qui ne lui appartient pas, ou qui est une copie privée de plan. #}
-            <section class="kd-card kd-section__block">
+               qui ne lui appartient pas, ou qui est une copie privée de plan.
+               L'id est l'ancre du retour sans JS après la pose (#125). #}
+            <section class="kd-card kd-section__block" id="poser-une-seance">
                 <h3 class="kd-card__title">{{ ux_icon('lucide:calendar-plus') }} Poser une séance sur son calendrier</h3>
                 <form method="post" action="{{ path('app_coach_schedule', {id: athlete.id}) }}" class="kd-coachform">
                     <input type="hidden" name="_token" value="{{ csrf_token('coach_schedule' ~ athlete.id) }}">
@@ -229,7 +240,7 @@
             <div class="kd-card kd-section__block">
                 <div class="kd-empty">
                     {{ ux_icon('lucide:layers') }}
-                    <div>Aucun plan. Crée-lui une trame ci-dessus, il pourra aussi l'instancier lui-même.</div>
+                    <div>Aucun plan. Crée-lui un plan ci-dessus. Il pourra aussi le placer lui-même sur son calendrier.</div>
                 </div>
             </div>
         {% else %}
@@ -237,50 +248,66 @@
                 <ul class="kd-coachitems">
                     {% for plan in plans %}
                         <li class="kd-coachitem">
-                            <a href="{{ path('app_plan_template_show', {id: plan.id}) }}" class="kd-coachitem__name">{{ plan.title }}</a>
+                            <a href="{{ path('app_plan_template_show', {id: plan.id}|merge(back_to('athlete', athlete.id))) }}" class="kd-coachitem__name">{{ plan.title }}</a>
                             <span class="kd-coachitem__meta">{{ plan.durationWeeks }} semaine{{ plan.durationWeeks > 1 ? 's' }}</span>
-                            <a href="{{ path('app_plan_template_edit', {id: plan.id}) }}" class="kd-btn kd-btn--ghost kd-btn--sm">
-                                {{ ux_icon('lucide:square-pen') }} Composer
+                            <a href="{{ path('app_plan_template_edit', {id: plan.id}|merge(back_to('athlete', athlete.id))) }}" class="kd-btn kd-btn--ghost kd-btn--sm">
+                                {{ ux_icon('lucide:square-pen') }} Modifier
                             </a>
                         </li>
                     {% endfor %}
                 </ul>
             </div>
 
-            {# Instanciation idempotente : relancer resynchronise (add-only), ne duplique pas. #}
-            <section class="kd-card kd-section__block">
-                <h3 class="kd-card__title">{{ ux_icon('lucide:calendar-range') }} Poser un plan sur son calendrier</h3>
-                <form method="post" action="{{ path('app_coach_instantiate', {id: athlete.id}) }}" class="kd-coachform">
+            {# Pose idempotente : relancer ajoute les cases nouvelles (add-only), ne
+               duplique ni ne redate rien. L'aperçu (#68) dit où tomberont les
+               séances avant validation ; `?plan=` (bouton de la page du plan)
+               présélectionne le plan et amène la section à l'écran. #}
+            <section class="kd-card kd-section__block" id="placer-un-plan">
+                <h3 class="kd-card__title">{{ ux_icon('lucide:calendar-range') }} Placer un plan dans son agenda</h3>
+                <form method="post" action="{{ path('app_coach_instantiate', {id: athlete.id}) }}" class="kd-coachform"
+                      data-controller="plan-preview"
+                      data-plan-preview-plans-value="{{ planPlacement|json_encode }}"
+                      data-action="change->plan-preview#update input->plan-preview#update">
                     <input type="hidden" name="_token" value="{{ csrf_token('coach_instantiate' ~ athlete.id) }}">
                     <div class="kd-field kd-coachform__field">
                         <label class="kd-label" for="coach_instantiate_plan">Plan</label>
-                        <select class="kd-input" id="coach_instantiate_plan" name="planId" required>
+                        <select class="kd-input" id="coach_instantiate_plan" name="planId" required
+                                data-plan-preview-target="plan">
                             {% for plan in plans %}
-                                <option value="{{ plan.id }}">{{ plan.title }}</option>
+                                <option value="{{ plan.id }}"{{ plan.id == preselectPlanId ? ' selected' }}>{{ plan.title }}</option>
                             {% endfor %}
                         </select>
                     </div>
                     <div class="kd-field kd-coachform__field kd-coachform__field--narrow">
                         <label class="kd-label" for="coach_instantiate_start">Début</label>
                         <input class="kd-input" type="date" id="coach_instantiate_start" name="startDate"
-                               value="{{ 'monday this week'|date('Y-m-d') }}" required>
+                               value="{{ 'monday this week'|date('Y-m-d') }}" required
+                               data-plan-preview-target="date">
                     </div>
                     <button type="submit" class="kd-btn kd-btn--primary">
-                        {{ ux_icon('lucide:calendar-range') }} Instancier
+                        {{ ux_icon('lucide:calendar-range') }} Placer dans l'agenda
                     </button>
+                    {{ include('components/_plan_placement_preview.html.twig', {whose: 'son'}, with_context = false) }}
                 </form>
-                <p class="kd-coachform__hint">Relancer sur un plan déjà posé resynchronise sans redater : les séances existantes et leur statut sont préservés.</p>
             </section>
         {% endif %}
     </section>
 
     {# --------------------------- SON CALENDRIER ----------------------------- #}
-    <section class="kd-section">
+    {# #77 (C-14) : la liste n'était que du texte. Chaque ligne ouvre désormais
+       la séance datée (le titre) ou sa semaine dans l'agenda de l'athlète (la
+       date), où se trouvent les gestes du calendrier : statut, déplacer,
+       retirer. Les deux posent un contexte de retour, sans quoi le clic suivant
+       renvoyait le coach à SON calendrier. #}
+    <section class="kd-section" id="agenda">
         <div class="kd-pagehead kd-pagehead--sub">
             <div>
                 <p class="kd-eyebrow kd-eyebrow--accent">Calendrier</p>
                 <h2 class="kd-title kd-title--sm">Ses 8 prochaines semaines</h2>
             </div>
+            <a href="{{ path('app_coach_athlete_calendar', {id: athlete.id}) }}" class="kd-btn kd-btn--ghost">
+                {{ ux_icon('lucide:calendar-range') }} Son agenda
+            </a>
         </div>
 
         {% if upcoming is empty %}
@@ -295,8 +322,11 @@
                 <ul class="kd-coachitems">
                     {% for scheduled in upcoming %}
                         <li class="kd-coachitem">
-                            <span class="kd-coachitem__date">{{ scheduled.scheduledDate|date('d/m') }}</span>
-                            <span class="kd-coachitem__name">{{ scheduled.displayTitle }}</span>
+                            <a class="kd-coachitem__date"
+                               href="{{ path('app_coach_athlete_calendar', {id: athlete.id, date: scheduled.scheduledDate|date('Y-m-d')}) }}"
+                               title="Voir sa semaine dans l'agenda">{{ scheduled.scheduledDate|date('d/m') }}</a>
+                            <a class="kd-coachitem__name"
+                               href="{{ path('app_scheduled_workout_show', {id: scheduled.id}|merge(back_to('athlete', athlete.id))) }}">{{ scheduled.displayTitle }}</a>
                             <span class="kd-badge kd-badge--{{ scheduled.status.value }}">{{ scheduled.status.label }}</span>
                         </li>
                     {% endfor %}
@@ -305,16 +335,19 @@
         {% endif %}
     </section>
 
-    {# ------------------------------ SON RÉALISÉ ----------------------------- #}
-    {# KL-45 : la séance datée porte désormais le réalisé, et le coach a déjà VIEW
-       dessus. Il ne restait qu'à l'afficher. **Lecture stricte** : chaque ligne
-       mène à la page de séance datée, dont le bloc de suppression du réalisé est
-       gardé par l'attribut LOG — réservé au propriétaire. Personne ne déclare à la
-       place de quelqu'un d'autre ce qu'il a soulevé.
+    {# ------------------------- SES DERNIÈRES SÉANCES ------------------------- #}
+    {# #76 : tout ce qui est échu sur ses quatre dernières semaines, consigné ou
+       non (`RecentSessions`). Le journal ne listait que le réalisé consigné :
+       une séance manquée n'apparaissait nulle part, une séance cochée « faite »
+       sans détail non plus, et « aucune séance consignée » côtoyait « 1 faite »
+       (C-10, C-11). Une séance consignée garde sa ligne de journal, chiffres
+       compris ; les autres disent leur statut, et « sans détail » quand il n'y
+       a rien derrière.
 
-       La fiche montre les dix dernières et **dit combien il y en a derrière** :
-       sans ce compte, elle laissait croire que l'athlète n'avait fait que ça. La
-       suite se lit sur le journal, qui est la même liste sur une fenêtre choisie.
+       **Lecture stricte** : chaque ligne mène à la page de séance datée, dont le
+       bloc de suppression du réalisé est gardé par l'attribut LOG, réservé au
+       propriétaire. Personne ne déclare à la place de quelqu'un d'autre ce
+       qu'il a soulevé.
 
        Chaque ligne pose son contexte de retour (`athlete-<id>`) : sans lui, le
        retour de la séance datée renvoyait le coach à SON calendrier — un lien ne
@@ -322,12 +355,12 @@
 
        Le bloc-notes privé de l'athlète (`Workout.notes`) n'apparaît ni ici ni
        là-bas : il ne se rend que dans les éditeurs, et pour son seul propriétaire. #}
-    <section class="kd-section">
+    <section class="kd-section" id="dernieres-seances">
         <div class="kd-pagehead kd-pagehead--sub">
             <div>
-                <p class="kd-eyebrow kd-eyebrow--accent">Réalisé</p>
-                <h2 class="kd-title kd-title--sm">Ce qu'il a fait</h2>
-                <p class="kd-lead">Ses dernières séances consignées série par série. Lecture seule : consigner appartient à l'athlète.</p>
+                <p class="kd-eyebrow kd-eyebrow--accent">Suivi</p>
+                <h2 class="kd-title kd-title--sm">Ses dernières séances</h2>
+                <p class="kd-lead">Ses {{ recentWeeks }} dernières semaines : faites, manquées ou pas encore cochées. Lecture seule : seul l'athlète saisit ses charges.</p>
             </div>
             {% if loggedTotal > 0 %}
                 <a href="{{ path('app_coach_athlete_log', {id: athlete.id}) }}" class="kd-btn kd-btn--ghost">
@@ -336,11 +369,23 @@
             {% endif %}
         </div>
 
-        {% if logged is empty %}
+        {# Ses séances de force faites sans réalisé, depuis le début : elles
+           comptent « faites » sur ses statistiques et ne portent aucun chiffre.
+           La phrase dit où ces chiffres se saisissent (C-11, #63). #}
+        {% if unloggedStrength > 0 %}
+            {{ include('components/_log_in_app.html.twig', {
+                count: unloggedStrength, third: true
+            }, with_context = false) }}
+        {% endif %}
+
+        {% if recent is empty %}
             <div class="kd-card kd-section__block">
                 <div class="kd-empty">
                     {{ ux_icon('lucide:history') }}
-                    <div>Aucune séance consignée pour l'instant. Le détail série par série remonte de son téléphone.</div>
+                    <div>Aucune séance datée sur ses {{ recentWeeks }} dernières semaines.{% if loggedTotal > 0 %} Les plus anciennes se lisent dans son journal.{% endif %}</div>
+                    {% if unloggedStrength == 0 %}
+                        {{ include('components/_log_in_app.html.twig', {third: true}, with_context = false) }}
+                    {% endif %}
                 </div>
             </div>
         {% else %}
@@ -350,22 +395,13 @@
                déclaré plus loin dans la feuille et l'emporte. #}
             <div class="kd-card kd-section__block">
                 <ul class="kd-loglist">
-                    {% for entry in logged %}
+                    {% for entry in recent %}
                         {{ include('components/_log_entry.html.twig', {
-                            entry: entry, back: back_to('athlete', athlete.id)
+                            entry: entry, back: back_to('athlete', athlete.id), statusAlways: true
                         }) }}
                     {% endfor %}
                 </ul>
             </div>
-            {% if loggedTotal > logged|length %}
-                <p class="kd-loglist__more">
-                    <a href="{{ path('app_coach_athlete_log', {id: athlete.id}) }}"
-                       class="kd-btn kd-btn--ghost kd-btn--sm">
-                        Voir les {{ loggedTotal }} séances consignées
-                        {{ ux_icon('lucide:arrow-right') }}
-                    </a>
-                </p>
-            {% endif %}
         {% endif %}
     </section>
 

@@ -39,6 +39,7 @@ final class BackTarget
     public const LOG = 'log';
     public const ATHLETE = 'athlete';
     public const ATHLETE_LOG = 'athlete-log';
+    public const ATHLETE_CAL = 'athlete-cal';
 
     private function __construct(
         public readonly string $kind,
@@ -65,6 +66,12 @@ final class BackTarget
         // Même précaution d'ordre que ci-dessus : `athlete-log` avant `athlete`.
         if (1 === preg_match('/^(athlete-log|athlete)-(\d+)$/', $raw, $m)) {
             return new self($m[1], $m[2]);
+        }
+
+        // L'agenda d'un athlète porte deux clés : qui, et quelle semaine. La
+        // valeur les garde ensemble (`<id>-<Y-m-d>`), `athleteWeek()` les sépare.
+        if (1 === preg_match('/^athlete-cal-(\d+)-(\d{4}-\d{2}-\d{2})$/', $raw, $m)) {
+            return self::isRealDate($m[2], 'Y-m-d') ? new self(self::ATHLETE_CAL, $m[1].'-'.$m[2]) : null;
         }
 
         // Le journal de son propre réalisé n'a pas d'identifiant : il n'y en a
@@ -94,6 +101,55 @@ final class BackTarget
         // n'y en a qu'un) est le type nu, pas un type suivi d'un tiret orphelin
         // — que `parse()` rejetterait.
         return '' === (string) $value ? $kind : $kind.'-'.$value;
+    }
+
+    /**
+     * Les deux clés d'un jeton `athlete-cal` : l'athlète et le jour de la
+     * semaine affichée. `null` sur tout autre type.
+     *
+     * @return array{int, string}|null
+     */
+    public function athleteWeek(): ?array
+    {
+        if (self::ATHLETE_CAL !== $this->kind || 1 !== preg_match('/^(\d+)-(\d{4}-\d{2}-\d{2})$/', $this->value, $m)) {
+            return null;
+        }
+
+        return [(int) $m[1], $m[2]];
+    }
+
+    /**
+     * Les jours que montre une vue calendrier : la semaine (lundi → dimanche)
+     * d'un jeton `cal-week` ou `athlete-cal`, le mois d'un jeton `cal-month`.
+     * `null` sur tout autre type. Sert à savoir si un geste fait dans cette vue
+     * (déplacer, placer un plan) y reste visible : sinon, il faut aller voir
+     * ailleurs. Le mois s'arrête à ses propres jours, pas aux débords de la
+     * grille : un débord renvoie au mois voisin, ce qui reste juste.
+     *
+     * @return array{\DateTimeImmutable, \DateTimeImmutable}|null
+     */
+    public function calendarSpan(): ?array
+    {
+        $day = match ($this->kind) {
+            self::CAL_WEEK => $this->value,
+            self::ATHLETE_CAL => $this->athleteWeek()[1] ?? null,
+            default => null,
+        };
+
+        if (null !== $day) {
+            $date = new \DateTimeImmutable($day);
+            $monday = $date->modify(sprintf('-%d days', (int) $date->format('N') - 1));
+
+            return [$monday, $monday->modify('+6 days')];
+        }
+
+        if (self::CAL_MONTH === $this->kind) {
+            $first = new \DateTimeImmutable($this->value.'-01');
+
+            return [$first, $first->modify('last day of this month')];
+        }
+
+        return null;
     }
 
     /**

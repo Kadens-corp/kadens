@@ -1,4 +1,4 @@
-{# Réponse à un changement de statut d'une séance datée (cycle rapide ou modale).
+{# Réponse à un changement de statut d'une séance datée (menu du statut ou modale).
    action="replace" : on remplace la pastille entière `#cal-event-{id}` par sa
    version à jour (statut, filet, modale, aperçu) — pas de rechargement de page,
    donc la vue mois/semaine courante est préservée. Le fragment re-rendu reporte
@@ -9,6 +9,7 @@
         {{ include('components/_cal_event.html.twig', {
             scheduled: scheduled,
             fw: fw,
+            instruction: instruction,
             statuses: statuses,
             detailed: detailed,
             rating: rating,
@@ -17,3 +18,26 @@
         }) }}
     </template>
 </turbo-stream>
+{# Vue semaine (#120) : le statut change aussi le bandeau de synthèse (faites,
+   prévues, assiduité). Sans lui, « 1 faite · 100 % » restait affiché sur une
+   séance redevenue prévue jusqu'au rechargement. Deux cibles, la ligne du pli et
+   la barre, jamais le `<details>` : le remplacer rouvrirait le pli replié. La
+   vue mois n'a pas de bandeau, le contrôleur ne fournit alors rien. #}
+{% if weekSummary|default(null) %}
+    {% import 'calendar/_week_summary.html.twig' as week %}
+    <turbo-stream action="replace" target="week-summary-line">
+        <template>{{ week.line(weekSummary) }}</template>
+    </turbo-stream>
+    <turbo-stream action="replace" target="week-summary">
+        <template>{{ week.bar(weekSummary) }}</template>
+    </turbo-stream>
+{% endif %}
+{# Séance ramenée à aujourd'hui (#109) : elle change de jour, et tout ce qui
+   dépend de sa date bouge avec elle (résumé de la semaine, « Repos », jours
+   libres). Remplacer d'abord le fragment ferme la modale ou le menu ouverts ;
+   le refresh relit ensuite la page en arrière-plan et la morphe, scroll gardé,
+   sans rechargement visible. Le message part en session et s'affiche au
+   refresh. Ce que le morphing ne reprend pas au serveur : assets/morph_state.js. #}
+{% if refresh|default(false) %}
+    <turbo-stream action="refresh" method="morph" scroll="preserve"></turbo-stream>
+{% endif %}

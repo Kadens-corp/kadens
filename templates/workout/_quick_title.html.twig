@@ -1,0 +1,14 @@
+{# Rappel sur le titre de la case, en tête de l'édition rapide (#93). Une case
+   garde le titre de sa séance d'origine : quand on la fait passer de 6 × 400 à
+   8 × 400, c'est encore « Fractionné 6 x 400 m » que lit l'athlète dans son agenda.
+
+   Le titre lui-même vit dans l'en-tête de la modale, où il se renomme en ligne
+   (#94) : l'afficher aussi ici le doublait. Renommer la copie ne casse rien : la
+   lignée (`origin`) dit déjà que c'est la même séance, même renommée.
+
+   Re-rendu seul après chaque enregistrement d'un exercice : le rappel apparaît
+   dès que le contenu s'écarte de la séance d'origine.
+   Contexte : workout, staleTitle (LineageDivergence::titleMayBeStale). #}
+<div id="quick-title-hint" class="kd-quicktitle">
+    {{ include('workout/_quick_title_hint.html.twig') }}
+</div>

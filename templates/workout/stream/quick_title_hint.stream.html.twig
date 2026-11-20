@@ -1,0 +1,7 @@
+{# Rappel du titre de la case, re-rendu avec la ligne de résumé d'un exercice
+   enregistré depuis l'édition rapide (#93). Contexte : workout, staleTitle. #}
+<turbo-stream action="update" target="quick-title-hint">
+    <template>
+        {{ include('workout/_quick_title_hint.html.twig') }}
+    </template>
+</turbo-stream>

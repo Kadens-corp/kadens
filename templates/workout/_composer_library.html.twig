@@ -15,14 +15,22 @@
 <div class="kd-libpanel">
     <div class="kd-libpanel__head">
         <div class="kd-libpanel__title">
-            <span>Bibliothèque</span>
-            <span class="kd-libpanel__count">{{ libraryCount }} exos</span>
+            <span>Exercices</span>
+            <span class="kd-libpanel__count">{{ libraryCount }} exo{{ libraryCount > 1 ? 's' }}</span>
             {# Visible uniquement en feuille (sous 900px) : sur écran large, le
                panneau n'est pas un calque, il n'y a rien à fermer. #}
-            <button type="button" class="kd-libpanel__close" data-action="composer#closeLib" aria-label="Fermer la bibliothèque">
+            <button type="button" class="kd-libpanel__close" data-action="composer#closeLib" aria-label="Fermer la liste des exercices">
                 {{ ux_icon('lucide:x') }}
             </button>
         </div>
+
+        {# Où part le prochain ajout (#85). Le « bloc actif » n'était dit nulle part
+           ailleurs que par une bordure, et l'aide qui l'expliquait vivait sous la
+           liste, hors écran. Rempli par le contrôleur `composer` (rôle et intitulé du
+           bloc actif) ; le texte serveur est celui d'une séance sans bloc. #}
+        <p class="kd-libpanel__target" aria-live="polite">
+            Ajout dans : <strong data-composer-target="target">un nouveau bloc</strong>
+        </p>
 
         <div class="kd-libsearch">
             {{ ux_icon('lucide:search') }}
@@ -81,11 +89,11 @@
                 <span class="kd-libx__add" aria-hidden="true">{{ ux_icon('lucide:plus') }}</span>
             </button>
         {% else %}
-            <p class="kd-libpanel__empty">Ta bibliothèque est vide. Crée un exercice d'abord.</p>
+            <p class="kd-libpanel__empty">Aucun exercice pour l'instant. Crée-en un d'abord.</p>
         {% endfor %}
     </div>
 
     <p class="kd-libpanel__hint">
-        Tape une carte pour l'ajouter au bloc actif, ou glisse-la dans un bloc.
+        Clique sur une carte pour l'ajouter au bloc indiqué en haut, ou glisse-la dans le bloc de ton choix. Pour changer de bloc, clique dedans.
     </p>
 </div>

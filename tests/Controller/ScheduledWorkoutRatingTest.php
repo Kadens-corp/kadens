@@ -18,8 +18,9 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 /**
  * Le ressenti saisi sur le web. Ce que ces tests tiennent : noter est
  * **consigner** (LOG, le propriétaire seul) et non programmer (EDIT, que le coach
- * possède) — la même frontière que le réalisé série par série, testée par ses
- * deux portes : l'endpoint dédié et le formulaire de statut que le coach poste.
+ * possède) — la même frontière que le réalisé série par série. Depuis #91, le
+ * ressenti part avec le formulaire de statut, que le coach poste aussi : la
+ * frontière se tient dans l'endpoint, pas seulement dans le rendu.
  */
 final class ScheduledWorkoutRatingTest extends WebTestCase
 {
@@ -50,27 +51,31 @@ final class ScheduledWorkoutRatingTest extends WebTestCase
         $this->client->loginUser($owner);
 
         $crawler = $this->client->request('GET', '/schedule/'.$scheduled->getId());
-        self::assertSelectorExists('#schedule-rating input[name="feeling"]');
-        $form = $crawler->filter('#schedule-rating form')->form(['feeling' => '4', 'sessionRpe' => '8']);
+        // Un seul formulaire : statut, commentaire et ressenti ensemble (#91).
+        self::assertSelectorExists('#schedule-done input[name="feeling"]');
+        self::assertSelectorTextContains('#schedule-summary', 'Pas encore noté.');
+        $form = $crawler->filter('#schedule-done form.kd-done__form')->form(['feeling' => '4', 'sessionRpe' => '8']);
         $this->client->submit($form);
 
         self::assertResponseRedirects('/schedule/'.$scheduled->getId());
         $this->client->followRedirect();
-        self::assertSelectorTextContains('#schedule-rating', 'En forme');
-        self::assertSelectorTextContains('#schedule-rating', 'Difficile');
-        // La forme se lit aussi en bonhomme (tuile + cinq dans le sélecteur), la
-        // difficulté en escalier : dix marches, la huitième retenue.
-        self::assertSelectorCount(6, '#schedule-rating .kd-figure');
-        self::assertSelectorCount(10, '#schedule-rating .kd-ratingpick__step');
-        self::assertSelectorExists('#schedule-rating .kd-ratingpick__step[data-step="8"] input:checked');
+        // Ce qui est enregistré se lit en tête de page, dans le bilan.
+        self::assertSelectorTextContains('#schedule-summary', 'En forme');
+        self::assertSelectorTextContains('#schedule-summary', 'Difficulté 8/10');
+        // Et le formulaire le garde coché : la forme en bonhommes, la difficulté
+        // en escalier, dix marches, la huitième retenue.
+        self::assertSelectorCount(5, '#schedule-done .kd-figure');
+        self::assertSelectorCount(10, '#schedule-done .kd-ratingpick__step');
+        self::assertSelectorExists('#schedule-done .kd-ratingpick__step[data-step="8"] input:checked');
 
-        $form = $this->client->getCrawler()->filter('#schedule-rating form')->form(['feeling' => '']);
+        $form = $this->client->getCrawler()->filter('#schedule-done form.kd-done__form')->form(['feeling' => '']);
         $this->client->submit($form);
 
         $this->em->clear();
         $stored = $this->mustFind(ScheduledWorkout::class, $scheduled->getId());
         self::assertNull($stored->getFeeling(), 'Vide = non renseigné : le web peut retirer une note.');
         self::assertSame(8, $stored->getSessionRpe());
+        self::assertSame(ScheduledStatus::DONE, $stored->getStatus(), 'Le statut coché reste celui de la séance.');
     }
 
     public function testAValueOutOfScaleLeavesTheRatingAlone(): void
@@ -80,8 +85,9 @@ final class ScheduledWorkoutRatingTest extends WebTestCase
         $this->em->flush();
         $this->client->loginUser($owner);
 
-        $this->client->request('POST', '/schedule/'.$scheduled->getId().'/rating', [
-            '_token' => $this->token('rating', $scheduled),
+        $this->client->request('POST', '/schedule/'.$scheduled->getId().'/status', [
+            '_token' => $this->token($scheduled),
+            'status' => 'done',
             'feeling' => '9',
         ]);
 
@@ -100,16 +106,15 @@ final class ScheduledWorkoutRatingTest extends WebTestCase
 
         $this->client->loginUser($coach);
         $this->client->request('GET', '/schedule/'.$scheduled->getId());
-        self::assertSelectorTextContains('#schedule-rating', 'Faible');
-        self::assertSelectorNotExists('#schedule-rating form');
-
-        $this->client->request('POST', '/schedule/'.$scheduled->getId().'/rating', ['_token' => 'x', 'feeling' => '5']);
-        self::assertResponseStatusCodeSame(403);
+        self::assertSelectorTextContains('#schedule-summary', 'Faible');
+        // Il programme (statut, commentaire), il ne consigne pas : pas de sélecteur.
+        self::assertSelectorExists('#schedule-done form.kd-done__form');
+        self::assertSelectorNotExists('#schedule-done input[name="feeling"]');
 
         // Par le formulaire de statut, que le coach a le droit de poster : le
         // statut passe, le ressenti glissé dans la requête est ignoré.
         $this->client->request('POST', '/schedule/'.$scheduled->getId().'/status', [
-            '_token' => $this->token('status', $scheduled),
+            '_token' => $this->token($scheduled),
             'status' => 'done',
             'feeling' => '5',
             'sessionRpe' => '',
@@ -121,8 +126,8 @@ final class ScheduledWorkoutRatingTest extends WebTestCase
         self::assertSame(9, $stored->getSessionRpe());
     }
 
-    /** Pas de ressenti à saisir sur une séance qui n'a pas eu lieu. */
-    public function testAPlannedSessionOffersNoRating(): void
+    /** Pas de ressenti à lire sur une séance qui n'a pas eu lieu. */
+    public function testAPlannedSessionShowsNoRating(): void
     {
         $owner = $this->createUser('athlete@example.com');
         $scheduled = $this->createDone($owner)->setStatus(ScheduledStatus::PLANNED);
@@ -131,18 +136,19 @@ final class ScheduledWorkoutRatingTest extends WebTestCase
 
         $this->client->request('GET', '/schedule/'.$scheduled->getId());
 
-        self::assertSelectorExists('#schedule-rating[hidden]');
-        self::assertSelectorNotExists('#schedule-rating form');
+        self::assertSelectorTextNotContains('#schedule-summary', 'Ressenti');
+        // Le sélecteur reste dans le formulaire, replié : on peut marquer faite
+        // et noter d'un même enregistrement, comme dans la modale.
+        self::assertSelectorExists('#schedule-done details.kd-done__rating:not([open]) input[name="feeling"]');
     }
 
-    private function token(string $intent, ScheduledWorkout $scheduled): string
+    private function token(ScheduledWorkout $scheduled): string
     {
         // Le jeton se lit sur la page, comme le ferait le navigateur : le
         // gestionnaire CSRF de test est lié à la session du client.
         $crawler = $this->client->request('GET', '/schedule/'.$scheduled->getId());
-        $action = 'rating' === $intent ? '/rating' : '/status';
 
-        return (string) $crawler->filter(sprintf('form[action$="%s"] input[name="_token"]', $action))->attr('value');
+        return (string) $crawler->filter('form[action$="/status"] input[name="_token"]')->attr('value');
     }
 
     private function createUser(string $email): User

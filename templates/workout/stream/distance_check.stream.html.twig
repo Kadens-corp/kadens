@@ -1,0 +1,6 @@
+{# Met à jour l'alerte de distance d'un exercice après un enregistrement
+   automatique (#97) : le formulaire n'est pas re-rendu, seule la phrase sous le
+   champ suit la valeur enregistrée. Contexte : prescribed. #}
+<turbo-stream action="update" target="distance-check-{{ prescribed.id }}">
+    <template>{{ include('workout/_distance_check_text.html.twig') }}</template>
+</turbo-stream>

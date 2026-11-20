@@ -2,6 +2,41 @@ import { Controller } from '@hotwired/stimulus';
 import { renderStreamMessage } from '@hotwired/turbo';
 import Sortable from 'sortablejs';
 import { normalize, scoreElement, tokens } from 'search';
+import { ensureSaved, trackSave } from 'save-status';
+
+/** Champ que l'utilisateur tape ou choisit (ni caché, ni case, ni bouton). */
+function isTypedField(el) {
+    if (el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) return true;
+
+    return !['hidden', 'checkbox', 'radio', 'file', 'submit', 'button', 'reset', 'image'].includes(el.type);
+}
+
+/** La valeur affichée diffère de celle que le serveur a rendue. */
+function isDirty(el) {
+    if (el instanceof HTMLSelectElement) {
+        return [...el.options].some((option) => option.selected !== option.defaultSelected);
+    }
+
+    return el.value !== el.defaultValue;
+}
+
+/*
+ * Une valeur reportée par script ne déclenche pas de `change` natif au départ du
+ * champ si l'utilisateur n'y retouche pas : la saisie reportée ne partirait
+ * jamais. On émet donc ce `change` nous-mêmes en quittant le champ, sauf si le
+ * navigateur l'a fait (il précède `blur`) ou si la valeur est celle du serveur.
+ */
+function saveOnLeave(el) {
+    const onChange = () => el.removeEventListener('blur', onBlur);
+    const onBlur = () => {
+        el.removeEventListener('change', onChange);
+        if (el.isConnected && isDirty(el)) {
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    };
+    el.addEventListener('change', onChange, { once: true });
+    el.addEventListener('blur', onBlur, { once: true });
+}
 
 /*
  * Compositeur de séance (éditeur). La persistance reste 100 % côté serveur :
@@ -34,15 +69,17 @@ import { normalize, scoreElement, tokens } from 'search';
  * plus qu'une affordance. `filter` protège ce qui doit rester cliquable/saisissable
  * dans la carte (le menu, le panneau de paramètres ouvert).
  *
- *   - bloc actif : cible de l'ajout depuis la bibliothèque
- *   - taper une carte de bibliothèque -> l'ajouter au bloc actif (quick-add)
+ *   - bloc actif : cible de l'ajout depuis la bibliothèque, nommé en tête de la
+ *     colonne (« Ajout dans : … »). Un bloc qu'on vient de créer le devient.
+ *   - taper une carte de bibliothèque -> l'ajouter au bloc actif (quick-add) ; sans
+ *     aucun bloc, le serveur en crée un (blockId = 0)
  *   - glisser une carte de bibliothèque -> l'ajouter dans un bloc au point de dépôt
  *   - glisser une ligne d'exercice -> la réordonner / changer de bloc (reorder)
  *   - stepper de tours, dépliage des paramètres, filtre de bibliothèque (client)
  *   - sous 900px la bibliothèque est une feuille : `openLib` / `closeLib`
  */
 export default class extends Controller {
-    static targets = ['block', 'items', 'library', 'libcard', 'search', 'quickAddForm', 'reorderForm'];
+    static targets = ['block', 'items', 'library', 'libcard', 'search', 'target', 'quickAddForm', 'reorderForm'];
 
     // L'URL du bandeau de volume. Une value et non une target : le bandeau vit
     // HORS de cette section (il ne doit pas être emporté par un stream de blocs),
@@ -66,8 +103,15 @@ export default class extends Controller {
         this.libTerms = [];
         this.libActivity = 'all';
         this.activeBlockId = null;
+        // Blocs déjà vus, pour reconnaître un bloc NEUF parmi ceux que chaque stream
+        // reconnecte. `null` tant que connect() n'a pas tourné : au chargement, tous
+        // les blocs se connectent et aucun n'est « neuf ».
+        this.knownBlockIds = null;
         this.sortables = new WeakMap();
         this.volumePending = false;
+        // Formulaires dont un enregistrement est parti sans réponse encore, par URL
+        // d'action (l'élément <form> ne survit pas à un re-rendu, son action si).
+        this.inFlight = new Map();
     }
 
     connect() {
@@ -88,15 +132,23 @@ export default class extends Controller {
             if (event.target.closest('.kd-composer__lib')) return;
             this.closeLib();
         };
+        this.onBeforeStreamRender = this.keepPendingInput.bind(this);
+        this.onVolumeRender = this.holdPlaceOnVolume.bind(this);
         this.element.addEventListener('submit', this.onSubmit);
+        document.addEventListener('turbo:before-stream-render', this.onBeforeStreamRender);
+        document.addEventListener('turbo:before-stream-render', this.onVolumeRender);
         document.addEventListener('keydown', this.onKey);
         document.addEventListener('click', this.onOutside);
+        this.knownBlockIds = new Set(this.blockTargets.map((el) => el.dataset.blockId));
+        this.refreshActive();
         this.applyLibFilter();
         this.refreshVolume();
     }
 
     disconnect() {
         this.element.removeEventListener('submit', this.onSubmit);
+        document.removeEventListener('turbo:before-stream-render', this.onBeforeStreamRender);
+        document.removeEventListener('turbo:before-stream-render', this.onVolumeRender);
         document.removeEventListener('keydown', this.onKey);
         document.removeEventListener('click', this.onOutside);
         // Une navigation Turbo pendant que la feuille est ouverte laisserait la page
@@ -120,8 +172,15 @@ export default class extends Controller {
      * champ suivant que l'utilisateur est en train de remplir). Pour les AUTRES
      * mutations (bloc, ajout, réordonnancement…), #workout-blocks est reconstruit :
      * on mémorise le champ actif pour le lui rendre après le re-render.
+     *
+     * Chaque soumission passe par `trackSave` : c'est l'indicateur « Enregistré »
+     * qui dit que la saisie est prise (#86), le compositeur n'ayant aucun bouton.
+     * Ce qui part est figé au premier essai (méthode, URL, FormData) : « Réessayer »
+     * renvoie exactement la même chose, même si le formulaire a été re-rendu entre
+     * temps. Un échec ne recharge plus la page — ça effaçait la saisie en cours — il
+     * se lit dans la pastille et se rejoue d'un clic.
      */
-    async onSubmit(event) {
+    onSubmit(event) {
         const form = event.target;
         if (!(form instanceof HTMLFormElement)) return;
 
@@ -133,29 +192,45 @@ export default class extends Controller {
         const activeName = !isParamSave && active && active.name ? active.name : null;
         const caret = active && typeof active.selectionStart === 'number' ? active.selectionStart : null;
 
-        try {
-            const response = await fetch(form.action, {
-                method: (form.getAttribute('method') || 'post').toUpperCase(),
-                body: new FormData(form),
-                headers: { Accept: 'text/vnd.turbo-stream.html' },
-                credentials: 'same-origin',
-            });
-            renderStreamMessage(await response.text());
+        const method = (form.getAttribute('method') || 'post').toUpperCase();
+        const { action } = form;
+        const body = new FormData(form);
+        // Clé de l'échec : un réglage de paramètres décrit un ÉTAT, sa tentative
+        // suivante remplace la précédente. Un ajout, un déplacement ou une
+        // suppression est un GESTE distinct, même quand il repasse par le même
+        // formulaire caché : chacun garde son propre échec.
+        const key = isParamSave ? form : Symbol('composer-mutation');
+
+        trackSave(form, async () => {
+            let html;
+            this.markInFlight(action, 1);
+            try {
+                const response = await ensureSaved(await fetch(action, {
+                    method,
+                    body,
+                    headers: { Accept: 'text/vnd.turbo-stream.html' },
+                    credentials: 'same-origin',
+                }));
+                html = await response.text();
+            } finally {
+                // Retiré AVANT le rendu : la réponse qu'on applique ne compte plus
+                // comme « en vol », seules les suivantes protègent leurs champs.
+                this.markInFlight(action, -1);
+            }
+            renderStreamMessage(html);
             // Le flux réécrit des lignes dont le serveur ignore l'état déplié. rAF :
             // `renderStreamMessage` rend de façon asynchrone, le DOM n'est pas encore
             // à jour au retour de l'appel (même raison que dans restoreFocus).
-            requestAnimationFrame(() => this.syncExpanded());
+            requestAnimationFrame(() => {
+                this.syncExpanded();
+                this.settleActive();
+            });
             if (!isParamSave) this.restoreFocus(activeName, caret);
             // Toute mutation change ce que la séance charge : une série ajoutée, un
             // exercice déplacé dans un bloc à trois tours. Sans `await` — le bandeau
             // n'est pas sur le chemin critique de l'enregistrement.
             this.refreshVolume();
-        } catch (error) {
-            console.error('Composer submit failed:', error);
-            // Sur un save de paramètre, ne PAS recharger : ça effacerait la saisie
-            // en cours. On recharge seulement pour les mutations structurelles.
-            if (!isParamSave) window.location.reload();
-        }
+        }, key);
     }
 
     /**
@@ -184,7 +259,87 @@ export default class extends Controller {
         });
     }
 
-    // ---- Bandeau de volume (chargé après la page) --------------------------
+    // ---- Saisie en cours face au re-rendu (#121) ---------------------------
+
+    /*
+     * Un stream qui re-rend un panneau remplace ses champs par la valeur EN BASE au
+     * moment où le serveur a répondu. Si l'utilisateur a tapé entre-temps, sa saisie
+     * part avec l'ancien élément. Cas d'origine : passer une série en échauffement
+     * change le décompte de travail, le serveur re-rend tout le panneau, et le « 10 »
+     * tapé aussitôt dans les reps revient à 8, focus perdu.
+     *
+     * Règle : un champ dont la valeur diffère de celle que le serveur a rendue
+     * (`defaultValue`) est une saisie que la réponse ignore, si l'une de ces deux
+     * conditions tient :
+     *  - il a le focus : la saisie n'est pas finie, aucun `change` n'est parti ;
+     *  - son formulaire a un enregistrement en vol : la valeur est partie, mais la
+     *    réponse qu'on applique est plus ancienne qu'elle.
+     * On la reporte sur le nouvel élément (retrouvé par son nom, unique grâce aux
+     * formulaires nommés), avec le focus et le curseur. Hors de ces deux cas, le
+     * serveur fait foi : une valeur refusée ou normalisée réapparaît telle qu'en base.
+     *
+     * Enveloppe `detail.render` plutôt que d'agir avant `renderStreamMessage` :
+     * Turbo rend après une frame, l'état se lit donc au moment exact du remplacement.
+     */
+    keepPendingInput(event) {
+        const { render } = event.detail;
+        event.detail.render = async (stream) => {
+            const pending = this.pendingInput();
+            await render(stream);
+            this.restorePendingInput(pending);
+        };
+    }
+
+    markInFlight(action, delta) {
+        const count = (this.inFlight.get(action) ?? 0) + delta;
+        if (count > 0) {
+            this.inFlight.set(action, count);
+        } else {
+            this.inFlight.delete(action);
+        }
+    }
+
+    pendingInput() {
+        const active = document.activeElement;
+
+        return [...this.element.querySelectorAll('input[name], select[name], textarea[name]')]
+            .filter((el) => isTypedField(el) && isDirty(el)
+                && (el === active || (el.form !== null && this.inFlight.has(el.form.action))))
+            .map((el) => ({
+                el,
+                value: el.value,
+                focused: el === active,
+                caret: el === active && typeof el.selectionStart === 'number' ? el.selectionStart : null,
+            }));
+    }
+
+    restorePendingInput(pending) {
+        pending.forEach(({ el, value, focused, caret }) => {
+            // Le stream n'a pas touché ce champ : rien à reporter.
+            if (el.isConnected) return;
+
+            const next = this.element.querySelector(`[name="${CSS.escape(el.name)}"]`);
+            if (!next || next.tagName !== el.tagName) return;
+            if (next instanceof HTMLSelectElement && ![...next.options].some((o) => o.value === value)) return;
+
+            next.value = value;
+            if (!focused) return;
+
+            const row = next.closest('.kd-cexo__params')?.closest('.kd-cexo');
+            if (row) this.setParamsOpen(row, true);
+            next.focus();
+            if (caret !== null && typeof next.setSelectionRange === 'function') {
+                try {
+                    next.setSelectionRange(caret, caret);
+                } catch (error) {
+                    // Certains types d'input n'acceptent pas setSelectionRange : sans importance.
+                }
+            }
+            saveOnLeave(next);
+        });
+    }
+
+    // ---- Bandeau de volume (esquissé avec la page, dessiné ensuite) --------
 
     /**
      * Recharge « ce que cette séance va charger » : la carte des muscles et le
@@ -215,11 +370,57 @@ export default class extends Controller {
         }
     }
 
+    /**
+     * Le bandeau est AU-DESSUS du compositeur : quand il change de hauteur (il
+     * apparaît au premier exercice de force, sa légende gagne une zone), tout ce
+     * qu'on est en train d'éditer glisse d'autant (#125). On garde donc le
+     * compositeur à sa place à l'écran, et c'est le bandeau qui grandit vers le haut.
+     *
+     * Sur l'événement de rendu et non après `renderStreamMessage` : le stream rend
+     * de façon asynchrone, c'est ici seulement qu'on encadre la mise à jour réelle.
+     * Le défilement natif (`overflow-anchor`) fait la même chose dans Chrome et
+     * Firefox, mais pas dans Safari ; s'il est déjà passé, l'écart mesuré est nul
+     * et rien ne bouge deux fois.
+     */
+    holdPlaceOnVolume(event) {
+        if (event.target.getAttribute('target') !== 'workout-volume') return;
+
+        const { render } = event.detail;
+        event.detail.render = async (stream) => {
+            const before = this.element.getBoundingClientRect().top;
+            await render(stream);
+            const shift = this.element.getBoundingClientRect().top - before;
+            if (shift !== 0) window.scrollBy(0, shift);
+        };
+    }
+
     // ---- Bloc actif --------------------------------------------------------
 
+    /**
+     * Chaque stream de blocs reconnecte TOUS les blocs : on ne peut donc pas lire
+     * « nouveau » dans la connexion elle-même. C'est l'id inconnu qui le dit. Un bloc
+     * neuf (bouton « Ajouter un bloc », ou bloc créé par le premier ajout) devient
+     * actif : on le crée pour le remplir, les exercices suivants doivent y aller.
+     */
     blockTargetConnected(el) {
-        if (this.activeBlockId === null) {
-            this.activeBlockId = el.dataset.blockId;
+        const id = el.dataset.blockId;
+        if (this.knownBlockIds !== null && !this.knownBlockIds.has(id)) {
+            this.knownBlockIds.add(id);
+            this.activeBlockId = id;
+        } else if (this.activeBlockId === null) {
+            this.activeBlockId = id;
+        }
+        this.refreshActive();
+    }
+
+    /**
+     * Après un stream : si le bloc actif a disparu (supprimé), on se rabat sur le
+     * premier. Pas dans blockTargetDisconnected : pendant un re-render, tous les blocs
+     * se déconnectent, y compris ceux qui reviennent.
+     */
+    settleActive() {
+        if (!this.blockTargets.some((el) => el.dataset.blockId === this.activeBlockId)) {
+            this.activeBlockId = this.blockTargets[0]?.dataset.blockId ?? null;
         }
         this.refreshActive();
     }
@@ -234,6 +435,28 @@ export default class extends Controller {
         this.blockTargets.forEach((el) => {
             el.classList.toggle('kd-cblock--active', el.dataset.blockId === this.activeBlockId);
         });
+        this.refreshTarget();
+    }
+
+    /** « Ajout dans : … » en tête de bibliothèque. Lu sur le bloc lui-même (son
+     *  rôle choisi, son intitulé libre), donc juste dès que le stream l'a re-rendu. */
+    refreshTarget() {
+        if (!this.hasTargetTarget) return;
+        const block = this.activeBlock();
+        this.targetTarget.textContent = block ? this.blockName(block) : 'un nouveau bloc';
+    }
+
+    /** Nom lisible d'un bloc : « Échauffement », « Corps de séance · Jambes ». Deux
+     *  blocs au même nom se distinguent par leur rang dans la séance. */
+    blockName(block) {
+        const name = (el) => {
+            const role = el.querySelector('.kd-cblock__role')?.selectedOptions?.[0]?.textContent.trim() || 'Bloc';
+            const label = el.querySelector('.kd-cblock__label')?.value.trim();
+            return label ? `${role} · ${label}` : role;
+        };
+        const mine = name(block);
+        const twins = this.blockTargets.filter((el) => name(el) === mine);
+        return twins.length > 1 ? `${mine} (bloc ${this.blockTargets.indexOf(block) + 1})` : mine;
     }
 
     activeBlock() {
@@ -245,12 +468,12 @@ export default class extends Controller {
     // ---- Ajout depuis la bibliothèque (tap sur une carte) ------------------
 
     /** La carte entière est le déclencheur : l'exercice part dans le bloc actif, et
-     *  la feuille se referme (sur écran large, la classe n'était pas posée). */
+     *  la feuille se referme (sur écran large, la classe n'était pas posée). Sans
+     *  bloc, `0` demande au serveur d'en créer un : le « + » ne reste plus muet. */
     quickAdd(event) {
         const block = this.activeBlock();
-        if (!block) return;
         this.closeLib();
-        this.submitQuickAdd(event.currentTarget.dataset.exerciseId, block.dataset.blockId);
+        this.submitQuickAdd(event.currentTarget.dataset.exerciseId, block ? block.dataset.blockId : '0');
     }
 
     submitQuickAdd(exerciseId, blockId, afterId) {
@@ -305,9 +528,10 @@ export default class extends Controller {
             group: { name: this.constructor.SORTABLE_GROUP, pull: true, put: true },
             draggable: '.kd-cexo',
             // Pas de `handle` : toute la carte est la prise (cf. en-tête de fichier).
-            // `filter` exclut ce qui ne doit jamais soulever la carte — le menu, et
-            // le panneau de paramètres déplié, où l'on saisit du texte.
-            filter: '.kd-kebab, .kd-cexo__params',
+            // `filter` exclut ce qui ne doit jamais soulever la carte — le menu, le
+            // bouton « Enchaîner » et le panneau de paramètres déplié, où l'on saisit
+            // du texte.
+            filter: '.kd-kebab, .kd-cexo__params, .kd-cexo__seam',
             preventOnFilter: false,
             delay: this.constructor.TOUCH_DRAG_DELAY,
             delayOnTouchOnly: true,

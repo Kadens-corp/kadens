@@ -1,0 +1,13 @@
+{# Réponse à l'enregistrement automatique d'un exercice depuis l'édition rapide
+   (#86). On ne remplace QUE sa ligne de résumé, pas tout #quick-panel : le
+   formulaire en cours de saisie reste ouvert et garde le focus, comme
+   `prescribed_row` au compositeur. Contexte : prescribed, rank, summary, et
+   workout + staleTitle pour le rappel du titre de la case (#93). L'alerte de
+   distance sous le champ suit aussi (#97). #}
+<turbo-stream action="replace" target="quickexo-sum-{{ prescribed.id }}">
+    <template>
+        {{ include('workout/_quick_exo_summary.html.twig') }}
+    </template>
+</turbo-stream>
+{{ include('workout/stream/quick_title_hint.stream.html.twig') }}
+{{ include('workout/stream/distance_check.stream.html.twig') }}

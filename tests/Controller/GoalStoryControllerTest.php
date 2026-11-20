@@ -72,6 +72,28 @@ final class GoalStoryControllerTest extends WebTestCase
         self::assertSame([0, 1], array_map(static fn (GoalBlock $b) => $b->getPosition(), $this->blocksOf($goal)));
     }
 
+    /**
+     * #105 : le retour est ancré sur l'élément ajouté, la confirmation se pose
+     * donc dans cet élément, pas en tête de page, hors de l'écran.
+     */
+    public function testAddingAParagraphConfirmsItInsideIt(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $goal = $this->createGoal($user, 'Trail des Templiers');
+        $this->client->loginUser($user);
+
+        $this->addBlock($goal, ['type' => 'text', 'body' => 'Premier paragraphe']);
+        $block = $this->blocksOf($goal)[0];
+
+        self::assertResponseRedirects(sprintf('/goal/%d/story#block-%d', $goal->getId(), $block->getId()));
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('#block-'.$block->getId().' .kd-storyedit__done', 'Ajouté au récit.');
+
+        // Une seule fois : au rechargement, le message ne revient pas.
+        $this->client->request('GET', '/goal/'.$goal->getId().'/story');
+        self::assertSelectorNotExists('.kd-storyedit__done');
+    }
+
     public function testAnEmptyTextBlockIsRefused(): void
     {
         $user = $this->createUser('owner@example.com');

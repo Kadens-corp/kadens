@@ -3,8 +3,6 @@
 {% block title %}Messages — Kadens{% endblock %}
 
 {% block body %}
-    {{ include('admin/message/_flashes.html.twig') }}
-
     <div class="kd-pagehead">
         <div>
             <p class="kd-eyebrow kd-eyebrow--accent">Back-office</p>
@@ -44,6 +42,7 @@
                             <div class="kd-list__meta">
                                 {{ message.startsOn|date('d/m/Y') }}{% if message.endsOn != message.startsOn %} → {{ message.endsOn|date('d/m/Y') }}{% endif %}
                                 · {{ message.audience.value == 'all' ? 'Tout le monde' : message.recipients|map(u => u.displayName)|join(', ') }}
+                                · {{ message.platform.label }}
                                 · vu par {{ message.seenBy|length }}
                             </div>
                         </div>

@@ -39,7 +39,7 @@
                     {# Les enchaînements se nomment au groupe, dans la liste : un
                        bloc peut n'en porter aucun, ou plusieurs. L'en-tête ne
                        garde que ce qui est vrai du bloc entier. #}
-                    {% if block.rounds > 1 %}<span class="kd-block__rounds">× {{ block.rounds }} tours</span>{% endif %}
+                    {% if block.rounds > 1 %}<span class="kd-block__rounds">Bloc répété {{ block.rounds }} fois</span>{% endif %}
 
                     <span class="kd-block__sum">
                         {%- if stat and stat.seconds > 0 %}≈ {{ (stat.seconds / 60)|round(0, 'ceil') }} min{% endif -%}

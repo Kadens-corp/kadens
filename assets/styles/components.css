@@ -122,7 +122,7 @@ turbo-frame {
 
 /* Menu de compte — <details> natif (clavier + sans-JS), panneau flottant.
    Porte tout ce qui relève du compte et non du travail quotidien : profil,
-   objectifs, coaching, paramètres, déconnexion. */
+   exercices, objectifs, coaching (athlète seulement), paramètres, déconnexion. */
 .kd-usermenu {
     position: relative;
 }
@@ -187,14 +187,26 @@ turbo-frame {
     border: 1px solid var(--color-text);
 }
 
-.kd-usermenu__who {
+/* Qui est connecté, et à quel titre : le pseudo puis le rôle (C-02). */
+.kd-usermenu__id {
     margin: 0 0 var(--kd-space-2);
     padding: 0 var(--kd-space-3) var(--kd-space-3);
     border-bottom: 1px solid var(--color-divider);
+}
+
+.kd-usermenu__who {
+    margin: 0;
     font-family: var(--font-mono);
     font-size: 10px;
     color: var(--color-text-faint);
     overflow-wrap: anywhere;
+}
+
+.kd-usermenu__role {
+    margin: var(--kd-space-1) 0 0;
+    font-size: 12px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-secondary);
 }
 
 .kd-usermenu__list {
@@ -237,7 +249,7 @@ turbo-frame {
 }
 
 /* Nav condensée (tablette) : les libellés rétrécissent, ils ne disparaissent
-   pas. Les masquer laissait quatre icônes sans nom accessible — `display: none`
+   pas. Les masquer laissait des icônes sans nom accessible — `display: none`
    retire l'élément de l'arbre d'accessibilité, le lien perdait donc son nom. */
 @media (max-width: 900px) {
     .kd-nav {
@@ -257,6 +269,21 @@ turbo-frame {
     .kd-header__inner {
         padding: 0 var(--kd-space-5);
         gap: var(--kd-space-5);
+    }
+}
+
+/* Entre la barre basse (560px) et ~680px, six entrées (coach) + la marque +
+   l'avatar demandent ~620px : la barre débordait. Le mot « Kadens » cède sa
+   place, le logo reste. Masqué pour l'œil seulement (même technique que
+   .kd-sr-only) : il reste le nom accessible du lien d'accueil. */
+@media (min-width: 561px) and (max-width: 680px) {
+    .kd-brand__name {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 }
 
@@ -323,6 +350,15 @@ turbo-frame {
 
     .kd-nav__link.is-active {
         border-top-color: var(--color-text);
+    }
+
+    /* Jusqu'à six entrées (coach). À 390px chacune a 65px pour un libellé de
+     52px au plus (« CALENDRIER »). Sous 360px la marge fond : on retire
+     l'interlettrage, qui rend 4px au libellé le plus long. */
+    @media (max-width: 360px) {
+        .kd-nav__link {
+            letter-spacing: 0;
+        }
     }
 
     /* Le panneau de compte porte désormais cinq entrées : sur un écran de 560px de
@@ -673,8 +709,15 @@ turbo-frame {
     color: var(--color-status-done);
 }
 
+/* Le gris de « prévue » est un gris d'objet graphique (3,5:1 sur papier) : il
+   tient pour le point, pas pour un mot de 10 px. Le mot passe à l'encre
+   secondaire, le point garde le token de statut (#89). */
 .kd-badge--planned {
-    color: var(--color-status-planned);
+    color: var(--color-text-secondary);
+}
+
+.kd-badge--planned .kd-badge__dot {
+    background: var(--color-status-planned);
 }
 
 .kd-badge--missed {
@@ -1139,6 +1182,13 @@ turbo-frame {
     transform: translateY(-2px);
 }
 
+/* Menu « Dupliquer chez… » ouvert (#83) : un `transform` fait de la carte le bloc
+   conteneur des descendants en `position: fixed`, et le panneau mobile de
+   .kd-kebab--row, calé sur l'écran, se retrouverait calé sur la carte. */
+.kd-libcard:has(.kd-kebab[open]) {
+    transform: none;
+}
+
 /* Carte d'une activité (exercice) ou d'une séance qui en a : filet gauche et
    pastille d'icône à la couleur de la dominante (--act), la deuxième activité
    en bande basse de la pastille (--act2). */
@@ -1281,6 +1331,103 @@ a.kd-scope--link:hover {
     color: var(--color-primary);
 }
 
+/* Origine coach (#80) : « Coach · CoachAudit » sur ce que le coach a ajouté
+   chez l'athlète. Un cran plus lisible que la portée : c'est l'information de
+   la carte, pas une méta. Le nom garde sa casse (règle 4). */
+.kd-scope--coach {
+    max-width: 100%;
+    color: var(--color-text-secondary);
+}
+
+.kd-scope__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+/* Dans une pastille de calendrier, la couleur suit le texte de la pastille :
+   sur l'aplat d'une activité, le gris décroché ne se lirait plus. */
+.kd-calevent .kd-scope--coach {
+    color: inherit;
+    opacity: .8;
+}
+
+/* ----------------------------------------------------------------------------
+   Bandeau propriétaire (#64) : « Séance de Trailer38 » sur le contenu d'un
+   athlète ouvert par son coach. Encre et gris seulement : ce n'est ni une
+   action primaire ni une alerte, le rouge n'a rien à y faire (règle 2). Le
+   filet gauche suffit à le détacher de la page sans en faire un message.
+   ---------------------------------------------------------------------------- */
+.kd-ownerbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-2) var(--kd-space-3);
+    margin: 0 0 var(--kd-space-7);
+    padding: var(--kd-space-3) var(--kd-space-5);
+    background: var(--color-surface-subtle);
+    border-left: 3px solid var(--color-text);
+    color: var(--color-text);
+}
+
+.kd-ownerbar > svg {
+    width: 14px;
+    height: 14px;
+    color: var(--color-text-secondary);
+}
+
+.kd-ownerbar__kicker {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+/* Le nom est du contenu saisi : casse normale (règle 4). */
+.kd-ownerbar__name {
+    font-family: var(--font-body);
+    font-weight: var(--kd-weight-semibold);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.kd-ownerbar__link {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+}
+
+.kd-ownerbar__link:hover {
+    color: var(--color-primary);
+}
+
+.kd-ownerbar__link svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* Variante côté athlète (#80) : « Ajoutée par CoachAudit, ton coach ». Même
+   encre, filet en pointillé : ce n'est pas « chez qui on est » mais « d'où ça
+   vient ». */
+.kd-ownerbar--coach {
+    border-left-style: dashed;
+}
+
+.kd-ownerbar__note {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
 /* ----------------------------------------------------------------------------
    Liste de définitions (page de consultation : activité, zones, description…)
    ---------------------------------------------------------------------------- */
@@ -1320,7 +1467,8 @@ a.kd-scope--link:hover {
 }
 
 /* ----------------------------------------------------------------------------
-   Message flash
+   Message flash. Par défaut, un succès : vert du « fait » (#87). Le rose de
+   l'accent le faisait lire comme une erreur. L'échec garde le rouge.
    ---------------------------------------------------------------------------- */
 .kd-flash {
     display: flex;
@@ -1330,9 +1478,9 @@ a.kd-scope--link:hover {
     border-radius: var(--kd-radius-md);
     font-size: 13px;
     margin-bottom: var(--kd-space-8);
-    background: var(--color-primary-tint);
-    color: var(--color-primary-on-tint);
-    border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+    background: var(--color-success-tint);
+    color: var(--color-success);
+    border: 1px solid color-mix(in srgb, var(--color-success) 22%, transparent);
 }
 
 .kd-flash svg {
@@ -1345,6 +1493,59 @@ a.kd-scope--link:hover {
     background: color-mix(in srgb, var(--color-status-missed) 9%, transparent);
     color: var(--color-status-missed);
     border-color: color-mix(in srgb, var(--color-status-missed) 22%, transparent);
+}
+
+/* Le coin des retours (#125, généralisé en #129) : la pile fixe en bas à droite
+   que pose `base.html.twig`, avec les messages flash de toute page
+   (`components/_flash_toasts`) puis la pastille « Enregistré »
+   (`.kd-savestatus`). Un message en tête de page poussait tout vers le bas, et
+   ne se lisait pas après un geste qui garde le défilement. Mêmes couleurs que le
+   flash. Seul le fond de l'erreur change : sa teinte est translucide et
+   laisserait transparaître la page dessous, on la mélange donc au papier. */
+.kd-toasts {
+    position: fixed;
+    right: var(--kd-space-7);
+    bottom: calc(var(--kd-navbar-h, 0px) + var(--kd-space-7));
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--kd-space-3);
+    max-width: min(28rem, calc(100vw - 2 * var(--kd-space-7)));
+    pointer-events: none;
+}
+
+.kd-toasts .kd-flash {
+    margin-bottom: 0;
+    padding: var(--kd-space-4) var(--kd-space-5);
+    pointer-events: auto;
+}
+
+.kd-toasts .kd-flash--error {
+    background: color-mix(in srgb, var(--color-status-missed) 9%, var(--color-surface));
+}
+
+.kd-flash__close {
+    display: inline-flex;
+    margin-left: auto;
+    padding: var(--kd-space-1);
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+.kd-flash__close svg {
+    width: 14px;
+    height: 14px;
+}
+
+@media (max-width: 560px) {
+    .kd-toasts {
+        right: var(--kd-space-4);
+        left: var(--kd-space-4);
+        max-width: none;
+    }
 }
 
 /* ----------------------------------------------------------------------------
@@ -1390,8 +1591,53 @@ a.kd-scope--link:hover {
     transition: border-color .12s ease, box-shadow .12s ease;
 }
 
+/* L'exemple d'un champ vide ne doit pas passer pour une valeur saisie (#97) :
+   préfixé « ex. » dans le texte, et en italique ici. Le gris reste celui du
+   token (4.8:1) : le pâlir encore ferait passer l'exemple sous le seuil de
+   lecture, c'est l'italique et le « ex. » qui le distinguent. */
 .kd-input::placeholder {
     color: var(--color-text-placeholder);
+    font-style: italic;
+}
+
+/* Valeur + unité côte à côte (DistanceType, #97) : un seul champ à l'œil. Le
+   sélecteur d'unité prend la largeur de « km », la valeur le reste. */
+.kd-unitinput {
+    display: flex;
+    gap: var(--kd-space-2);
+}
+
+.kd-unitinput__value {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.kd-unitinput__unit {
+    flex: 0 0 auto;
+    width: auto;
+}
+
+/* Alerte de vraisemblance sous une distance (#97). Encre forte et icône, pas de
+   rouge : rien n'a échoué, la valeur est enregistrée, on demande de vérifier. */
+.kd-distcheck {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-2) 0 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-strong);
+}
+
+.kd-distcheck:empty {
+    display: none;
+}
+
+.kd-distcheck svg {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    margin-top: 1px;
 }
 
 /* Le halo teinté d'avant ne tenait pas les 3:1 de WCAG 1.4.11. On garde l'aide
@@ -1810,6 +2056,37 @@ a.kd-scope--link:hover {
     padding: 12px var(--kd-space-6);
 }
 
+/* « Mot de passe oublié ? » sous le champ (#99) : un <details> natif dont le
+   résumé a l'allure d'un lien discret, le texte se déplie dans le flux. */
+.kd-auth__forgot {
+    margin-top: var(--kd-space-3);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-auth__forgot > summary {
+    display: inline;
+    list-style: none;
+    cursor: pointer;
+    color: var(--color-text-soft);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.kd-auth__forgot > summary::-webkit-details-marker {
+    display: none;
+}
+
+.kd-auth__forgot > summary:hover,
+.kd-auth__forgot[open] > summary {
+    color: var(--color-text);
+}
+
+.kd-auth__forgot > p {
+    margin: var(--kd-space-3) 0 0;
+    line-height: 1.5;
+}
+
 /* Message d'erreur d'authentification */
 .kd-auth__error {
     display: flex;
@@ -1888,6 +2165,114 @@ a.kd-scope--link:hover {
 }
 
 /* ----------------------------------------------------------------------------
+   Partage par lien (#61) — bandeau du propriétaire, sous le hero d'une séance ou
+   la barre d'un plan. Privé par défaut : l'état se lit en premier, le geste
+   d'envoi (« Copier le lien à envoyer ») n'existe qu'une fois le lien ouvert.
+   ---------------------------------------------------------------------------- */
+.kd-sharelink {
+    margin: 0 0 var(--kd-space-9);
+    padding: var(--kd-space-6) var(--kd-space-7);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-subtle);
+}
+
+/* Une case de plan : une ligne d'explication, pas de geste. */
+.kd-sharelink--note {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-sharelink svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+
+.kd-sharelink__state {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin: 0;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
+.kd-sharelink__hint {
+    margin: var(--kd-space-3) 0 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-sharelink__url {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin-top: var(--kd-space-5);
+}
+
+.kd-sharelink__url .kd-input {
+    flex: 1 1 16rem;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.kd-sharelink__feedback {
+    margin: var(--kd-space-3) 0 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-primary);
+}
+
+.kd-sharelink__feedback:empty {
+    display: none;
+}
+
+.kd-sharelink__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin-top: var(--kd-space-5);
+}
+
+/* La plage de semaines vit dans le bandeau : elle en perd le cadre. */
+.kd-sharelink .kd-sharerange {
+    margin: var(--kd-space-5) 0 0;
+    padding: 0;
+    border: 0;
+    background: none;
+}
+
+/* Bandeau des pages publiques (#61, A-44) : la page publique reprend le rendu de
+   la page privée, c'est lui qui dit où l'on est. */
+.kd-publicbanner {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin: 0 0 var(--kd-space-7);
+    padding: var(--kd-space-4) var(--kd-space-6);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface-subtle);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-publicbanner strong {
+    color: var(--color-text-strong);
+}
+
+.kd-publicbanner svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+
+/* ----------------------------------------------------------------------------
    Séance — en-tête de lecture (titre + méta + description)
    ---------------------------------------------------------------------------- */
 .kd-workouthead {
@@ -1933,6 +2318,15 @@ a.kd-scope--link:hover {
      un liseré de fond apparaît sur les côtés. */
     margin: calc(-1 * var(--kd-space-13)) calc(-1 * min(var(--kd-space-8), 4vw)) var(--kd-space-10);
     padding: var(--kd-space-8) min(var(--kd-space-8), 4vw) var(--kd-space-12);
+}
+
+/* La morsure du haut suppose que le hero ouvre la page. Précédé du bandeau
+   « Page publique » (#61) ou du bandeau propriétaire (#64), il les recouvrait :
+   il reprend alors sa place dans le flux, sous eux. Les côtés mordent toujours.
+   (Le flash n'en est plus : il vit en toast hors de <main>, #129.) */
+.kd-publicbanner + .kd-wk > .kd-wk__hero,
+.kd-ownerbar + .kd-wk > .kd-wk__hero {
+    margin-top: 0;
 }
 
 .kd-wk__heroinner {
@@ -2098,6 +2492,14 @@ a.kd-scope--link:hover {
     gap: var(--kd-space-3);
 }
 
+/* Le statut dans la barre du hero : sur l'aplat (encre ou couleur d'activité),
+   les teintes de statut ne tiennent pas le contraste — vert ou rouge sur carmin
+   (#89). Il s'écrit en blanc, l'icône et le mot portent le sens. */
+.kd-wk__baractions .kd-badge {
+    border-color: var(--color-border-on-ink-strong);
+    color: var(--color-on-ink);
+}
+
 /* Variante de bouton sur aplat encre : le secondaire habituel (bordure encre)
    deviendrait invisible ici. */
 .kd-btn--onink {
@@ -2211,6 +2613,160 @@ a.kd-scope--link:hover {
 
 .kd-done__moverow .kd-input {
     width: auto;
+}
+
+/* ----------------------------------------------------------------------------
+   Bilan d'une séance datée (#91) — sous le hero de /schedule/{id}
+   Ce qui a été enregistré, en lecture : statut, commentaire, ressenti, réalisé,
+   lien vers la séance type. Une liste de définitions, libellé en condensé à
+   gauche, valeur à droite ; empilée sous 560px.
+   ---------------------------------------------------------------------------- */
+.kd-sumcard {
+    margin: 0 0 var(--kd-space-9);
+    padding: var(--kd-space-7) var(--kd-space-8);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+}
+
+.kd-sumcard__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--kd-space-4);
+    margin-bottom: var(--kd-space-5);
+}
+
+.kd-sumcard__title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-bold);
+    font-size: 18px;
+    letter-spacing: var(--kd-tracking-display);
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-sumcard__list {
+    margin: 0;
+}
+
+.kd-sumcard__row {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    gap: var(--kd-space-4);
+    padding: var(--kd-space-4) 0;
+    border-top: 1px solid var(--color-divider);
+}
+
+.kd-sumcard__row dt {
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-semibold);
+    font-size: 13px;
+    letter-spacing: var(--kd-tracking-display);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-sumcard__row dd {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--color-text);
+}
+
+.kd-sumcard__row .kd-applog {
+    margin: 0;
+}
+
+.kd-sumcard__status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    font-weight: var(--kd-weight-semibold);
+}
+
+.kd-sumcard__status svg {
+    width: 15px;
+    height: 15px;
+}
+
+.kd-sumcard__status--done { color: var(--color-status-done); }
+.kd-sumcard__status--planned { color: var(--color-status-planned); }
+.kd-sumcard__status--missed { color: var(--color-status-missed); }
+
+/* Le commentaire est du contenu saisi : casse normale, retours à la ligne gardés. */
+.kd-sumcard__notes {
+    margin: 0;
+    white-space: normal;
+}
+
+.kd-sumcard__empty,
+.kd-sumcard__hint {
+    color: var(--color-text-soft);
+}
+
+.kd-sumcard__link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    color: var(--color-text);
+    font-weight: var(--kd-weight-medium);
+}
+
+.kd-sumcard__link svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* ----------------------------------------------------------------------------
+   Consigne du plan (#95) — la note de case, sur la séance datée qui en est
+   issue (page /schedule/{id} et modale du calendrier). Une note en marge :
+   encre, filet gauche plein, sans rouge (ni action, ni échec). Le libellé en
+   mono comme les titres de section de modale, le texte en police de lecture.
+   ---------------------------------------------------------------------------- */
+.kd-instruction {
+    margin: 0 0 var(--kd-space-7);
+    padding: var(--kd-space-5) var(--kd-space-7);
+    background: var(--color-surface-subtle);
+    border-left: 3px solid var(--color-text);
+}
+
+.kd-instruction__label {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: 0 0 var(--kd-space-2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-instruction__label svg {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+}
+
+/* Contenu saisi : casse normale, retours à la ligne gardés par nl2br. */
+.kd-instruction__text {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--color-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.kd-instruction--compact {
+    margin: var(--kd-space-4) 0 var(--kd-space-6);
+    padding: var(--kd-space-4) var(--kd-space-5);
+}
+
+.kd-instruction--compact .kd-instruction__text {
+    font-size: 14px;
 }
 
 /* ---- Menu kebab (actions secondaires) — <details> natif ---- */
@@ -2876,6 +3432,14 @@ a.kd-scope--link:hover {
     font-size: 11px;
 }
 
+/* « % de la série la plus lourde » (#106) : l'intitulé entier prendrait plus de
+   largeur que tout le reste du tableau, sur une colonne de « 50 % ». Il passe sur
+   plusieurs lignes, borné à la largeur d'une colonne de chiffres. */
+.kd-settable thead .kd-settable__c-pct {
+    width: 7rem;
+    white-space: normal;
+}
+
 /* ----------------------------------------------------------------------------
    Séance datée — le RÉALISÉ à côté du PRÉVU (KL-07)
 
@@ -3443,6 +4007,7 @@ a.kd-scope--link:hover {
 
     .kd-wk__baractions {
         width: 100%;
+        flex-wrap: wrap;
         gap: var(--kd-space-3);
     }
 
@@ -3450,8 +4015,24 @@ a.kd-scope--link:hover {
         flex: 1;
     }
 
+    /* Le retour de copie passe sous les boutons, pleine largeur. Masqué, il
+       laissait le téléphone sans aucun signe que le lien était parti (A-43). */
     .kd-wk__feedback {
+        flex-basis: 100%;
+    }
+
+    .kd-wk__feedback:empty {
         display: none;
+    }
+
+    /* Bilan de séance datée : libellé au-dessus de sa valeur. */
+    .kd-sumcard {
+        padding: var(--kd-space-6);
+    }
+
+    .kd-sumcard__row {
+        grid-template-columns: 1fr;
+        gap: var(--kd-space-1);
     }
 
     /* Actions de fin de séance datée : une colonne, boutons pleine largeur. */
@@ -3533,6 +4114,88 @@ a.kd-scope--link:hover {
     display: inline-flex;
     justify-content: center;
     min-width: 22px;
+}
+
+/* ----------------------------------------------------------------------------
+   Infobulle d'un sigle (#102, components/_term.html.twig). Le texte est dans la
+   page : il s'ouvre au survol (pointeur qui survole vraiment, sinon le toucher
+   laisse un survol collant que le second toucher ne refermerait pas), au focus
+   clavier, et au toucher par le contrôleur `term` (`.is-open`).
+   ---------------------------------------------------------------------------- */
+.kd-term {
+    position: relative;
+    display: inline;
+}
+
+.kd-term__word {
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+    cursor: help;
+}
+
+.kd-term__hint {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: var(--kd-space-1);
+    padding: 0;
+    border: 1px solid var(--color-text-secondary);
+    border-radius: var(--kd-radius-pill);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: var(--kd-weight-bold);
+    line-height: 1;
+    vertical-align: middle;
+    cursor: help;
+}
+
+/* Libellé de champ suivi de son « ? » : sur une ligne. */
+.kd-field__labelrow {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+}
+
+.kd-field__labelrow .kd-term__hint {
+    margin-left: 0;
+}
+
+.kd-term__tip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + var(--kd-space-2));
+    left: 50%;
+    z-index: 40;
+    width: max-content;
+    max-width: min(260px, 80vw);
+    padding: var(--kd-space-3) var(--kd-space-4);
+    transform: translateX(-50%);
+    background: var(--color-surface-ink);
+    color: var(--color-on-ink);
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: var(--kd-weight-regular);
+    letter-spacing: normal;
+    line-height: 1.4;
+    text-align: left;
+    text-transform: none;
+    white-space: normal;
+}
+
+.kd-term.is-open .kd-term__tip,
+.kd-term__word:focus-visible + .kd-term__tip,
+.kd-term__hint:focus-visible + .kd-term__tip {
+    display: block;
+}
+
+@media (hover: hover) {
+    .kd-term:hover .kd-term__tip {
+        display: block;
+    }
 }
 
 /* Séries détaillées en lecture : une ligne par groupe (pastille · compteur · détail). */
@@ -4065,7 +4728,7 @@ a.kd-planday__item:hover svg {
    modale, pour garder les cases lisibles malgré la densité.
    ---------------------------------------------------------------------------- */
 
-/* Barre d'ajout : poser une séance / instancier un plan (deux replis) */
+/* Barre d'ajout : poser une séance / placer un plan (deux replis) */
 .kd-calbar {
     display: flex;
     flex-wrap: wrap;
@@ -4309,7 +4972,7 @@ a.kd-planday__item:hover svg {
 }
 
 /* Pastille de séance datée — le contenu sur toute la case, les deux actions en
-   rangée dessous (cycle rapide du statut | voir la séance). Sur ordinateur une
+   rangée dessous (menu du statut | voir la séance). Sur ordinateur une
    colonne de calendrier fait ~150px, soit moins que l'écran d'un téléphone :
    trois zones côte à côte ne laissaient au titre qu'une quarantaine de pixels.
    Sous 560px l'agenda vertical rend la pleine largeur, et la ligne y redevient
@@ -4349,23 +5012,31 @@ a.kd-planday__item:hover svg {
     border-left-color: var(--color-status-missed);
 }
 
-/* Le formulaire de cycle enveloppe le bouton toggle : il ne prend pas de place
+/* L'enveloppe du statut (bouton + son menu en popover) ne prend pas de place
    propre, le bouton porte tout. Les deux actions se partagent la rangée basse à
    parts égales (`flex: 1 1 0`), d'où deux cibles larges au lieu de deux colonnes
-   de 26px. */
-.kd-calevent__statusform {
+   de 26px.
+   Conteneur de requête (`container-type`) : le libellé du statut ne tient que si
+   la demi-rangée est assez large, et cette largeur dépend de la colonne du
+   calendrier, pas de l'écran — une @media ne saurait pas la lire. Ce n'est donc
+   pas un quatrième point de rupture de page, c'est la taille de la pastille. */
+.kd-calevent__status {
     display: flex;
     flex: 1 1 0;
     min-width: 0;
     border-top: 1px solid var(--color-divider);
+    container-type: inline-size;
 }
 
-/* Bouton de cycle du statut. L'icône est teintée par le statut. */
+/* Bouton du statut : ouvre le menu. L'icône est teintée par le statut, le
+   libellé le nomme en clair quand la place le permet (#89). */
 .kd-calevent__toggle {
     flex: 1 1 auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: var(--kd-space-1);
+    min-width: 0;
     padding: var(--kd-space-1) var(--kd-space-2);
     border: 0;
     border-right: 1px solid var(--color-divider);
@@ -4380,8 +5051,32 @@ a.kd-planday__item:hover svg {
 }
 
 .kd-calevent__toggle svg {
+    flex: none;
     width: 14px;
     height: 14px;
+}
+
+/* Le mot à l'encre secondaire, l'icône garde la teinte du statut : le gris de
+   « prévue » ne tient pas un texte de 10 px (3,2:1). Sur l'aplat, le blanc du
+   bouton (ci-dessous) reprend la main. */
+.kd-calevent__statuslbl {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+
+.kd-calevent--act .kd-calevent__statuslbl {
+    color: inherit;
+}
+
+/* Demi-rangée trop étroite : l'icône seule, le nom accessible du bouton dit
+   toujours le statut. */
+@container (max-width: 76px) {
+    .kd-calevent__statuslbl {
+        display: none;
+    }
 }
 
 .kd-calevent--done .kd-calevent__toggle {
@@ -4454,9 +5149,18 @@ a.kd-planday__item:hover svg {
     white-space: nowrap;
 }
 
-.kd-calevent--done .kd-calevent__title {
-    text-decoration: line-through;
-    text-decoration-color: color-mix(in srgb, var(--color-status-done) 55%, transparent);
+/* Séance faite : une coche devant le titre. Le titre barré qu'elle remplace se
+   lisait « annulé » (#89). */
+.kd-calevent__check {
+    display: inline-flex;
+    vertical-align: -2px;
+    margin-right: var(--kd-space-1);
+    color: var(--color-status-done);
+}
+
+.kd-calevent__check svg {
+    width: 12px;
+    height: 12px;
 }
 
 /* Méta compacte de la pastille : icônes d'activité + durée estimée (+ nb d'exos
@@ -4560,7 +5264,7 @@ a.kd-planday__item:hover svg {
    carte entière prend la couleur de la DOMINANTE (--act, posé par
    activity.surface()), la deuxième activité fait une bande basse de 4 px
    (--act2). Le filet gauche ne code donc plus le statut : c'est l'icône du
-   bouton de cycle qui le porte, en blanc sur une rangée assombrie, et la
+   bouton de statut qui le porte, en blanc sur une rangée assombrie, et la
    manquée se hachure. Une séance sans activité (vide, libre) garde la pastille
    neutre à filet de statut ci-dessus.
    Les couleurs s'appliquent aux ZONES (contenu, rangée), jamais à la racine :
@@ -4604,8 +5308,18 @@ a.kd-planday__item:hover svg {
     color: var(--color-on-activity-muted);
 }
 
-.kd-calevent--act.kd-calevent--done .kd-calevent__title {
-    text-decoration-color: var(--color-on-activity-muted);
+/* Sur l'aplat, la coche et le ressenti s'écrivent en blanc : le vert du statut
+   et le rouge de la difficulté ne se lisent pas sur un carmin ou un ocre (#89,
+   « Difficulté 8/10 » rouge sur rouge). */
+.kd-calevent--act .kd-calevent__check,
+.kd-calevent--act .kd-rating__feel,
+.kd-calevent--act .kd-rating__rpe {
+    color: var(--color-on-activity);
+}
+
+.kd-calevent--act .kd-rating,
+.kd-calevent--act .kd-rating__src {
+    color: var(--color-on-activity-muted);
 }
 
 /* Le rouge de « en retard » ne se lit pas sur un aplat coloré : le drapeau
@@ -4614,7 +5328,7 @@ a.kd-planday__item:hover svg {
     color: var(--color-on-activity);
 }
 
-.kd-calevent--act .kd-calevent__statusform,
+.kd-calevent--act .kd-calevent__status,
 .kd-calevent--act .kd-calevent__eye {
     border-top-color: var(--color-border-on-ink);
     background: color-mix(in srgb, var(--act) 82%, var(--color-shade));
@@ -4673,10 +5387,15 @@ a.kd-planday__item:hover svg {
         flex: 1 1 auto;
     }
 
-    .kd-calevent__statusform {
+    .kd-calevent__status {
         order: -1;
         flex: 0 0 auto;
         border-top: 0;
+        container-type: normal;
+    }
+
+    .kd-calevent__statuslbl {
+        display: none;
     }
 
     .kd-calevent__toggle {
@@ -4693,6 +5412,74 @@ a.kd-planday__item:hover svg {
     .kd-calevent--act .kd-calevent__eye {
         border-left-color: var(--color-border-on-ink);
     }
+}
+
+/* Menu du statut d'une séance datée (#89) : trois choix nommés, le courant
+   marqué. Popover natif, donc en top-layer : il hérite encore de la pastille
+   (police, couleur), d'où les valeurs posées ici en entier. Sa position est
+   écrite par `status_menu_controller` ; sans JS, il reste centré par le
+   navigateur. Habillage du menu kebab : papier, filet d'encre, rayon 0. */
+.kd-statusmenu {
+    min-width: 168px;
+    padding: var(--kd-space-2) 0;
+    border: 1px solid var(--color-text);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    font-family: var(--font-body);
+}
+
+.kd-statusmenu__title {
+    margin: 0;
+    padding: var(--kd-space-2) var(--kd-space-5) var(--kd-space-3);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-statusmenu__item {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    width: 100%;
+    padding: var(--kd-space-3) var(--kd-space-5);
+    border: 0;
+    border-left: 3px solid transparent;
+    background: transparent;
+    font: inherit;
+    font-size: 13.5px;
+    color: var(--color-text);
+    text-align: left;
+    cursor: pointer;
+}
+
+.kd-statusmenu__item:hover {
+    background: var(--color-fill);
+}
+
+.kd-statusmenu__item svg {
+    flex: none;
+    width: 15px;
+    height: 15px;
+}
+
+.kd-statusmenu__item--planned svg {
+    color: var(--color-status-planned);
+}
+
+.kd-statusmenu__item--done svg {
+    color: var(--color-status-done);
+}
+
+.kd-statusmenu__item--missed svg {
+    color: var(--color-status-missed);
+}
+
+/* Le statut courant : filet gauche d'encre et graisse, pas une couleur de plus. */
+.kd-statusmenu__item.is-active {
+    border-left-color: var(--color-text);
+    font-weight: var(--kd-weight-semibold);
 }
 
 /* ----------------------------------------------------------------------------
@@ -4882,6 +5669,143 @@ a.kd-planday__item:hover svg {
 }
 
 /* ----------------------------------------------------------------------------
+   Calendrier au téléphone : en-tête compact (#107)
+   À 390px, l'en-tête (boutons, bilan, objectif, légende) faisait ~520px avant
+   la première séance. Trois leviers, tous sous 560px :
+   - bilan de la semaine et légende repliés dans `.kd-calfold` (un <details>
+     ouvert côté serveur, refermé par le contrôleur `collapse`) ;
+   - Historique, Export, Abonnement et Aide réduits à leur icône, le libellé
+     restant le nom accessible (`.kd-calhead__label`, même découpe que
+     `.kd-sr-only`, qui ne peut pas s'activer depuis une @media) ;
+   - en vue mois, jours sans séance masqués tant que `.kd-calfree` n'est pas
+     cochée.
+   Au-dessus de 560px, rien ne change : summary et case sont masqués, le
+   <details> reste ouvert.
+   ---------------------------------------------------------------------------- */
+.kd-calfold > summary,
+.kd-calfree {
+    display: none;
+}
+
+@media (max-width: 560px) {
+    .kd-pagehead--cal {
+        gap: var(--kd-space-5);
+        margin-bottom: var(--kd-space-7);
+    }
+
+    .kd-calhead {
+        gap: var(--kd-space-4);
+    }
+
+    .kd-calhead .kd-actionbar__end {
+        margin-left: 0;
+        gap: var(--kd-space-2);
+    }
+
+    .kd-calhead__label,
+    .kd-calhead .kd-help__trigger > span {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    /* Repli : même habit que la barre de filtres des index. */
+    .kd-calfold {
+        border: 1px solid var(--color-border);
+        border-left: 3px solid var(--color-primary);
+        background: var(--color-surface-raised);
+        margin-bottom: var(--kd-space-6);
+    }
+
+    .kd-calfold > summary {
+        display: flex;
+        align-items: center;
+        gap: var(--kd-space-3);
+        padding: var(--kd-space-5) var(--kd-space-6);
+        list-style: none;
+        cursor: pointer;
+        font-family: var(--font-display);
+        font-size: 14px;
+        font-weight: var(--kd-weight-semibold);
+        letter-spacing: var(--kd-tracking-action);
+        text-transform: uppercase;
+        color: var(--color-text-strong);
+    }
+
+    .kd-calfold > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .kd-calfold > summary svg {
+        flex: none;
+        width: 16px;
+        height: 16px;
+        margin-left: auto;
+        color: var(--color-text-faint);
+        transition: transform .15s ease;
+    }
+
+    .kd-calfold[open] > summary {
+        border-bottom: 1px solid var(--color-divider);
+    }
+
+    .kd-calfold[open] > summary svg {
+        transform: rotate(180deg);
+    }
+
+    /* Ouvert, le bilan perd son cadre : c'est le repli qui le porte. */
+    .kd-calfold .kd-weekbar {
+        gap: var(--kd-space-6);
+        margin: 0;
+        padding: var(--kd-space-6);
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+    }
+
+    .kd-calfold .kd-weekstat__val {
+        font-size: 20px;
+    }
+
+    .kd-calfold .kd-legend--cal {
+        margin: 0;
+        padding: var(--kd-space-6);
+    }
+
+    .kd-calfold .kd-weekbar + .kd-legend--cal {
+        padding-top: 0;
+    }
+
+    .kd-calfree {
+        display: flex;
+        align-items: center;
+        gap: var(--kd-space-3);
+        margin-bottom: var(--kd-space-5);
+        font-family: var(--font-body);
+        font-size: 13px;
+        color: var(--color-text-secondary);
+        cursor: pointer;
+    }
+
+    .kd-calfree__toggle {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        accent-color: var(--color-primary);
+    }
+
+    .kd-cal:not(:has(.kd-calfree__toggle:checked)) .kd-calday--free {
+        display: none;
+    }
+}
+
+/* ----------------------------------------------------------------------------
    Modale réutilisable (élément natif <dialog> + contrôleur Stimulus `dialog`)
    ---------------------------------------------------------------------------- */
 .kd-modal {
@@ -5051,14 +5975,52 @@ a.kd-planday__item:hover svg {
     margin-bottom: var(--kd-space-2);
 }
 
-/* Segmenté de statut : trois boutons soumettant le formulaire avec leur valeur.
-   Le bouton actif reflète le statut courant ; la couleur code le statut. */
+/* Saisie non enregistrée à la fermeture (#90). Ni un succès ni un échec : un
+   encart à l'encre, filet gauche plein, comme une note en marge. Les deux
+   réponses suivent le message, l'enregistrement en premier. */
+.kd-modal__unsaved {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-4);
+    margin: 0 0 var(--kd-space-6);
+    padding: var(--kd-space-5) var(--kd-space-6);
+    background: var(--color-surface-subtle);
+    border-left: 3px solid var(--color-text);
+    color: var(--color-text-strong);
+}
+
+.kd-modal__unsaved-msg {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin: 0;
+    font-size: 13px;
+    font-weight: var(--kd-weight-medium);
+}
+
+.kd-modal__unsaved-msg svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+
+.kd-modal__unsaved-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--kd-space-3);
+}
+
+/* Segmenté de statut de la modale du calendrier : trois radios (#90), qui ne
+   soumettent plus rien — c'est « Enregistrer » qui envoie. La radio couvre
+   l'étiquette, invisible ; la case cochée se dessine par :has(:checked), la
+   couleur code le statut. */
 .kd-segmented {
     display: flex;
     gap: var(--kd-space-2);
 }
 
 .kd-segbtn {
+    position: relative;
     flex: 1 1 0;
     display: inline-flex;
     align-items: center;
@@ -5081,24 +6043,37 @@ a.kd-planday__item:hover svg {
     height: 15px;
 }
 
+.kd-segbtn input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    margin: 0;
+    cursor: pointer;
+}
+
 .kd-segbtn:hover {
     border-color: var(--color-border-strong);
     background: var(--color-surface-raised);
 }
 
-.kd-segbtn--done.is-active {
+.kd-segbtn:has(input:focus-visible) {
+    outline: 2px solid var(--color-text);
+    outline-offset: 2px;
+}
+
+.kd-segbtn--done:has(input:checked) {
     color: var(--color-status-done);
     border-color: color-mix(in srgb, var(--color-status-done) 45%, transparent);
     background: color-mix(in srgb, var(--color-status-done) 10%, transparent);
 }
 
-.kd-segbtn--planned.is-active {
+.kd-segbtn--planned:has(input:checked) {
     color: var(--color-status-planned);
     border-color: color-mix(in srgb, var(--color-status-planned) 55%, transparent);
     background: color-mix(in srgb, var(--color-status-planned) 12%, transparent);
 }
 
-.kd-segbtn--missed.is-active {
+.kd-segbtn--missed:has(input:checked) {
     color: var(--color-status-missed);
     border-color: color-mix(in srgb, var(--color-status-missed) 45%, transparent);
     background: color-mix(in srgb, var(--color-status-missed) 9%, transparent);
@@ -5148,8 +6123,9 @@ a.kd-planday__item:hover svg {
     cursor: pointer;
 }
 
-.kd-ratingpanel__form {
-    margin-top: var(--kd-space-6);
+.kd-done__rating > summary {
+    margin-bottom: var(--kd-space-4);
+    cursor: pointer;
 }
 
 .kd-ratingpick {
@@ -5553,10 +6529,12 @@ a.kd-summplan__title:hover {
 }
 
 /* ---- Bandeau « ce que cette séance va charger » ----
-   Silhouette + légende chiffrée à gauche, tuiles de volume dessous. Il arrive
-   APRÈS le rendu de la page (fetch), d'où l'absence de hauteur réservée : rien
-   ne saute, parce que rien n'est posé en dessous avant qu'il n'existe — le
-   compositeur qui le suit descend simplement d'un cran. */
+   Silhouette + légende chiffrée à gauche, tuiles de volume dessous. Dans le
+   compositeur, il est rendu avec la page en esquisse (silhouettes sans tracés,
+   même boîte), puis complété par fetch : la place est prise dès le départ. Il
+   arrivait vide et poussait le compositeur d'un cran, sous la main (#125). Ses
+   changements de hauteur ensuite sont compensés au défilement
+   (`composer#holdPlaceOnVolume`). */
 .kd-wkvol {
     margin-bottom: var(--kd-space-6);
     padding: var(--kd-space-6);
@@ -5813,6 +6791,33 @@ a.kd-summplan__title:hover {
     color: var(--color-text-placeholder);
 }
 
+/* « Ajout dans : … » : la cible du prochain ajout, dite en tête de colonne. */
+.kd-libpanel__target {
+    margin: var(--kd-space-3) 0 0;
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+.kd-libpanel__target strong {
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-primary-on-tint);
+}
+
+/* Sous les pastilles « à qui » : les séances du coach déjà copiées chez l'athlète,
+   qui ne figurent plus que par leur copie (#112). Même voix que la cible. */
+.kd-libpanel__note {
+    margin: var(--kd-space-3) 0 0;
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+}
+
+.kd-libpanel__note strong {
+    font-weight: var(--kd-weight-semibold);
+}
+
 /* N'a de sens qu'en feuille : sur écran large la bibliothèque est une colonne, il
    n'y a rien à fermer. */
 .kd-libpanel__close {
@@ -5832,9 +6837,10 @@ a.kd-summplan__title:hover {
 
 /* Rappel de la case visée quand la palette est ouverte depuis le « + » d'un jour.
    En feuille, la palette masque la trame : sans ce rappel, on ne sait plus où le
-   prochain tap va poser. Rempli par le contrôleur, `hidden` sinon. */
-.kd-libpanel__target {
-    margin: var(--kd-space-3) 0 0;
+   prochain tap va poser. Rempli par le contrôleur, `hidden` sinon. Modificateur
+   de la cible simple du compositeur : les deux partageaient le même nom, et cette
+   règle, déclarée plus bas, encadrait aussi « Ajout dans : … ». */
+.kd-libpanel__target--cell {
     padding: var(--kd-space-2) var(--kd-space-3);
     border-left: 2px solid var(--color-primary);
     background: var(--color-primary-tint);
@@ -6294,6 +7300,73 @@ button.kd-libx:active {
     color: var(--color-text-faint);
 }
 
+/* ---- Les charges se saisissent dans l'app (#63) ----
+   Partout où un chiffre de salle manque faute de réalisé. Même registre que
+   l'encart hors programme : une information, pas une alerte. Aucune couleur
+   d'état, le rouge reste aux actions et à l'échec. */
+.kd-applog {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-3);
+    margin: 0 0 var(--kd-space-6);
+    padding: var(--kd-space-4) var(--kd-space-5);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-subtle);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+    text-align: left;
+}
+
+.kd-applog > svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    /* `margin` entier : `.kd-empty svg`, déclaré plus haut, pose une marge
+       basse qui décalerait l'icône dans un état vide. */
+    margin: 2px 0 0;
+    color: var(--color-text-faint);
+}
+
+.kd-applog__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-1);
+}
+
+.kd-applog__text {
+    color: var(--color-text);
+}
+
+.kd-applog__link {
+    color: inherit;
+    font-weight: var(--kd-weight-semibold);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.kd-applog__note {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+/* Dans un état vide, l'encart n'est qu'une ligne d'explication sous le titre :
+   ni cadre ni fond, centré comme le reste du bloc. */
+.kd-empty .kd-applog {
+    justify-content: center;
+    margin: var(--kd-space-3) auto 0;
+    padding: 0;
+    border: 0;
+    background: none;
+}
+
+/* Dans un formulaire (modale du calendrier, « Boucler la séance »), il suit le
+   champ de note sans marge propre : c'est l'espacement du formulaire qui joue. */
+.kd-modal__form .kd-applog,
+.kd-done__form .kd-applog {
+    margin: 0;
+}
+
 .kd-cblocks__empty svg {
     width: 26px;
     height: 26px;
@@ -6385,9 +7458,14 @@ button.kd-libx:active {
      passe sous la flèche et paraît tronqué. min-width évite tout écrasement. */
     min-width: fit-content;
     padding: var(--kd-space-1) var(--kd-space-10) var(--kd-space-1) var(--kd-space-3);
-    border: 1px solid transparent;
+    /* Toujours lisible comme une liste (#85) : bordure discrète et flèche
+       permanentes, pas seulement au survol. `background-color` et non `background` :
+       le raccourci effaçait l'image de flèche posée par `.kd-select`. */
+    border: 1px solid var(--color-divider);
     border-radius: var(--kd-radius-sm);
-    background: transparent;
+    background-color: transparent;
+    background-position: right var(--kd-space-2) center;
+    background-size: 14px 14px;
     font-family: var(--font-mono);
     font-size: 11px;
     font-weight: var(--kd-weight-semibold);
@@ -6531,9 +7609,79 @@ button.kd-libx:active {
 
 /* ---- Ligne d'exercice ---- */
 .kd-cexo {
+    position: relative;
     border: 1px solid var(--color-divider);
     border-radius: var(--kd-radius-lg);
     background: var(--color-surface-raised);
+}
+
+/* « Enchaîner » entre deux cartes (#85). Le bouton vit dans la carte du dessous
+   (DOM plat, cf. _block.html.twig) : on élargit l'espace au-dessus d'elle et on y
+   remonte le bouton, centré sur la jointure. Room = marge + gap du conteneur. */
+.kd-cexo.kd-cexo--seam {
+    margin-top: var(--kd-space-7);
+}
+
+.kd-cexo__seam {
+    position: absolute;
+    top: calc((var(--kd-space-7) + var(--kd-space-2)) / -2);
+    left: 50%;
+    z-index: 1;
+    margin: 0;
+    transform: translate(-50%, -50%);
+}
+
+.kd-cexo__seambtn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+    min-height: 22px;
+    padding: 0 var(--kd-space-4);
+    border: 1px dashed var(--color-border-strong);
+    border-radius: var(--kd-radius-full);
+    background: var(--color-surface-raised);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+
+.kd-cexo__seambtn svg {
+    width: 12px;
+    height: 12px;
+}
+
+.kd-cexo__seambtn:hover,
+.kd-cexo__seambtn:focus-visible {
+    border-style: solid;
+    color: var(--color-primary-on-tint);
+}
+
+/* Membre de superset suivi d'un autre : enchaîné sans repos, son champ repos ne
+   compte pas (WorkoutEstimator l'ignore). Masqué, pas retiré : la valeur survit. */
+.kd-cexo--chained .kd-fieldrow__cell--rest {
+    display: none;
+}
+
+.kd-cexo__restnote {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-2);
+    margin: 0 0 var(--kd-space-4);
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+}
+
+.kd-cexo__restnote svg {
+    flex: none;
+    width: 12px;
+    height: 12px;
+    margin-top: 2px;
 }
 
 .kd-cexo--open {
@@ -7341,12 +8489,72 @@ button.kd-libx:active {
     max-width: 60ch;
 }
 
+/* Aide de l'éditeur de plan en trois étapes numérotées (#67) */
+.kd-planhelp {
+    padding-left: var(--kd-space-5);
+}
+
+.kd-planhelp li + li {
+    margin-top: var(--kd-space-1);
+}
+
 /* Actions de semaine (copier vers, retirer) en menu poussé à droite de l'en-tête.
    Une rangée — un select de destination et deux boutons — ne tenait pas sur une
    ligne de téléphone : elle passait à la ligne et doublait la hauteur de chaque
    en-tête de semaine. */
 .kd-planweek__menu {
     margin-left: auto;
+}
+
+/* « Copier vers » d'une semaine (#111) : les semaines cibles en pastilles à
+   cocher, qui passent à la ligne au-delà de la largeur du menu (un plan de 12
+   semaines en propose 11). */
+.kd-weekcopy {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+
+.kd-weekcopy legend {
+    padding: 0;
+    margin-bottom: var(--kd-space-2);
+}
+
+.kd-weekcopy__choices {
+    max-width: 16rem;
+}
+
+.kd-weekcopy__choices .kd-label {
+    padding: 4px var(--kd-space-4);
+    font-size: 12px;
+}
+
+.kd-weekcopy__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kd-space-2);
+}
+
+/* Confirmation sous l'en-tête de semaine : « Semaine 1 copiée sur S2, S3 et S4. » */
+.kd-planweek__notice {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: calc(-1 * var(--kd-space-4)) 0 var(--kd-space-6);
+    font-size: 12px;
+    color: var(--color-success);
+}
+
+.kd-planweek__notice--error {
+    color: var(--color-status-missed);
+}
+
+.kd-planweek__notice svg {
+    width: 13px;
+    height: 13px;
+    flex: none;
 }
 
 .kd-planweek__select {
@@ -7533,6 +8741,17 @@ button.kd-libx:active {
     height: 11px;
 }
 
+/* Case identique à la fois d'avant de sa séance (#93) : « = S11 ». Pastille à
+   l'encre, pas au rouge (réservé à l'action et à l'échec) : c'est un état, pas
+   une alerte. En chasse fixe comme le reste de la ligne. */
+.kd-planitem__meta .kd-planitem__same {
+    padding: 0 4px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--kd-radius-sm);
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
 /* Chemin d'ajout attaché au jour : ouvre la palette SUR cette case. Discret à la
    souris (il n'apparaît qu'au survol de la case, comme le « + » du calendrier),
    toujours visible au doigt où il n'y a pas de survol (cf. base.css). */
@@ -7598,6 +8817,11 @@ button.kd-libx:active {
     /* Contour encre : élément flottant, même règle que .kd-modal. */
     border: 1px solid var(--color-text);
     background: var(--color-surface-raised);
+    /* Un aperçu se regarde, il ne se touche pas (#69) : sans cette ligne, posé
+       sur la carte il captait le clic destiné au titre, et la souris posée
+       dessus restait « dans la carte » (le panneau en est un descendant DOM),
+       donc plus de `mouseleave` pour le refermer. */
+    pointer-events: none;
 }
 
 .kd-planpreview__title {
@@ -7840,6 +9064,68 @@ textarea.kd-inlineedit__input {
     }
 }
 
+/* Notes du coach sur son athlète (#65) : même bloc, même geste, mais un filet à
+   gauche comme le bandeau propriétaire juste au-dessus. Sur le contenu d'un
+   athlète, ce bloc est le seul qui ne lui appartient pas, et ça doit se voir. */
+.kd-notes--coach {
+    border-left: 3px solid var(--color-text);
+}
+
+/* « Visible par Trailer38 » sous un champ que le coach remplit chez son athlète.
+   Discret mais pas caché : c'est une information de portée, pas une aide. */
+.kd-visibleto {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-2) 0 0;
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--color-text-soft);
+}
+
+.kd-visibleto svg {
+    width: 13px;
+    height: 13px;
+    flex: none;
+}
+
+.kd-editsection__hint + .kd-visibleto {
+    margin: calc(-1 * var(--kd-space-4)) 0 var(--kd-space-6);
+}
+
+/* « Utilisée dans 2 plans : les cases déjà posées gardent leur version » (#113),
+   sous l'en-tête du compositeur. Même voix que `.kd-visibleto` : une information
+   de portée, pas une alerte. Le lien vers le plan garde la couleur du texte,
+   souligné, pour ne pas prendre le rouge des actions. */
+.kd-poses {
+    display: grid;
+    gap: var(--kd-space-1);
+    margin: var(--kd-space-2) 0 0;
+}
+
+.kd-poses__line {
+    display: flex;
+    align-items: baseline;
+    gap: var(--kd-space-2);
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--color-text-soft);
+}
+
+.kd-poses__line svg {
+    width: 13px;
+    height: 13px;
+    flex: none;
+    align-self: center;
+}
+
+.kd-poses__line a {
+    color: var(--color-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 /* ----------------------------------------------------------------------------
    Mini-modale d'édition rapide (éditeur de plan)
    Le panneau (#quick-panel) liste les exercices de la copie locale avec leurs
@@ -7857,21 +9143,68 @@ textarea.kd-inlineedit__input {
     max-height: min(88vh, 820px);
 }
 
+/* En-tête sur deux lignes (#94) : la case éditée et la croix, puis l'état
+   d'enregistrement et le lien vers l'éditeur. Sur une seule ligne, les actions
+   prenaient toute la largeur et le titre tombait à « S6 … ». */
 .kd-modal__card--quick .kd-modal__head {
     margin: 0;
+    flex-wrap: wrap;
     align-items: center;
+    row-gap: var(--kd-space-3);
     padding: var(--kd-space-5) var(--kd-space-6);
     border-bottom: 1px solid var(--color-divider);
 }
 
+.kd-modal__card--quick .kd-modal__headactions {
+    flex: 1 1 100%;
+    justify-content: space-between;
+}
+
 .kd-modal__card--quick .kd-modal__title {
-    display: inline-flex;
-    align-items: center;
+    display: flex;
+    align-items: baseline;
     gap: var(--kd-space-3);
     font-size: 15px;
 }
 
+.kd-quickhead__cell {
+    flex: none;
+    white-space: nowrap;
+}
+
+.kd-quickhead__sep {
+    flex: none;
+    color: var(--color-text-faint);
+}
+
+/* Le titre de la séance est du contenu saisi : police de texte, casse normale.
+   Il se renomme en ligne, et le champ qui le remplace garde la même voix. */
+.kd-quickhead__title,
+.kd-quickhead .kd-inlineedit__input {
+    min-width: 0;
+    font-family: var(--font-body);
+    font-weight: var(--kd-weight-semibold);
+    font-size: 15px;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--color-text-strong);
+}
+
+.kd-quickhead__title {
+    padding: 1px var(--kd-space-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kd-quickhead .kd-inlineedit__input {
+    flex: 1 1 auto;
+    width: auto;
+}
+
 .kd-modal__card--quick .kd-modal__title svg {
+    flex: none;
+    align-self: center;
     width: 16px;
     height: 16px;
     color: var(--color-primary);
@@ -7910,6 +9243,42 @@ textarea.kd-inlineedit__input {
 .kd-quickedit__empty svg {
     width: 18px;
     height: 18px;
+}
+
+/* Rappel sur le titre de la case, en tête du panneau (#93). Le titre lui-même
+   est dans l'en-tête de la modale (#94). Vide, le conteneur ne prend pas de place. */
+.kd-quicktitle {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-1);
+}
+
+.kd-quicktitle:not(:has(*)) {
+    display: none;
+}
+
+.kd-quicktitle__hint {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-2);
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--color-text-faint);
+}
+
+.kd-quicktitle__hint--todo {
+    padding: var(--kd-space-2) var(--kd-space-3);
+    border-left: 3px solid var(--color-border-strong);
+    background: var(--color-surface-subtle);
+    color: var(--color-text-strong);
+}
+
+.kd-quicktitle__hint svg {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
 }
 
 /* Un bloc dans le panneau rapide */
@@ -7982,9 +9351,18 @@ textarea.kd-inlineedit__input {
     display: none;
 }
 
-.kd-quickexo__name {
+/* Nom puis résumé, empilés (#94) : le nom ne cède jamais sa place au résumé. */
+.kd-quickexo__body {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+}
+
+.kd-quickexo__name {
+    max-width: 100%;
     font-family: var(--font-body);
     font-size: 13px;
     font-weight: var(--kd-weight-medium);
@@ -8053,7 +9431,7 @@ textarea.kd-inlineedit__input {
 
 /* ============================================================================
    Ajout au calendrier : « + » par jour + modales de sélection (poser une séance /
-   instancier un plan). Remplacent les anciens dropdowns de la barre d'ajout.
+   placer un plan). Remplacent les anciens dropdowns de la barre d'ajout.
    ============================================================================ */
 
 /* Bouton « + » d'un jour (grille mois) : poussé en bas de la case, révélé au
@@ -8159,6 +9537,26 @@ textarea.kd-inlineedit__input {
     text-transform: uppercase;
 }
 
+/* Statut d'une séance posée un jour passé (#109) : le segmenté de la modale
+   de séance, sous une question. Le fieldset perd son cadre natif. */
+.kd-picker__past {
+    display: grid;
+    gap: var(--kd-space-2);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+
+.kd-picker__past[hidden] {
+    display: none;
+}
+
+.kd-picker__past legend {
+    padding: 0;
+    margin-bottom: var(--kd-space-2);
+}
+
 /* Ligne d'outils : recherche extensible + tri compact. */
 .kd-picker__tools {
     display: flex;
@@ -8207,6 +9605,13 @@ textarea.kd-inlineedit__input {
     text-align: left;
     font: inherit;
     color: inherit;
+}
+
+/* Dans les modales du calendrier, la carte se clique, elle ne se glisse pas :
+   la main de .kd-palettecard y promettait un glisser-déposer qui n'existe pas
+   (#108). La palette de la trame, elle, garde la main : on y glisse vraiment. */
+.kd-picker .kd-palettecard--btn {
+    cursor: pointer;
 }
 
 .kd-palettecard--btn:focus-visible {
@@ -8279,7 +9684,7 @@ textarea.kd-inlineedit__input {
     display: inline-flex;
 }
 
-/* Pied de la modale plan : date de départ + bouton « Instancier ». */
+/* Pied de la modale plan : date de départ + bouton « Placer dans l'agenda ». */
 .kd-picker__foot {
     display: flex;
     align-items: flex-end;
@@ -8292,6 +9697,50 @@ textarea.kd-inlineedit__input {
 .kd-picker__foot .kd-field {
     flex: 1 1 160px;
     margin: 0;
+}
+
+/* « Nouvelle séance pour ce jour » (#92) : sortie de secours sous la liste,
+   toujours visible puisque seule la liste défile. */
+.kd-picker__new {
+    align-items: center;
+    justify-content: space-between;
+}
+
+.kd-picker__newlead {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+/* Aperçu d'une pose de plan (#68) : la règle d'ancrage en petit, et la ligne
+   vivante (dates, nombre de séances) en texte courant, filet rouge à gauche. */
+.kd-placement {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-2);
+    padding-top: var(--kd-space-4);
+    flex-basis: 100%;
+}
+
+.kd-placement__rule {
+    margin: 0;
+    font-size: 12px;
+    color: var(--color-text-faint);
+}
+
+.kd-placement__preview {
+    margin: 0;
+    padding-left: var(--kd-space-3);
+    border-left: 2px solid var(--color-primary);
+    font-size: 13px;
+    color: var(--color-text);
+}
+
+/* Jour amené à l'écran après une pose de plan (`caladd`, valeur `focus`). */
+.kd-calfocus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
 }
 
 /* ----------------------------------------------------------------------------
@@ -9060,6 +10509,20 @@ textarea.kd-inlineedit__input {
 
 .kd-plangoals__select {
     max-width: 220px;
+}
+
+/* Confirmation d'un rattachement, posée dans le bandeau même (B-05 coach). */
+.kd-plangoals__notice {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    font-size: 12px;
+    color: var(--color-success);
+}
+
+.kd-plangoals__notice svg {
+    width: 13px;
+    height: 13px;
 }
 
 .kd-goalplans {
@@ -9927,6 +11390,387 @@ textarea.kd-inlineedit__input {
     min-width: 0;
 }
 
+/* ---- Images d'un exercice (#38, components/_exercise_frames) ----
+   Des carrés déjà signés du logo, empilés dans une scène carrée. Fondu
+   enchaîné : l'image qui arrive (is-active, au-dessus) passe de transparent à
+   opaque pendant que la précédente (is-prev, dessous) reste opaque. Les deux se
+   superposent, on ne voit jamais le fond. is-entering fige l'opacité 0 sans
+   transition juste avant le fondu (cf. exercise_frames_controller.js). */
+.kd-exframes {
+    flex: 0 1 280px;
+    min-width: 0;
+    margin: 0;
+}
+
+.kd-exframes__stage {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+}
+
+.kd-exframes__frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    z-index: 0;
+}
+
+.kd-exframes__frame.is-prev {
+    opacity: 1;
+    z-index: 1;
+}
+
+.kd-exframes__frame.is-active {
+    opacity: 1;
+    z-index: 2;
+    transition: opacity .6s ease-in-out;
+}
+
+.kd-exframes__frame.is-entering {
+    opacity: 0;
+    z-index: 2;
+    transition: none;
+}
+
+.kd-exframes__controls {
+    display: none;
+    align-items: center;
+    gap: var(--kd-space-4);
+    margin-top: var(--kd-space-3);
+}
+
+.kd-exframes.is-live .kd-exframes__controls {
+    display: flex;
+}
+
+.kd-exframes__dots {
+    display: flex;
+    gap: var(--kd-space-2);
+}
+
+/* Cible tactile de 32 px, pastille visible de 10 px. */
+.kd-exframes__dot {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+.kd-exframes__dot::before {
+    content: "";
+    display: block;
+    width: 10px;
+    height: 10px;
+    margin: auto;
+    border: 1px solid var(--color-text-secondary);
+}
+
+.kd-exframes__dot[aria-current="true"]::before {
+    background: var(--color-text-strong);
+    border-color: var(--color-text-strong);
+}
+
+/* L'aperçu animé d'une bande (planche, éditeur) : de la taille d'une vignette,
+   un peu plus grand, sans commande. */
+.kd-exframes--mini {
+    flex: none;
+    width: 88px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .kd-exframes__frame.is-active {
+        transition: none;
+    }
+}
+
+@media (max-width: 559px) {
+    .kd-exframes--sheet {
+        flex-basis: 100%;
+    }
+}
+
+/* ---- L'œil d'un exercice illustré (components/_exercise_eye) ----
+   Discret à côté du nom : de l'encre secondaire, le rouge au survol seulement
+   (une action, pas une alerte). Cible de 32 px au doigt, dessin de 16. */
+.kd-exeye {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    margin: -6px 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: color .12s ease;
+}
+
+.kd-exeye svg {
+    width: 16px;
+    height: 16px;
+}
+
+.kd-exeye:hover,
+.kd-exeye:focus-visible {
+    color: var(--color-primary);
+}
+
+.kd-cexo__row > .kd-exeye {
+    align-self: center;
+    margin: 0;
+}
+
+/* ---- Visionneuse (components/_exercise_viewer) ---- */
+.kd-modal--exviewer {
+    width: min(520px, calc(100vw - 2 * var(--kd-space-8)));
+}
+
+.kd-exviewer__body {
+    margin: var(--kd-space-5) 0 var(--kd-space-3);
+}
+
+.kd-exframes--viewer {
+    width: 100%;
+}
+
+/* ---- Bande d'images d'un exercice (exercise/_image_strip) ----
+   Vignettes dans l'ordre de lecture, outils posés dessous, case d'ajout au
+   bout. Unité de remplacement des Turbo Streams. */
+.kd-imgstrip {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-5);
+    min-width: 0;
+}
+
+.kd-imgstrip__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--kd-space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    min-width: 0;
+}
+
+.kd-imgstrip__item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--kd-space-1);
+    width: 72px;
+}
+
+.kd-imgstrip__thumb {
+    display: block;
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border);
+}
+
+.kd-imgstrip__rank {
+    position: absolute;
+    top: 0;
+    left: 0;
+    min-width: 18px;
+    padding: 1px 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-align: center;
+    color: var(--color-on-ink);
+    background: var(--color-surface-ink);
+}
+
+.kd-imgstrip__tools {
+    display: flex;
+    justify-content: center;
+}
+
+.kd-imgstrip__tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+
+.kd-imgstrip__tool svg {
+    width: 14px;
+    height: 14px;
+}
+
+.kd-imgstrip__tool:hover {
+    color: var(--color-primary);
+}
+
+.kd-imgstrip__tool--danger:hover {
+    color: var(--color-status-missed);
+}
+
+.kd-imgstrip__add {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--kd-space-1);
+    width: 72px;
+    height: 72px;
+    padding: 0;
+    border: 1px dashed var(--color-border-strong);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-family: var(--font-display);
+    font-size: 11px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color .12s ease, color .12s ease;
+}
+
+.kd-imgstrip__add svg {
+    width: 18px;
+    height: 18px;
+}
+
+.kd-imgstrip__add:hover,
+.kd-imgstrip__add:focus-visible {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+/* ---- Planche des images (exercise/images) ---- */
+.kd-imgboard {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--color-border);
+}
+
+.kd-imgboard__row {
+    display: grid;
+    grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--kd-space-6);
+    padding: var(--kd-space-5) 0;
+    border-bottom: 1px solid var(--color-border);
+    scroll-margin-top: var(--kd-space-13);
+}
+
+.kd-imgboard__head {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-4);
+    min-width: 0;
+}
+
+.kd-imgboard .kd-libcard__icon {
+    background: var(--act, var(--color-fill));
+    color: var(--color-on-activity);
+}
+
+.kd-imgboard__title {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.kd-imgboard__name {
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+.kd-imgboard__name:hover {
+    color: var(--color-primary);
+}
+
+.kd-imgboard__meta {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+@media (max-width: 559px) {
+    .kd-imgboard__row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--kd-space-4);
+    }
+}
+
+/* Section Images de l'éditeur (exercise/_images) */
+.kd-eximages {
+    margin-top: var(--kd-space-8);
+}
+
+.kd-eximages__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--kd-space-4);
+    flex-wrap: wrap;
+}
+
+.kd-eximages .kd-help {
+    margin: var(--kd-space-3) 0 var(--kd-space-5);
+}
+
+/* ---- Modale de préparation (exercise/_image_dialog) ---- */
+.kd-modal--imgprep {
+    width: min(480px, calc(100vw - 2 * var(--kd-space-8)));
+}
+
+.kd-imgprep__stage {
+    aspect-ratio: 1 / 1;
+    margin: var(--kd-space-5) 0;
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border);
+}
+
+.kd-imgprep__preview {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.kd-imgprep__crop {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-2);
+    margin-bottom: var(--kd-space-4);
+}
+
+.kd-imgprep__crop[hidden] {
+    display: none;
+}
+
+.kd-segbtn[aria-pressed="true"] {
+    color: var(--color-text-strong);
+    border-color: var(--color-text);
+    background: var(--color-surface-raised);
+}
+
+.kd-modal--imgprep .kd-help {
+    min-height: 1.5em;
+    margin-bottom: var(--kd-space-4);
+}
+
 /* ---- Courbes de progression (components/_exercise_progress) ----
    Repères à gauche, tracé à droite. Le tracé est un SVG déformable dont le trait
    garde son épaisseur ; points et repères sont du HTML posé en % par-dessus, la
@@ -10200,6 +12044,89 @@ textarea.kd-inlineedit__input {
     margin: 0;
 }
 
+/* ── Droits du coach (#66) : ce que l'athlète ouvre en acceptant ─────────────
+   Pas de couleur propre : la liste hérite de son conteneur (carte neutre ou
+   bandeau teinté de l'accueil), seules les icônes marquent les trois portées. */
+.kd-coachrights {
+    margin: var(--kd-space-3) 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.kd-coachrights__title {
+    margin: 0 0 var(--kd-space-2);
+    font-weight: var(--kd-weight-semibold);
+}
+
+.kd-coachrights__list {
+    display: grid;
+    gap: var(--kd-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.kd-coachrights__list li {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-3);
+}
+
+.kd-coachrights__list svg {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+}
+
+.kd-coachrights__list strong {
+    font-weight: var(--kd-weight-semibold);
+}
+
+.kd-coachrights__foot {
+    margin: var(--kd-space-2) 0 0;
+    opacity: .85;
+}
+
+/* Variante repliée (relation active, formulaire de demande). */
+.kd-coachcard__rights {
+    margin: var(--kd-space-3) 0 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-coachcard__rights > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    cursor: pointer;
+    list-style: none;
+}
+
+.kd-coachcard__rights > summary::-webkit-details-marker {
+    display: none;
+}
+
+.kd-coachcard__rights > summary svg {
+    width: 14px;
+    height: 14px;
+    transition: transform .12s ease;
+}
+
+.kd-coachcard__rights[open] > summary svg {
+    transform: rotate(180deg);
+}
+
+.kd-coachform__rights {
+    margin: 0 0 var(--kd-space-4);
+}
+
+/* Bandeau d'accueil : la liste prend toute la largeur, les boutons passent dessous. */
+.kd-home__coach .kd-coachrights {
+    flex-basis: 100%;
+    margin: 0;
+}
+
 /* ── Formulaires courts (invitation, création, pose) : une ligne qui s'empile ─ */
 .kd-coachform {
     display: flex;
@@ -10227,6 +12154,37 @@ textarea.kd-inlineedit__input {
 /* Placé avant le formulaire, l'indice garde sa marge basse plutôt que haute. */
 .kd-card > .kd-coachform__hint:not(:last-child) {
     margin: 0 0 var(--kd-space-5);
+}
+
+/* Doublon annoncé avant l'envoi (#82) : la copie qu'il a déjà, et de quoi l'ouvrir. */
+.kd-coachform__notice {
+    flex-basis: 100%;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-3);
+    margin: 0;
+    padding: var(--kd-space-4) var(--kd-space-5);
+    border-radius: var(--kd-radius-md);
+    font-size: 13px;
+    background: var(--color-primary-tint);
+    color: var(--color-primary-on-tint);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.kd-coachform__notice[hidden] {
+    display: none;
+}
+
+.kd-coachform__notice > svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+
+.kd-coachform__notice > span {
+    flex: 1 1 14rem;
+    min-width: 0;
 }
 
 /* ── Listes compactes (séances, plans, prochaines dates d'un athlète) ─────── */
@@ -10283,6 +12241,19 @@ a.kd-coachitem__name:hover {
     font-family: var(--font-mono);
     font-size: 12px;
     color: var(--color-text-secondary);
+}
+
+/* La date d'une séance à venir mène à sa semaine dans l'agenda de l'athlète
+   (#77) : elle reste discrète, le soulignement dit qu'elle se clique. */
+a.kd-coachitem__date {
+    text-decoration: underline;
+    text-decoration-color: var(--color-divider);
+    text-underline-offset: 3px;
+    transition: color .12s ease;
+}
+
+a.kd-coachitem__date:hover {
+    color: var(--color-primary);
 }
 
 @media (max-width: 560px) {
@@ -10667,6 +12638,65 @@ a.kd-coachitem__name:hover {
     max-width: 66ch;
 }
 
+/* « Pas de version iPhone », dit en tête et pas au fond des détails (#74) :
+   c'est la première chose qu'un possesseur d'iPhone a besoin de savoir. Cadre
+   neutre, comme `.kd-applog` : une limite de plateforme n'est pas une erreur. */
+.kd-install__platform {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-3);
+    margin: var(--kd-space-6) 0 0;
+    padding: var(--kd-space-4) var(--kd-space-5);
+    max-width: 66ch;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-subtle);
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--color-text);
+}
+
+.kd-install__platform svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    color: var(--color-text-faint);
+}
+
+/* Le chemin de secours (APK direct), sous le chemin recommandé dans la même
+   carte : un intertitre, pas une section à part entière. */
+.kd-install__subtitle {
+    margin: var(--kd-space-9) 0 0;
+    padding-top: var(--kd-space-7);
+    border-top: 1px solid var(--color-border);
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-bold);
+    font-size: 15px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-install__text {
+    margin: var(--kd-space-3) 0 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--color-text-secondary);
+    max-width: 66ch;
+}
+
+/* Dans les détails techniques, l'empreinte suit la liste : un peu d'air
+   avant son étiquette. */
+.kd-install__feats + .kd-install__label {
+    margin-top: var(--kd-space-8);
+}
+
+/* Hors du flex de la marche à suivre, l'empreinte n'a pas de `gap` pour la
+   séparer de son étiquette. */
+.kd-install__feats ~ .kd-install__fingerprint {
+    margin-top: var(--kd-space-3);
+}
+
 /* Le numéro de build est une précision, pas la version : même ligne, encre
    secondaire, et c'est le numéro lisible qui garde le poids. */
 .kd-install__version span {
@@ -10786,8 +12816,11 @@ a.kd-coachitem__name:hover {
         gap: var(--kd-space-7);
     }
 
+    /* Sur un téléphone, le QR affiché par le téléphone lui-même ne se scanne
+       pas : la marche à suivre et l'adresse à coller passent devant. */
     .kd-install__qr {
         align-self: center;
+        order: 2;
     }
 
     /* Un APK se télécharge depuis le téléphone : les deux liens prennent la
@@ -10817,6 +12850,19 @@ a.kd-coachitem__name:hover {
     color: var(--color-text-secondary);
 }
 
+/* Périmètre de page : ce que la page montre et ce qu'elle ne montre pas, en
+   une phrase (#73). Journal, historique et statistiques comptent des choses
+   voisines ; sans elle, leurs chiffres se contredisent en apparence. Lisible,
+   pas une note : c'est la clé de lecture de tout ce qui suit. */
+.kd-pagehead__scope {
+    max-width: 68ch;
+    margin: var(--kd-space-2) 0 0;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--color-text);
+}
+
 /* Note de bas de carte : d'où vient le chiffre, ce qu'il ne dit pas. Toujours
    secondaire — une note qui crie autant que sa donnée n'est plus une note. */
 .kd-card__note {
@@ -10832,6 +12878,20 @@ a.kd-coachitem__name:hover {
     font-size: 12px;
     line-height: 1.5;
     color: var(--color-text-placeholder);
+}
+
+/* Liens d'un état vide vers une autre portée (« Celles de Trailer38 : 4 »,
+   #75) : centrés sous le message, un par athlète, à la ligne si besoin. */
+.kd-empty__jumps {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--kd-space-3);
+    margin-top: var(--kd-space-6);
+}
+
+.kd-empty__jumps:not(:has(> :not([hidden]))) {
+    display: none;
 }
 
 .kd-deflist__note {
@@ -11119,11 +13179,13 @@ a.kd-coachitem__name:hover {
         width: 100%;
     }
 
-    /* Trois cibles tactiles qui se partagent la largeur plutôt que de se
-       serrer à gauche. */
+    /* Les cibles tactiles se partagent la largeur plutôt que de se serrer à
+       gauche. À quatre (« Cette année »), un libellé peut passer sur deux
+       lignes à 375 px : il reste centré dans sa case. */
     .kd-rangetab {
         flex: 1 1 0;
         justify-content: center;
+        text-align: center;
         padding-inline: var(--kd-space-2);
     }
 
@@ -11641,6 +13703,43 @@ a.kd-coachitem__name:hover {
     min-width: 0;
 }
 
+/* « Où trouver ma clé ? » (#100) : même lien discret que « Mot de passe
+   oublié ? » (#99), les étapes se déplient dans le flux sous le champ. */
+.kd-intervals__guide {
+    margin: calc(-1 * var(--kd-space-4)) 0 var(--kd-space-7);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-intervals__guide > summary {
+    display: inline;
+    list-style: none;
+    cursor: pointer;
+    color: var(--color-text-soft);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.kd-intervals__guide > summary::-webkit-details-marker {
+    display: none;
+}
+
+.kd-intervals__guide > summary:hover,
+.kd-intervals__guide[open] > summary {
+    color: var(--color-text);
+}
+
+.kd-intervals__guide > ol {
+    margin: var(--kd-space-3) 0 0;
+    padding-left: 1.4em;
+    max-width: 44rem;
+    line-height: 1.5;
+}
+
+.kd-intervals__guide li + li {
+    margin-top: var(--kd-space-2);
+}
+
 .kd-zonebars {
     list-style: none;
     margin: 0;
@@ -11905,6 +14004,20 @@ a.kd-coachitem__name:hover {
     margin-bottom: var(--kd-space-5);
 }
 
+/* Confirmation d'un ajout ou d'un enregistrement, dans l'élément touché (#105) :
+   le retour est ancré sur lui, un message en tête de page tomberait hors écran. */
+.kd-storyedit__done {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin: 0 0 var(--kd-space-5);
+    padding: var(--kd-space-3) var(--kd-space-5);
+    border: 1px solid color-mix(in srgb, var(--color-success) 22%, transparent);
+    background: var(--color-success-tint);
+    color: var(--color-success);
+    font-size: 13px;
+}
+
 .kd-storyedit__type {
     display: inline-flex;
     align-items: center;
@@ -12140,6 +14253,12 @@ a.kd-coachitem__name:hover {
     font-weight: var(--kd-weight-semibold);
 }
 
+/* Encart « ajouté par ton coach » (#80) : chaque morceau mène au contenu. */
+.kd-home__coachtext a {
+    color: inherit;
+    font-weight: var(--kd-weight-semibold);
+}
+
 .kd-home__coachacts {
     display: flex;
     gap: var(--kd-space-3);
@@ -12147,6 +14266,186 @@ a.kd-coachitem__name:hover {
 
 .kd-home__decline {
     color: var(--color-primary-on-tint);
+}
+
+/* Démarrage d'un compte vide (#70) : trois étapes en index à filets, comme les
+   raccourcis. L'étape à faire porte un filet rouge à gauche, les étapes faites
+   passent en secondaire avec une coche. */
+.kd-home__start {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-6);
+}
+
+.kd-home__starthead {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-3);
+}
+
+.kd-home__starttitle {
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-extrabold);
+    font-size: 22px;
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    margin: 0;
+}
+
+.kd-home__startlead {
+    margin: 0;
+    max-width: 60ch;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--color-border);
+    border: 1px solid var(--color-border);
+}
+
+.kd-home__steplink {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-5);
+    height: 100%;
+    padding: var(--kd-space-7);
+    background: var(--color-surface-raised);
+    border-left: 3px solid transparent;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.kd-home__steplink:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+.kd-home__step--current .kd-home__steplink {
+    border-left-color: var(--color-primary);
+}
+
+.kd-home__stepmark {
+    display: inline-flex;
+    flex: none;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__stepmark svg {
+    width: 20px;
+    height: 20px;
+}
+
+.kd-home__step--current .kd-home__stepmark {
+    color: var(--color-primary);
+}
+
+.kd-home__stepbody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-2);
+}
+
+.kd-home__steptitle {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: var(--kd-weight-bold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+}
+
+.kd-home__steptext {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__step--done .kd-home__steptitle {
+    color: var(--color-text-secondary);
+    text-decoration: line-through;
+}
+
+/* Prochaine séance : une carte claire, une ligne par séance du jour visé. Le
+   titre est un intitulé saisi : Barlow en casse normale (règle 4). */
+.kd-home__next {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-5);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-primary);
+    padding: var(--kd-space-8) var(--kd-space-9);
+}
+
+.kd-home__nexteyebrow {
+    margin: 0;
+    color: var(--color-primary);
+}
+
+.kd-home__nextlist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-4);
+}
+
+.kd-home__nextitem {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-3) var(--kd-space-5);
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.kd-home__nextitem:hover {
+    color: var(--color-text);
+}
+
+.kd-home__nextitem:hover .kd-home__nexttitle {
+    text-decoration: underline;
+}
+
+.kd-home__nexttitle {
+    flex: 1 1 14rem;
+    min-width: 0;
+    font-family: var(--font-body);
+    font-weight: var(--kd-weight-bold);
+    font-size: clamp(20px, 3vw, 26px);
+    line-height: 1.1;
+}
+
+.kd-home__nexttitle--empty {
+    font-weight: var(--kd-weight-semibold);
+    font-size: 16px;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__nextplan {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__nextplan svg {
+    width: 14px;
+    height: 14px;
+}
+
+@media (max-width: 900px) {
+    .kd-home__steps {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 /* Prochain objectif en aplat encre. Le compte à rebours est le chiffre qu'on
@@ -12304,12 +14603,14 @@ a.kd-coachitem__name:hover {
     min-width: 0;
 }
 
-/* L'icône porte la couleur de l'activité ; le libellé reste en encre. */
+/* L'icône porte la couleur de l'activité ; le libellé reste en encre. Une
+   séance sans contenu n'a pas de classe d'activité : `--act` n'est pas
+   défini, la ligne retombe sur le gris neutre au lieu de disparaître. */
 .kd-home__actname svg {
     flex: none;
     width: 14px;
     height: 14px;
-    color: var(--act);
+    color: var(--act, var(--color-text-secondary));
 }
 
 .kd-home__acttrack {
@@ -12321,7 +14622,7 @@ a.kd-coachitem__name:hover {
 .kd-home__actfill {
     display: block;
     height: 100%;
-    background: var(--act);
+    background: var(--act, var(--color-border-strong));
 }
 
 .kd-home__actcount {
@@ -12329,6 +14630,64 @@ a.kd-coachitem__name:hover {
     font-size: 12px;
     color: var(--color-text-secondary);
     text-align: right;
+}
+
+/* Les sept derniers jours (#131). Une section et non un lien comme les cartes
+   du mois : elle porte deux lectures (activités, muscles), et son seul lien,
+   vers l'historique, est écrit en pied. Deux colonnes dès qu'il y a la place,
+   empilées en dessous (flex-wrap, aucune media query à tenir). */
+.kd-home__week {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-6);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    padding: var(--kd-space-8) var(--kd-space-9);
+}
+
+.kd-home__weekbody {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--kd-space-8) var(--kd-space-10);
+}
+
+.kd-home__weekacts {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+.kd-home__weekmuscles {
+    flex: 2 1 420px;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--kd-space-8);
+}
+
+.kd-home__weeklegend {
+    flex: 1 1 200px;
+    min-width: 0;
+}
+
+.kd-home__weeknone {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-home__weeklink {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    font-size: 13px;
+}
+
+.kd-home__weeklink svg {
+    width: 14px;
+    height: 14px;
 }
 
 /* Raccourcis : un index à filets (fond = couleur du filet, `gap: 1px`), pas
@@ -12665,8 +15024,9 @@ a.kd-coachitem__name:hover {
     overflow: hidden;
 }
 
+/* Repli neutre pour la part « sans contenu », qui n'a pas d'activité. */
 .kd-pfile__actbar > span {
-    background: var(--act);
+    background: var(--act, var(--color-border-strong));
 }
 
 .kd-pfile__actlegend {
@@ -12690,7 +15050,7 @@ a.kd-coachitem__name:hover {
 .kd-pfile__actdot {
     width: 8px;
     height: 8px;
-    background: var(--act);
+    background: var(--act, var(--color-border-strong));
 }
 
 .kd-pfile__tileshead {
@@ -12834,4 +15194,1345 @@ a.kd-coachitem__name:hover {
     .kd-pfile__zonebpm {
         font-size: 10px;
     }
+}
+
+/* ----------------------------------------------------------------------------
+   Aide contextuelle (#72) — `components/_help`, page `/aide`
+   ----------------------------------------------------------------------------
+   Un <details> natif, comme les menus kebab : le bouton a l'allure d'un bouton
+   secondaire compact, le panneau s'ancre sous lui, à droite. Sous 560px, le
+   bouton peut avoir glissé à gauche d'une barre repliée : le panneau devient
+   une feuille fixée en bas de l'écran, pour ne jamais déborder. */
+.kd-help {
+    position: relative;
+}
+
+.kd-help__trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    padding: 8px var(--kd-space-5);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-text);
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: var(--kd-weight-bold);
+    letter-spacing: var(--kd-tracking-action);
+    text-transform: uppercase;
+    line-height: 1;
+    cursor: pointer;
+    list-style: none;
+}
+
+.kd-help__trigger::-webkit-details-marker {
+    display: none;
+}
+
+.kd-help__trigger:hover,
+.kd-help[open] > .kd-help__trigger {
+    background: var(--color-text);
+    color: var(--color-surface-raised);
+}
+
+.kd-help__trigger svg {
+    width: 15px;
+    height: 15px;
+}
+
+.kd-help__panel {
+    position: absolute;
+    top: calc(100% + var(--kd-space-2));
+    right: 0;
+    z-index: 40;
+    width: 360px;
+    max-width: calc(100vw - 2 * var(--kd-space-7));
+    padding: var(--kd-space-7);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-text);
+    text-align: left;
+}
+
+.kd-help__title {
+    margin: 0 0 var(--kd-space-4);
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: var(--kd-weight-bold);
+    letter-spacing: var(--kd-tracking-action);
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-help__body {
+    font-family: var(--font-body);
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+}
+
+.kd-help__body p {
+    margin: 0 0 var(--kd-space-3);
+}
+
+.kd-help__body strong {
+    color: var(--color-text);
+}
+
+.kd-help__steps {
+    margin: 0;
+    padding-left: var(--kd-space-8);
+}
+
+.kd-help__steps li {
+    margin-bottom: var(--kd-space-4);
+}
+
+.kd-help__more {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+    margin-top: var(--kd-space-2);
+    font-size: 13px;
+    color: var(--color-text);
+}
+
+.kd-help__more svg {
+    width: 13px;
+    height: 13px;
+}
+
+@media (max-width: 560px) {
+    .kd-help__panel {
+        position: fixed;
+        top: auto;
+        right: var(--kd-space-7);
+        bottom: var(--kd-space-7);
+        left: var(--kd-space-7);
+        width: auto;
+        max-width: none;
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+}
+
+/* Mini-guide coach sur /coaching : replié une fois qu'il a des athlètes. */
+.kd-coachguide > .kd-coachguide__summary {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    font-weight: var(--kd-weight-bold);
+    color: var(--color-text);
+    cursor: pointer;
+    list-style: none;
+}
+
+.kd-coachguide > .kd-coachguide__summary::-webkit-details-marker {
+    display: none;
+}
+
+.kd-coachguide > .kd-coachguide__summary svg {
+    width: 16px;
+    height: 16px;
+    flex: none;
+}
+
+.kd-coachguide[open] > .kd-coachguide__summary {
+    margin-bottom: var(--kd-space-5);
+}
+
+/* Page /aide : sommaire en liens, sections à largeur de lecture. */
+.kd-helpindex {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--kd-space-3) var(--kd-space-8);
+    margin-bottom: var(--kd-space-9);
+    font-size: 14px;
+}
+
+.kd-helppage {
+    max-width: 680px;
+}
+
+.kd-helppage .kd-help__body {
+    margin-top: var(--kd-space-5);
+    font-size: 15px;
+}
+
+/* ============================================================================
+   Indicateur d'enregistrement automatique (#86) — `components/_save_status`
+   Deux formes : pastille en bas de l'écran pour la page (invisible au repos,
+   s'efface après « Enregistré »), pastille en ligne dans l'en-tête de la modale
+   d'édition rapide (toujours là). Un seul libellé visible à la fois, choisi par
+   `data-state` sur le conteneur. La première ne se place pas elle-même : elle
+   est la dernière de la pile `.kd-toasts`, sous les messages flash (#129).
+   ========================================================================== */
+.kd-savestatus {
+    display: flex;
+    align-items: center;
+    padding: var(--kd-space-2) var(--kd-space-5);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface-raised);
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    pointer-events: none;
+}
+
+.kd-savestatus[data-state="idle"]:not(.kd-savestatus--inline) {
+    display: none;
+}
+
+/* La pastille ne bloque aucun clic, sauf quand elle porte « Réessayer ». */
+.kd-savestatus[data-state="error"] {
+    pointer-events: auto;
+}
+
+.kd-savestatus--inline {
+    position: static;
+    padding: 0;
+    border: 0;
+    background: none;
+    pointer-events: auto;
+}
+
+.kd-savestatus__state {
+    display: none;
+    align-items: center;
+    gap: var(--kd-space-2);
+    white-space: nowrap;
+}
+
+.kd-savestatus__state svg {
+    width: 14px;
+    height: 14px;
+    flex: none;
+}
+
+.kd-savestatus[data-state="idle"] .kd-savestatus__state--idle,
+.kd-savestatus[data-state="pending"] .kd-savestatus__state--pending,
+.kd-savestatus[data-state="saved"] .kd-savestatus__state--saved,
+.kd-savestatus[data-state="error"] .kd-savestatus__state--error,
+.kd-savestatus[data-state="refused"] .kd-savestatus__state--refused {
+    display: inline-flex;
+}
+
+.kd-savestatus__state--idle {
+    color: var(--color-text-faint);
+}
+
+.kd-savestatus__state--pending svg {
+    animation: kd-savestatus-spin 900ms linear infinite;
+}
+
+.kd-savestatus__state--saved svg {
+    color: var(--color-status-done);
+}
+
+.kd-savestatus[data-state="error"],
+.kd-savestatus[data-state="refused"] {
+    border-color: var(--color-status-missed);
+    color: var(--color-status-missed);
+}
+
+.kd-savestatus__retry {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+    margin-left: var(--kd-space-3);
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-weight: var(--kd-weight-semibold);
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+@keyframes kd-savestatus-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Téléphone : l'en-tête de la modale n'a pas la place d'une phrase à côté de ses
+   deux boutons ; au repos, l'icône suffit. Les autres états gardent leur texte. */
+@media (max-width: 560px) {
+    .kd-savestatus:not(.kd-savestatus--inline) {
+        left: var(--kd-space-7);
+        right: auto;
+    }
+
+    .kd-savestatus--inline .kd-savestatus__state--idle {
+        font-size: 0;
+    }
+}
+
+/* ----------------------------------------------------------------------------
+   Outil de progression d'un plan (#110) : formulaire de réglage, puis aperçu
+   case par case dans le tableau des séries (`kd-settable`). Les champs courts
+   (pas, départ, semaines) vont par deux ou trois sur une ligne, empilés au
+   téléphone.
+   ---------------------------------------------------------------------------- */
+.kd-progtool {
+    max-width: 40rem;
+}
+
+.kd-progtool__row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: var(--kd-space-6);
+}
+
+.kd-progtool__hint {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--color-text-soft);
+    max-width: 60ch;
+}
+
+.kd-progtool__apply {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kd-space-6);
+    margin-top: var(--kd-space-8);
+}
+
+.kd-progtable {
+    min-width: 0;
+}
+
+.kd-progtable tbody th {
+    padding: var(--kd-space-3) var(--kd-space-6);
+    border-top: 1px solid var(--color-divider-soft);
+    background: var(--color-surface-raised);
+    font-weight: var(--kd-weight-semibold);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.kd-progtable__note {
+    font-family: var(--font-body);
+    color: var(--color-text-soft);
+}
+
+/* Ce qui ne bougera pas s'efface : on lit d'abord les cases qui changent. */
+.kd-progtable__row--absent th,
+.kd-progtable__row--same th,
+.kd-progtable__row--done th {
+    color: var(--color-text-soft);
+    font-weight: var(--kd-weight-regular);
+}
+
+/* Lien de l'outil de progression sous l'aide de la trame (#110). */
+.kd-planprog {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kd-space-3) var(--kd-space-5);
+    margin: 0 0 var(--kd-space-6);
+}
+
+.kd-planprog .kd-editsection__hint {
+    margin: 0;
+}
+
+/* ============================================================================
+   AMIS ET FLUX (#126) — page /friends et flux /friends/feed.
+   Rien de neuf en couleur : la carte de séance porte la bande de son activité
+   (classe porteuse kd-act--gym, `--act`), le record le rouge de l'intensité,
+   la copie réussie le vert de « fait ». Le reste est encre et papier.
+   ========================================================================== */
+
+/* ── Pastille du menu de compte : demandes d'amitié reçues ─────────────────── */
+.kd-usermenu__count {
+    margin-left: auto;
+    padding: 1px 5px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    line-height: 1.4;
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+}
+
+/* ── Page Amis : deux colonnes, l'outil (recherche, partage) à droite ──────── */
+.kd-friends {
+    display: grid;
+    gap: var(--kd-space-12);
+    align-items: start;
+}
+
+@media (min-width: 900px) {
+    .kd-friends {
+        grid-template-columns: minmax(0, 1fr) 340px;
+    }
+}
+
+.kd-friends__main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-12);
+    min-width: 0;
+}
+
+.kd-friends__heading {
+    margin: 0 0 var(--kd-space-5);
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-extrabold);
+    font-size: 18px;
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-friends__stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-3);
+}
+
+.kd-friends__list {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+}
+
+.kd-friends__list .kd-friend + .kd-friend {
+    border-top: 1px solid var(--color-divider-soft);
+}
+
+.kd-friend {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-6);
+    flex-wrap: wrap;
+    padding: var(--kd-space-6) var(--kd-space-8);
+}
+
+.kd-friend--card {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+}
+
+.kd-friend--card.is-muted {
+    background: var(--color-surface-subtle);
+}
+
+.kd-friend__avatar {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-strong);
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-bold);
+    font-size: 17px;
+    line-height: 1;
+}
+
+.kd-friend__avatar--sm {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+}
+
+.kd-friend__body {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.kd-friend__top {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-3);
+}
+
+.kd-friend__name {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 16px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.kd-friend__meta {
+    margin: var(--kd-space-1) 0 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-friend__meta--text {
+    font-family: var(--font-body);
+    font-size: 13px;
+}
+
+.kd-friend__meta strong {
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
+.kd-friend__tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-1);
+    padding: 3px var(--kd-space-3);
+    border: 1px solid var(--color-border-pill);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-lg);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-friend__tag svg {
+    width: 12px;
+    height: 12px;
+}
+
+.kd-friend__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin: 0;
+}
+
+.kd-friend__actions form,
+.kd-friend form {
+    margin: 0;
+}
+
+.kd-friend__link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    padding: var(--kd-space-3);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: var(--kd-weight-bold);
+    letter-spacing: var(--kd-tracking-action);
+    text-transform: uppercase;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.kd-friend__link:hover {
+    color: var(--color-primary);
+}
+
+.kd-friend__link svg {
+    width: 14px;
+    height: 14px;
+}
+
+.kd-friend__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-text-soft);
+    cursor: pointer;
+}
+
+.kd-friend__remove:hover {
+    color: var(--color-status-missed);
+    border-color: var(--color-border);
+}
+
+.kd-friend__remove svg {
+    width: 15px;
+    height: 15px;
+}
+
+/* Colonne de droite : deux panneaux d'outil. */
+.kd-friends__side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-6);
+}
+
+.kd-friends__panel {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    padding: var(--kd-space-8) var(--kd-space-9);
+    scroll-margin-top: var(--kd-space-13);
+}
+
+.kd-friends__paneltitle {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-3);
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-bold);
+    font-size: 19px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-friends__paneltitle svg {
+    width: 16px;
+    height: 16px;
+    color: var(--color-text-soft);
+}
+
+.kd-friends__hint {
+    margin: var(--kd-space-3) 0 var(--kd-space-5);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-friends__search {
+    display: flex;
+    gap: var(--kd-space-3);
+    margin: 0;
+}
+
+.kd-friends__search .kd-inputgroup {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.kd-friends__result {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-4);
+    flex-wrap: wrap;
+    margin-top: var(--kd-space-3);
+    padding: var(--kd-space-4) var(--kd-space-5);
+    border: 1px solid var(--color-text);
+}
+
+.kd-friends__result form {
+    margin: 0 0 0 auto;
+}
+
+.kd-friends__found {
+    font-size: 14px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.kd-friends__state {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-friends__none {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+/* Interrupteur de partage : un vrai bouton de formulaire, `role="switch"`. */
+.kd-friends__panel form {
+    margin: 0;
+}
+
+.kd-friends__switch {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-6);
+    width: 100%;
+    margin-top: var(--kd-space-5);
+    padding: var(--kd-space-5) 0;
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
+    font-family: var(--font-body);
+    text-align: left;
+    cursor: pointer;
+}
+
+.kd-friends__switchlabel {
+    flex: 1;
+    font-size: 15px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text);
+}
+
+.kd-switch {
+    flex: none;
+    display: flex;
+    width: 44px;
+    height: 24px;
+    padding: 2px;
+    box-sizing: border-box;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border-strong);
+}
+
+.kd-switch__knob {
+    width: 18px;
+    height: 18px;
+    background: var(--color-text-soft);
+}
+
+.kd-switch.is-on {
+    justify-content: flex-end;
+    background: var(--color-text);
+    border-color: var(--color-text);
+}
+
+.kd-switch.is-on .kd-switch__knob {
+    background: var(--color-surface-raised);
+}
+
+.kd-friends__status {
+    margin: var(--kd-space-3) 0 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-friends__scope {
+    margin: var(--kd-space-6) 0 0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.kd-friends__scope dt {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-xl);
+    text-transform: uppercase;
+    color: var(--color-text-soft);
+}
+
+.kd-friends__scope dd {
+    margin: 2px 0 var(--kd-space-4);
+    color: var(--color-text-strong);
+}
+
+.kd-friends__hidden {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-6) 0 0;
+    padding-top: var(--kd-space-5);
+    border-top: 1px solid var(--color-divider-soft);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-friends__hidden svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* ── Le flux ─────────────────────────────────────────────────────────────── */
+.kd-feed-page {
+    max-width: 760px;
+}
+
+.kd-feedfilter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--kd-space-2);
+    margin-bottom: var(--kd-space-9);
+}
+
+.kd-feedfilter__chip {
+    padding: var(--kd-space-2) var(--kd-space-4);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface-raised);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+}
+
+.kd-feedfilter__chip:hover {
+    border-color: var(--color-text);
+    color: var(--color-text);
+}
+
+.kd-feedfilter__chip.is-active {
+    border-color: var(--color-text);
+    background: var(--color-text);
+    color: var(--color-on-ink);
+}
+
+.kd-feed__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kd-space-5);
+}
+
+/* Une page du flux est un turbo-frame (la suivante s'y charge, cf.
+   `_feed_page`). Il ne doit pas faire boîte : ses cartes restent des enfants
+   de la liste et en gardent l'espacement, d'une page à l'autre. */
+turbo-frame.kd-feed__page {
+    display: contents;
+}
+
+/* Pendant le chargement de la page suivante, Turbo pose `busy` sur le frame. */
+turbo-frame.kd-feed__page[busy] > .kd-feed__older {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.kd-feed__day {
+    margin: var(--kd-space-4) 0 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-xl);
+    text-transform: uppercase;
+    color: var(--color-text-soft);
+}
+
+.kd-feedcard {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--act, var(--color-border));
+    scroll-margin-top: var(--kd-space-13);
+}
+
+.kd-feedcard__who {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-4);
+    padding: var(--kd-space-7) var(--kd-space-8) 0;
+}
+
+.kd-feedcard__who p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.kd-feedcard__who strong {
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
+.kd-feedcard__time {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-soft);
+}
+
+/* Nom de séance : du contenu saisi, Barlow en casse normale. */
+.kd-feedcard__title {
+    margin: var(--kd-space-4) var(--kd-space-8) 0;
+    font-family: var(--font-body);
+    font-size: 22px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text);
+    overflow-wrap: anywhere;
+}
+
+.kd-feedcard__kpis {
+    display: flex;
+    margin: var(--kd-space-6) var(--kd-space-8) 0;
+    border-top: 1px solid var(--color-divider-soft);
+    border-bottom: 1px solid var(--color-divider-soft);
+}
+
+.kd-feedcard__kpis > div {
+    flex: 1;
+    padding: var(--kd-space-4) 0;
+}
+
+.kd-feedcard__kpis > div + div {
+    padding-left: var(--kd-space-7);
+    border-left: 1px solid var(--color-border);
+}
+
+.kd-feedcard__kpis dt {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-xl);
+    text-transform: uppercase;
+    color: var(--color-text-soft);
+}
+
+.kd-feedcard__kpis dd {
+    margin: 2px 0 0;
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-extrabold);
+    font-size: 26px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text);
+}
+
+.kd-feedcard__kpis dd span {
+    font-size: .48em;
+    color: var(--color-text-soft);
+}
+
+.kd-feedcard__record {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-5) var(--kd-space-8) 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-strong);
+}
+
+.kd-feedcard__record svg {
+    width: 13px;
+    height: 13px;
+    color: var(--color-primary);
+}
+
+.kd-feedcard__recordtag {
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-primary-on-tint);
+}
+
+.kd-feedcard__note {
+    margin: var(--kd-space-5) var(--kd-space-8) 0;
+    padding: var(--kd-space-4) var(--kd-space-6);
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-divider-soft);
+}
+
+.kd-feedcard__note p {
+    margin: var(--kd-space-1) 0 0;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--color-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.kd-feedcard__note .kd-feedcard__notelabel {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-xl);
+    text-transform: uppercase;
+    color: var(--color-text-soft);
+}
+
+.kd-feedcard__exos {
+    list-style: none;
+    margin: var(--kd-space-5) var(--kd-space-8) 0;
+    padding: 0;
+}
+
+.kd-feedex {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--kd-space-1) var(--kd-space-4);
+    padding: 7px 0;
+    border-top: 1px solid var(--color-divider-soft);
+}
+
+.kd-feedex__n {
+    flex: none;
+    width: 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-soft);
+}
+
+.kd-feedex__name {
+    min-width: 0;
+    font-size: 15px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.kd-feedex__perso {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 5px;
+    border: 1px solid var(--color-border-pill);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-feedex__perso svg {
+    width: 10px;
+    height: 10px;
+}
+
+.kd-feedex__record {
+    align-self: center;
+    display: inline-flex;
+    color: var(--color-primary);
+}
+
+.kd-feedex__record svg {
+    width: 12px;
+    height: 12px;
+}
+
+.kd-feedex__sum {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+
+.kd-feedex__rpe {
+    flex: none;
+    width: 58px;
+    padding-left: var(--kd-space-4);
+    border-left: 1px solid var(--color-border);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: right;
+    color: var(--color-text-secondary);
+}
+
+/* « Voir les N autres exercices » : <details> natif, libellé selon l'état. */
+.kd-feedcard__more > summary {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: 0 var(--kd-space-8);
+    padding: var(--kd-space-4) 0;
+    border-top: 1px solid var(--color-divider-soft);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text);
+    list-style: none;
+    cursor: pointer;
+}
+
+.kd-feedcard__more > summary::-webkit-details-marker {
+    display: none;
+}
+
+.kd-feedcard__more > summary svg {
+    width: 13px;
+    height: 13px;
+    transition: transform .12s ease;
+}
+
+.kd-feedcard__more .kd-feedcard__moreclose,
+.kd-feedcard__more[open] .kd-feedcard__moreopen {
+    display: none;
+}
+
+.kd-feedcard__more[open] .kd-feedcard__moreclose {
+    display: inline;
+}
+
+.kd-feedcard__more[open] > summary svg {
+    transform: rotate(180deg);
+}
+
+.kd-feedcard__more > .kd-feedcard__exos {
+    margin-top: 0;
+}
+
+.kd-feedcard__foot {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-4);
+    margin-top: var(--kd-space-1);
+    padding: var(--kd-space-5) var(--kd-space-8) var(--kd-space-6);
+    border-top: 1px solid var(--color-border);
+}
+
+.kd-feedcard__exos + .kd-feedcard__foot {
+    margin-top: var(--kd-space-5);
+}
+
+.kd-feedcard__foot form {
+    margin: 0;
+}
+
+.kd-feedcard__end {
+    margin-left: auto;
+}
+
+.kd-feedcard__copiedby {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-feedcard__copiedby svg {
+    flex: none;
+    width: 12px;
+    height: 12px;
+}
+
+.kd-feedcard__copied {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: 0;
+    font-size: 14px;
+    color: var(--color-text-strong);
+}
+
+.kd-feedcard__copied svg {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    color: var(--color-success);
+}
+
+.kd-feedcard__copied strong {
+    font-weight: var(--kd-weight-semibold);
+}
+
+/* Sa propre séance masquée : en retrait, tirets, rien d'autre que le rappel. */
+.kd-feedcard--hidden {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--kd-space-5);
+    padding: var(--kd-space-6) var(--kd-space-8);
+    background: var(--color-fill);
+    border: 1px dashed var(--color-border-strong);
+    color: var(--color-text-secondary);
+}
+
+.kd-feedcard--hidden > svg {
+    flex: none;
+    width: 15px;
+    height: 15px;
+}
+
+.kd-feedcard--hidden p {
+    flex: 1 1 16rem;
+    margin: 0;
+    font-size: 14px;
+}
+
+.kd-feedcard--hidden strong {
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
+.kd-feedcard--hidden form {
+    margin: 0 0 0 auto;
+}
+
+.kd-feed__older {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--kd-space-2);
+    margin-top: var(--kd-space-3);
+    padding: var(--kd-space-5);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface-raised);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: var(--kd-weight-bold);
+    letter-spacing: var(--kd-tracking-action);
+    text-transform: uppercase;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.kd-feed__older:hover {
+    border-color: var(--color-text);
+}
+
+.kd-feed__older svg {
+    width: 15px;
+    height: 15px;
+}
+
+.kd-feedempty {
+    padding: var(--kd-space-13) var(--kd-space-10);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    text-align: center;
+    color: var(--color-text-secondary);
+}
+
+.kd-feedempty > svg {
+    width: 28px;
+    height: 28px;
+    color: var(--color-text-soft);
+}
+
+.kd-feedempty__title {
+    margin: var(--kd-space-5) 0 0;
+    font-family: var(--font-display);
+    font-weight: var(--kd-weight-extrabold);
+    font-size: 28px;
+    line-height: 1;
+    text-transform: uppercase;
+    color: var(--color-text);
+}
+
+.kd-feedempty p {
+    max-width: 52ch;
+    margin: var(--kd-space-4) auto var(--kd-space-8);
+    font-size: 14px;
+}
+
+/* ── Modale de copie ─────────────────────────────────────────────────────── */
+.kd-modal--copy {
+    width: min(520px, calc(100vw - 2 * var(--kd-space-8)));
+}
+
+.kd-modal--copy .kd-modal__head {
+    margin-bottom: var(--kd-space-4);
+}
+
+.kd-copy__lead {
+    margin: 0 0 var(--kd-space-7);
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.kd-copy__count {
+    margin: var(--kd-space-6) 0 var(--kd-space-3);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-copy__list {
+    max-height: 40vh;
+    overflow-y: auto;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--color-divider-soft);
+}
+
+.kd-copy__list li {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--kd-space-1) var(--kd-space-4);
+    padding: 7px 0;
+    border-bottom: 1px solid var(--color-divider-soft);
+}
+
+.kd-copy__name {
+    font-size: 14px;
+    font-weight: var(--kd-weight-semibold);
+    color: var(--color-text-strong);
+}
+
+.kd-copy__added {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-copy__added svg {
+    width: 11px;
+    height: 11px;
+}
+
+.kd-copy__notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-6) 0 var(--kd-space-7);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.kd-copy__notice svg {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+}
+
+/* ── Sous 560px : la carte se resserre, le RPE passe sous le résumé ──────── */
+@media (max-width: 560px) {
+    .kd-feedcard__who,
+    .kd-feedcard__foot {
+        padding-left: var(--kd-space-6);
+        padding-right: var(--kd-space-6);
+    }
+
+    .kd-feedcard__title,
+    .kd-feedcard__kpis,
+    .kd-feedcard__record,
+    .kd-feedcard__note,
+    .kd-feedcard__exos,
+    .kd-feedcard__more > summary {
+        margin-left: var(--kd-space-6);
+        margin-right: var(--kd-space-6);
+    }
+
+    .kd-feedcard__kpis dd {
+        font-size: 22px;
+    }
+
+    .kd-feedex__rpe {
+        width: auto;
+    }
+
+    .kd-friend {
+        padding: var(--kd-space-5) var(--kd-space-6);
+    }
+}
+
+/* « Copiée par » sous le hero d'une séance (#126) : une ligne, en retrait. */
+.kd-copiedby {
+    display: flex;
+    align-items: center;
+    gap: var(--kd-space-2);
+    margin: var(--kd-space-7) 0 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.kd-copiedby svg {
+    flex: none;
+    width: 13px;
+    height: 13px;
 }

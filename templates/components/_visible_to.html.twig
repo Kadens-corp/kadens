@@ -1,0 +1,19 @@
+{# « Visible par Trailer38 » sous un champ que le coach remplit sur le contenu
+   de son athlète (#65) : description, consignes de case. Le coach y écrit
+   comme dans ses propres notes, sauf que l'athlète lit tout. Pour une remarque
+   qui doit rester entre soi, il y a `_coach_notes`.
+
+   Ne se rend que quand le lecteur n'est pas le propriétaire, comme
+   `_owner_banner` (comparaison par `id`, `owner` peut être un proxy).
+
+   Paramètres :
+     - owner : User|null, le propriétaire du contenu
+     - what  : ce qui est visible, en tête de phrase (défaut : rien, la mention
+               se lit alors sous le champ qu'elle accompagne) #}
+{% set what = what|default(null) %}
+{% if owner is not null and app.user and owner.id != app.user.id %}
+    <p class="kd-visibleto">
+        {{ ux_icon('lucide:eye') }}
+        <span>{{ what ? what ~ ' : visibles' : 'Visible' }} par {{ owner.displayName }}</span>
+    </p>
+{% endif %}

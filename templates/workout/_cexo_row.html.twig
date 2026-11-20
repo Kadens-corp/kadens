@@ -51,7 +51,7 @@
                     {% endif %}
                 {% endfor %}
                 <span class="kd-cexo__meta">
-                    <span class="kd-cexo__setcount">{{ prescribed.detailedSets|length }} série{{ prescribed.detailedSets|length > 1 ? 's' }}</span>
+                    <span class="kd-cexo__setcount">{{ settype.count(prescribed.detailedSets|map(s => s.setType)) }}</span>
                     {% for t in distinctTypes %}{{ settype.badge(t) }}{% endfor %}
                 </span>
             {% elseif summary is not empty %}
@@ -70,6 +70,10 @@
         </span>
         <span class="kd-cexo__chev" aria-hidden="true">{{ ux_icon('lucide:chevron-down') }}</span>
     </button>
+
+    {# Hors du bouton de la ligne (un bouton dans un bouton n'est pas valide),
+       entre lui et le menu (#38). #}
+    {{ include('components/_exercise_eye.html.twig', {exercise: ex}, with_context = false) }}
 
     <details class="kd-kebab kd-kebab--row" data-controller="dismiss">
         <summary class="kd-kebab__trigger kd-kebab__trigger--plain" aria-label="Actions sur {{ ex ? exercise_name(ex) : 'l\'exercice' }}">

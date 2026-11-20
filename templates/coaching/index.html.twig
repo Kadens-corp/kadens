@@ -6,12 +6,14 @@
     de travail d'un athlète donné (app_coach_athlete).
 
     Deux leviers UX portent la fusion :
-      - les demandes (reçues / envoyées) sont mutualisées, quel que soit le sens ;
+      - les demandes reçues sont mutualisées en tête, quel que soit le sens ;
+        une demande envoyée, elle, se range dans la section de la relation
+        qu'elle propose (#79) ;
       - l'ordre des sections suit le rôle : un ROLE_COACH ouvre la page pour ses
         athlètes, un athlète pour ses coachs. D'où les macros ci-dessous, appelées
         dans un ordre ou dans l'autre.
 #}
-{% macro coachesSection(coaches, me) %}
+{% macro coachesSection(coaches, pending, me) %}
     <section class="kd-section" id="coachs">
         <div class="kd-pagehead kd-pagehead--sub">
             <div>
@@ -22,7 +24,9 @@
             </div>
         </div>
 
-        {% if coaches is empty %}
+        {# Les demandes envoyées à un coach se rangent ici, sous les relations
+           actives (#79) : c'est là qu'on les cherche. #}
+        {% if coaches is empty and pending is empty %}
             <div class="kd-card kd-section__block">
                 <div class="kd-empty">
                     {{ ux_icon('lucide:user-plus') }}
@@ -31,7 +35,7 @@
             </div>
         {% else %}
             <div class="kd-coachlist kd-section__block">
-                {% for relation in coaches %}
+                {% for relation in coaches|merge(pending) %}
                     {{ include('components/_coaching_card.html.twig', {relation: relation, me: me}) }}
                 {% endfor %}
             </div>
@@ -43,16 +47,28 @@
         <section class="kd-card kd-section__block">
             <h3 class="kd-card__title">{{ ux_icon('lucide:mail') }} Demander à être coaché</h3>
             <p class="kd-coachform__hint">Saisis l'email exact du compte Kadens de ton coach. Il recevra une demande à accepter.</p>
+            {# Demander, c'est déjà consentir : la liste des droits (#66) se lit
+               avant d'envoyer, comme avant d'accepter. #}
+            <details class="kd-coachcard__rights kd-coachform__rights">
+                <summary>{{ ux_icon('lucide:chevron-down') }} Ce que ton coach pourra faire</summary>
+                {{ include('components/_coaching_rights.html.twig', {coach: null, title: false}) }}
+            </details>
             <form method="post" action="{{ path('app_coaching_request') }}" class="kd-coachform">
                 <input type="hidden" name="_token" value="{{ csrf_token('coaching_request') }}">
                 <input type="hidden" name="role" value="athlete">
                 <div class="kd-field kd-coachform__field">
                     <label class="kd-label" for="coaching_request_email">Email du coach</label>
+                    {# Texte libre et non `type=email` (#79) : un pseudo saisi ici
+                       reçoit l'explication du site, pas la bulle du navigateur. #}
                     <div class="kd-inputgroup">
                         {{ ux_icon('lucide:at-sign') }}
-                        <input class="kd-input" type="email" id="coaching_request_email" name="email"
-                               placeholder="coach@exemple.fr" required>
+                        <input class="kd-input" type="text" inputmode="email" autocomplete="off"
+                               autocapitalize="none" spellcheck="false"
+                               id="coaching_request_email" name="email"
+                               placeholder="coach@exemple.fr" required
+                               aria-describedby="coaching_request_email_help">
                     </div>
+                    <p class="kd-help" id="coaching_request_email_help">L'adresse email de son compte Kadens. Son pseudo ne suffit pas.</p>
                 </div>
                 <button type="submit" class="kd-btn kd-btn--primary">
                     {{ ux_icon('lucide:send') }} Envoyer la demande
@@ -62,7 +78,7 @@
     </section>
 {% endmacro %}
 
-{% macro athletesSection(athletes, me) %}
+{% macro athletesSection(athletes, pending, former, me) %}
     {# `linkAthlete` ouvre la fiche de travail sous /coach, protégée par
        ROLE_COACH : on ne propose le lien qu'à un coach, sinon un ex-coach
        (rôle retiré, relations résiduelles) cliquerait vers un 403. #}
@@ -76,7 +92,10 @@
             </div>
         </div>
 
-        {% if athletes is empty %}
+        {# Les invitations envoyées se rangent ici, badge « En attente » (#79).
+           Rangées tout en bas de page, le coach croyait l'envoi perdu pendant
+           que cette section lui disait « aucun athlète ». #}
+        {% if athletes is empty and pending is empty %}
             <div class="kd-card kd-section__block">
                 <div class="kd-empty">
                     {{ ux_icon('lucide:users') }}
@@ -85,13 +104,36 @@
             </div>
         {% else %}
             <div class="kd-coachlist kd-section__block">
-                {% for relation in athletes %}
+                {% for relation in athletes|merge(pending) %}
                     {{ include('components/_coaching_card.html.twig', {relation: relation, me: me, linkAthlete: me.isCoach}) }}
                 {% endfor %}
             </div>
         {% endif %}
 
+        {# Anciens athlètes (#81) : sans eux, « Terminer » ne laissait aucune
+           trace côté coach. Un nom et des dates, rien de plus : la carte n'ouvre
+           aucune fiche, le contenu reste à l'athlète et ne lui est plus ouvert. #}
+        {% if former is not empty %}
+            <div class="kd-section__block" id="anciens-athletes">
+                <h3 class="kd-card__title">{{ ux_icon('lucide:history') }} Anciens athlètes</h3>
+                <p class="kd-coachform__hint">Tu ne les suis plus. Leur contenu leur reste et tu n'y as plus accès. Une nouvelle invitation, s'ils l'acceptent, renoue la relation.</p>
+                <div class="kd-coachlist">
+                    {% for relation in former %}
+                        {{ include('components/_coaching_card.html.twig', {relation: relation, me: me}) }}
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
         {% if me.isCoach %}
+            {# Le mini-guide coach (#72), ouvert tant qu'il n'a personne à suivre :
+               c'est là qu'il en a besoin. Même texte que sur /aide. #}
+            {% import 'help/_topics.html.twig' as help %}
+            <details class="kd-card kd-section__block kd-coachguide"{{ athletes is empty ? ' open' }}>
+                <summary class="kd-coachguide__summary">{{ ux_icon('lucide:circle-help') }} Guide du coach : inviter, programmer, ce que voit l'athlète, fin de relation</summary>
+                <div class="kd-help__body">{{ help.coach_guide() }}</div>
+            </details>
+
             <section class="kd-card kd-section__block">
                 <h3 class="kd-card__title">{{ ux_icon('lucide:user-plus') }} Inviter un athlète</h3>
                 <p class="kd-coachform__hint">L'athlète doit déjà avoir un compte Kadens. Il recevra une demande à accepter avant que tu aies accès à son contenu.</p>
@@ -101,9 +143,13 @@
                         <label class="kd-label" for="coach_invite_email">Email de l'athlète</label>
                         <div class="kd-inputgroup">
                             {{ ux_icon('lucide:at-sign') }}
-                            <input class="kd-input" type="email" id="coach_invite_email" name="email"
-                                   placeholder="athlete@exemple.fr" required>
+                            <input class="kd-input" type="text" inputmode="email" autocomplete="off"
+                                   autocapitalize="none" spellcheck="false"
+                                   id="coach_invite_email" name="email"
+                                   placeholder="athlete@exemple.fr" required
+                                   aria-describedby="coach_invite_email_help">
                         </div>
+                        <p class="kd-help" id="coach_invite_email_help">Son adresse email, celle de son compte Kadens. Son pseudo ne suffit pas.</p>
                     </div>
                     <button type="submit" class="kd-btn kd-btn--primary">
                         {{ ux_icon('lucide:send') }} Envoyer l'invitation
@@ -119,20 +165,13 @@
 {% block body %}
     {% import _self as sections %}
 
-    {% for message in app.flashes('success') %}
-        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-    {% for message in app.flashes('error') %}
-        <p class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ message }}</p>
-    {% endfor %}
-
     {% set me = app.user %}
 
     <div class="kd-pagehead">
         <div>
             <p class="kd-eyebrow kd-eyebrow--accent">Coaching</p>
             <h1 class="kd-title">Qui t'entraîne, qui tu entraînes</h1>
-            <p class="kd-lead">Un coach accepté crée des séances et des plans, et les pose sur le calendrier. Le contenu appartient toujours à l'athlète : il le garde même si la relation se termine.</p>
+            <p class="kd-lead">Un coach accepté suit les statistiques et l'historique de son athlète, crée et modifie ses séances, ses plans et son agenda. Ses notes privées restent privées. Le contenu appartient toujours à l'athlète : il le garde même si la relation se termine.</p>
         </div>
     </div>
 
@@ -155,31 +194,14 @@
 
     {# ------------------- RELATIONS, ordonnées selon le rôle ------------------ #}
     {% if me.isCoach %}
-        {{ sections.athletesSection(athletes, me) }}
-        {{ sections.coachesSection(coaches, me) }}
+        {{ sections.athletesSection(athletes, sentAsCoach, formerAthletes, me) }}
+        {{ sections.coachesSection(coaches, sentAsAthlete, me) }}
     {% else %}
-        {{ sections.coachesSection(coaches, me) }}
+        {{ sections.coachesSection(coaches, sentAsAthlete, me) }}
         {# Un non-coach n'a normalement pas d'athlète : la section n'apparaît que
            s'il reste des relations d'un rôle retiré depuis. #}
-        {% if athletes is not empty %}
-            {{ sections.athletesSection(athletes, me) }}
+        {% if athletes is not empty or sentAsCoach is not empty or formerAthletes is not empty %}
+            {{ sections.athletesSection(athletes, sentAsCoach, formerAthletes, me) }}
         {% endif %}
-    {% endif %}
-
-    {# --------------------------- DEMANDES ENVOYÉES -------------------------- #}
-    {% if sent is not empty %}
-        <section class="kd-section">
-            <div class="kd-pagehead kd-pagehead--sub">
-                <div>
-                    <p class="kd-eyebrow">En attente</p>
-                    <h2 class="kd-title kd-title--sm">Demandes envoyées</h2>
-                </div>
-            </div>
-            <div class="kd-coachlist kd-section__block">
-                {% for relation in sent %}
-                    {{ include('components/_coaching_card.html.twig', {relation: relation, me: me}) }}
-                {% endfor %}
-            </div>
-        </section>
     {% endif %}
 {% endblock %}

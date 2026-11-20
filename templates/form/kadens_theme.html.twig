@@ -11,8 +11,22 @@
     {%- if help is not empty -%}
         {%- set widget_attr = {attr: {'aria-describedby': id ~ '_help'}} -%}
     {%- endif -%}
-    <div class="kd-field">
-        {{- form_label(form) -}}
+    {#- Une erreur serveur s'efface dès que le champ ne la mérite plus (#114),
+        cf. `field_errors_controller.js`. Sans erreur, rien n'est branché. -#}
+    <div class="kd-field"
+         {%- if errors|length > 0 %} data-controller="field-errors" data-action="input->field-errors#check change->field-errors#check"{% endif %}>
+        {#- `term` (option de rendu, #102) : l'infobulle d'un sigle À CÔTÉ du libellé,
+            jamais dedans — toucher un <label> donne le focus au champ et
+            refermerait l'infobulle aussitôt. -#}
+        {%- if term|default(null) -%}
+            {%- import 'components/_term.html.twig' as terms -%}
+            <div class="kd-field__labelrow">
+                {{- form_label(form) -}}
+                {{- terms.hint(term) -}}
+            </div>
+        {%- else -%}
+            {{- form_label(form) -}}
+        {%- endif -%}
         {{- form_widget(form, widget_attr) -}}
         {{- form_help(form) -}}
         {{- form_errors(form) -}}
@@ -41,6 +55,17 @@
     {{- parent() -}}
 {%- endblock -%}
 
+{# Distance (DistanceType) : la valeur et son unité côte à côte, comme un seul
+   champ. Le conteneur porte les `attr` du champ (dont le `data-action` de
+   l'enregistrement automatique, que le `change` des deux enfants traverse). #}
+{%- block distance_widget -%}
+    {%- set attr = attr|merge({class: (attr.class|default('') ~ ' kd-unitinput')|trim}) -%}
+    <div {{ block('widget_container_attributes') }}>
+        {{- form_widget(form.value, {attr: form.value.vars.attr|merge({class: 'kd-unitinput__value'})}) -}}
+        {{- form_widget(form.unit, {attr: form.unit.vars.attr|merge({class: 'kd-unitinput__unit'})}) -}}
+    </div>
+{%- endblock -%}
+
 {%- block choice_widget_expanded -%}
     <div class="kd-choicegrid" {{ block('widget_container_attributes') }}>
     {%- for child in form -%}
@@ -59,7 +84,7 @@
 
 {%- block form_errors -%}
     {%- if errors|length > 0 -%}
-        <ul class="kd-errors">
+        <ul class="kd-errors" data-field-errors-target="list">
             {%- for error in errors -%}
                 <li>{{ error.message }}</li>
             {%- endfor -%}

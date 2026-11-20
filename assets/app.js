@@ -6,6 +6,7 @@ import './stimulus_bootstrap.js';
  * which should already be in your base.html.twig.
  */
 import './styles/app.css';
+import './morph_state.js';
 
 /*
  * Le service worker n'est PAS enregistré ici : il l'est dans base.html.twig,

@@ -68,6 +68,7 @@
         "--kd-status-done": "#006d14",
         "--kd-status-planned": "#8a8a82",
         "--kd-status-missed": "#d8261e",
+        "--kd-status-done-tint": "#e8f2ea",
         "--kd-set-warm": "#0b0b0b",
         "--kd-set-warm-tint": "#ffffff",
         "--kd-set-degr": "#0b0b0b",
@@ -171,7 +172,8 @@
         "--kd-night-set-degr-tint": "#292928",
         "--kd-night-set-fail-tint": "#3a1310",
         "--kd-night-set-drop-tint": "#1f1f1e",
-        "--kd-night-status-done": "#45a35a"
+        "--kd-night-status-done": "#45a35a",
+        "--kd-night-status-done-tint": "#13281a"
     },
     "semantic": {
         "--color-bg": "#dcdcd7",
@@ -254,6 +256,8 @@
         "--color-status-done": "#006d14",
         "--color-status-planned": "#8a8a82",
         "--color-status-missed": "#d8261e",
+        "--color-success": "#006d14",
+        "--color-success-tint": "#e8f2ea",
         "--shadow-card": "none",
         "--shadow-accent": "none",
         "--font-display": "'Barlow Condensed', system-ui, sans-serif",
@@ -341,7 +345,9 @@
             "--color-set-dropset-tint": "#ffffff",
             "--color-status-done": "#006d14",
             "--color-status-planned": "#8a8a82",
-            "--color-status-missed": "#d8261e"
+            "--color-status-missed": "#d8261e",
+            "--color-success": "#006d14",
+            "--color-success-tint": "#e8f2ea"
         },
         "dark": {
             "--color-bg": "#101010",
@@ -423,7 +429,9 @@
             "--color-set-dropset-tint": "#1f1f1e",
             "--color-status-done": "#45a35a",
             "--color-status-planned": "#8a8a82",
-            "--color-status-missed": "#d8261e"
+            "--color-status-missed": "#d8261e",
+            "--color-success": "#45a35a",
+            "--color-success-tint": "#13281a"
         }
     }
 }

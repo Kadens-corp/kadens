@@ -8,6 +8,7 @@ use App\Entity\ApiToken;
 use App\Entity\CustomMessage;
 use App\Entity\User;
 use App\Enum\MessageAudience;
+use App\Enum\MessagePlatform;
 use App\Tests\FindsEntities;
 use App\Tests\PurgesDatabase;
 use Doctrine\ORM\EntityManagerInterface;
@@ -67,6 +68,18 @@ final class ApiMessageTest extends WebTestCase
         self::assertSame(['id', 'body', 'mediaUrl', 'startsOn', 'endsOn'], array_keys($messages[0]));
         self::assertSame((new \DateTimeImmutable('today'))->format('Y-m-d'), $messages[0]['startsOn']);
         self::assertNull($messages[0]['mediaUrl']);
+    }
+
+    public function testAWebsiteOnlyMessageIsNotSentToThePhone(): void
+    {
+        $this->createMessage('today', 'today', 'Pour le site')->setPlatform(MessagePlatform::WEB);
+        $this->createMessage('today', 'today', 'Pour l\'appli')->setPlatform(MessagePlatform::APP);
+        $this->createMessage('today', 'today', 'Pour les deux');
+        $this->em->flush();
+
+        $bodies = array_column($this->bootstrap()['messages'], 'body');
+
+        self::assertSame(['Pour l\'appli', 'Pour les deux'], $bodies);
     }
 
     public function testTheMediaUrlIsAbsoluteAndSigned(): void

@@ -113,6 +113,62 @@ final class PlanScheduler
     }
 
     /**
+     * De quoi annoncer une pose AVANT de la faire (#68), plan par plan : le
+     * décalage en jours de chaque case depuis le lundi de la semaine 1 (trié),
+     * et si le plan est déjà posé chez `$owner` (relancer ne redate alors rien,
+     * la date choisie n'est pas utilisée). Le navigateur n'a plus qu'à ajouter
+     * ces décalages au lundi de la date choisie : la règle d'ancrage reste ici.
+     *
+     * Une requête pour savoir ce qui est déjà posé, quel que soit le nombre de
+     * plans ; les cases, elles, sont lues sur chaque plan.
+     *
+     * @param array<PlanTemplate> $templates
+     *
+     * @return array<int, array{offsets: list<int>, placed: bool}> indexé par id de plan
+     */
+    public function placementPreviews(array $templates, User $owner): array
+    {
+        $placed = [];
+        foreach ($this->scheduledRepository->findInstantiatedPlansForOwner($owner) as $template) {
+            $placed[(int) $template->getId()] = true;
+        }
+
+        $previews = [];
+        foreach ($templates as $template) {
+            $offsets = [];
+            foreach ($template->getPlanItems() as $item) {
+                $offsets[] = self::dayOffset($item);
+            }
+            sort($offsets);
+
+            $previews[(int) $template->getId()] = [
+                'offsets' => $offsets,
+                'placed' => isset($placed[(int) $template->getId()]),
+            ];
+        }
+
+        return $previews;
+    }
+
+    /**
+     * La plus ancienne séance datée de ce plan chez `$owner`, ou null s'il n'y est
+     * pas. Sert à ouvrir l'agenda là où le plan commence après une relance qui
+     * n'a rien ajouté.
+     */
+    public function firstScheduledDate(PlanTemplate $template, User $owner): ?\DateTimeImmutable
+    {
+        $first = null;
+        foreach ($this->scheduledRepository->findBySourcePlanTemplateForOwner($template, $owner) as $scheduled) {
+            $date = $scheduled->getScheduledDate();
+            if (null === $first || $date < $first) {
+                $first = $date;
+            }
+        }
+
+        return $first;
+    }
+
+    /**
      * Réaligne les séances datées ENCORE PRÉVUES d'une case sur sa nouvelle
      * position (semaine/jour) dans la trame : déplacer une case dans l'éditeur de
      * plan déplace la séance « prévu » au calendrier. Les séances DONE/MISSED
@@ -191,9 +247,15 @@ final class PlanScheduler
 
     private function dateForItem(\DateTimeImmutable $anchor, PlanItem $item): \DateTimeImmutable
     {
-        $offsetDays = ($item->getWeekNumber() - 1) * 7 + ($item->getDayOfWeek() - 1);
+        return $anchor->modify(sprintf('+%d days', self::dayOffset($item)));
+    }
 
-        return $anchor->modify(sprintf('+%d days', $offsetDays));
+    /**
+     * Jours entre le lundi de la semaine 1 et la case : semaine 2 mercredi = 9.
+     */
+    private static function dayOffset(PlanItem $item): int
+    {
+        return ($item->getWeekNumber() - 1) * 7 + ($item->getDayOfWeek() - 1);
     }
 
     /**
@@ -214,9 +276,7 @@ final class PlanScheduler
         foreach ($existing as $scheduled) {
             $item = $scheduled->getSourcePlanItem();
             if (null !== $item) {
-                $offsetDays = ($item->getWeekNumber() - 1) * 7 + ($item->getDayOfWeek() - 1);
-
-                return $scheduled->getScheduledDate()->modify(sprintf('-%d days', $offsetDays));
+                return $scheduled->getScheduledDate()->modify(sprintf('-%d days', self::dayOffset($item)));
             }
         }
 

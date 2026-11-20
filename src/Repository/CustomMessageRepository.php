@@ -7,6 +7,7 @@ namespace App\Repository;
 use App\Entity\CustomMessage;
 use App\Entity\User;
 use App\Enum\MessageAudience;
+use App\Enum\MessagePlatform;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\Persistence\ManagerRegistry;
@@ -26,10 +27,11 @@ class CustomMessageRepository extends ServiceEntityRepository
      * croise `[$from, $until]` (bornes incluses), du plus ancien début au plus
      * récent. Le web demande le jour même (`$from = $until = aujourd'hui`), le
      * téléphone un horizon, pour pouvoir l'afficher hors réseau le jour venu.
+     * `$surface` (WEB ou APP) écarte les messages réservés à l'autre côté.
      *
      * @return list<CustomMessage>
      */
-    public function findUnseenFor(User $user, \DateTimeImmutable $from, \DateTimeImmutable $until): array
+    public function findUnseenFor(User $user, \DateTimeImmutable $from, \DateTimeImmutable $until, MessagePlatform $surface): array
     {
         return $this->createQueryBuilder('m')
             ->andWhere('m.active = true')
@@ -37,10 +39,12 @@ class CustomMessageRepository extends ServiceEntityRepository
             ->andWhere('m.endsOn >= :from')
             ->andWhere('m.audience = :all OR :user MEMBER OF m.recipients')
             ->andWhere(':user NOT MEMBER OF m.seenBy')
+            ->andWhere('m.platform IN (:platforms)')
             ->setParameter('from', $from, Types::DATE_IMMUTABLE)
             ->setParameter('until', $until, Types::DATE_IMMUTABLE)
             ->setParameter('all', MessageAudience::ALL)
             ->setParameter('user', $user)
+            ->setParameter('platforms', array_map(static fn (MessagePlatform $p): string => $p->value, MessagePlatform::shownOn($surface)))
             ->orderBy('m.startsOn', 'ASC')
             ->addOrderBy('m.id', 'ASC')
             ->getQuery()

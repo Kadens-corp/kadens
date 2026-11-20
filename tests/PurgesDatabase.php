@@ -7,6 +7,7 @@ use App\Entity\Coaching;
 use App\Entity\CustomMessage;
 use App\Entity\DeletedEntity;
 use App\Entity\Exercise;
+use App\Entity\Friendship;
 use App\Entity\Goal;
 use App\Entity\ImportedActivity;
 use App\Entity\IntervalsConnection;
@@ -50,6 +51,7 @@ trait PurgesDatabase
             ApiToken::class,
             PairingCode::class,
             Coaching::class,
+            Friendship::class,
             ScheduledWorkout::class,
             PlanTemplate::class,
             Goal::class,

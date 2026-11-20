@@ -39,7 +39,7 @@ class GoalType extends AbstractType
                 'class' => ActivityType::class,
                 'label' => 'Activité',
                 'choice_label' => fn (ActivityType $a): string => $a->getLabel(),
-                'placeholder' => 'Transverse (aucune)',
+                'placeholder' => 'Toutes activités',
                 'required' => false,
             ])
             ->add('priority', EnumType::class, [
@@ -53,11 +53,11 @@ class GoalType extends AbstractType
                 'attr' => ['placeholder' => 'ex. sub 4h · 180 kg · Top 10'],
             ])
             ->add('description', TextareaType::class, [
-                // « Présentation » et non plus « Notes » : c'est le chapeau du récit,
-                // lisible sur la page publique quand l'objectif est publié (#42).
-                'label' => 'Présentation',
+                // L'introduction du récit, lisible sur la page publique quand
+                // l'objectif est publié (#42). « Chapeau » était un mot de presse (#105).
+                'label' => 'Introduction',
                 'required' => false,
-                'help' => 'Le chapeau du récit : visible sur la page publique si tu le publies.',
+                'help' => 'L\'introduction du récit : visible sur la page publique si tu le publies.',
                 'attr' => ['rows' => 3, 'placeholder' => 'Contexte, stratégie, parcours…'],
             ])
             ->add('outcome', EnumType::class, [

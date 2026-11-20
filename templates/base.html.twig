@@ -33,9 +33,14 @@
             <style data-turbo-track="dynamic">{{ activity_palette }}</style>
         {% endif %}
     </head>
-    <body>
-        {# Évitement du chrome : le header est collant et porte 4 entrées + un
-           menu, qu'un utilisateur clavier retabulerait à chaque navigation.
+    {# `save-status` : l'indicateur d'enregistrement automatique de la page (#86),
+       que le compositeur, l'éditeur de plan et l'édition en ligne alimentent. Sur
+       <body> parce que la source peut être n'importe où dans <main>.
+       `exercise-viewer` : la visionneuse des images d'un exercice (#38), qu'un
+       œil ouvre de n'importe quelle ligne d'exercice, Turbo Stream compris. #}
+    <body data-controller="save-status exercise-viewer">
+        {# Évitement du chrome : le header est collant et porte 5 ou 6 entrées
+           + un menu, qu'un utilisateur clavier retabulerait à chaque navigation.
            Visible seulement une fois focalisé (.kd-skip). #}
         <a class="kd-skip" href="#main">Aller au contenu</a>
 
@@ -45,6 +50,19 @@
         <main id="main" class="{% block main_class %}kd-page{% endblock %}">
             {% block body %}{% endblock %}
         </main>
+        {# Le coin des retours, en bas à droite : les messages flash de TOUTE page
+           (#129), puis la pastille « Enregistré ». Une seule pile, pour qu'ils
+           s'empilent au lieu de se recouvrir, et rien dans le flux de <main> :
+           un retour ne déplace jamais la page. #}
+        {% if app.user %}
+            {{ include('components/_exercise_viewer.html.twig', {}, with_context = false) }}
+        {% endif %}
+        <div class="kd-toasts">
+            {{ include('components/_flash_toasts.html.twig', {}, with_context = false) }}
+            {% if app.user %}
+                {{ include('components/_save_status.html.twig', {}, with_context = false) }}
+            {% endif %}
+        </div>
 
         {# Un message programmé à lire aujourd'hui, sur la page où l'on arrive.
            Une modale à la fois : s'il y en a un, l'invitation à choisir un pseudo

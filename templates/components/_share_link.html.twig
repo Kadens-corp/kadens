@@ -1,0 +1,83 @@
+{# Partage par lien d'une séance ou d'un plan (#61).
+
+   Privé par défaut : tant que le propriétaire n'a pas ouvert le partage, il
+   n'existe aucune page publique. Ce bandeau dit l'état, ce qui sortira, et porte
+   le seul geste d'envoi, « Copier le lien à envoyer », avec son retour visible.
+   Sans JS, l'adresse reste lisible et sélectionnable dans son champ.
+
+   Portée : ne se rend QUE pour le propriétaire. Un coach accepté est co-éditeur
+   du contenu de son athlète, mais il ne le publie pas (C-15) ; la garde est
+   doublée côté serveur (`share`). Comparaison par `id` : `owner` peut être un
+   proxy Doctrine, que Twig comparerait attribut par attribut.
+
+   Attendus :
+     subject  Workout|PlanTemplate
+     kind     'workout' | 'plan'
+     url      adresse publique, null tant que c'est privé
+     action   URL du POST qui ouvre ou arrête le partage
+     csrf     identifiant du jeton CSRF de ce POST
+
+   `embed` pour le plan : le bloc `shared_extra` accueille le partage d'une plage
+   de semaines, qui n'a de sens qu'une fois le lien ouvert. #}
+{% set plan = kind == 'plan' %}
+{% if subject.owner and app.user and subject.owner.id == app.user.id %}
+    {% if not plan and subject.planLocal %}
+        {# Une case de plan n'a jamais de lien à elle (`ShareLink::open`). #}
+        <p class="kd-sharelink kd-sharelink--note">
+            {{ ux_icon('lucide:lock') }}
+            <span>Séance d'un plan : elle se partage avec son plan, jamais seule.</span>
+        </p>
+    {% else %}
+        <section class="kd-sharelink" aria-label="Partage par lien"
+                 {% if url %}data-controller="clipboard" data-clipboard-url-value="{{ url }}"{% endif %}>
+            {% if url %}
+                <p class="kd-sharelink__state">
+                    {{ ux_icon('lucide:globe') }}
+                    <span>{{ plan ? 'Plan partagé' : 'Séance partagée' }} par lien : toute personne qui a l'adresse peut {{ plan ? 'le' : 'la' }} lire, sans compte.</span>
+                </p>
+                <div class="kd-sharelink__url">
+                    <input type="text" class="kd-input" readonly value="{{ url }}"
+                           data-action="click->clipboard#select" aria-label="Adresse publique">
+                    <button type="button" class="kd-btn kd-btn--primary kd-btn--sm" data-action="clipboard#copy">
+                        {{ ux_icon('lucide:link-2') }} Copier le lien à envoyer
+                    </button>
+                </div>
+                <p class="kd-sharelink__feedback" data-clipboard-target="feedback" role="status" aria-live="polite"></p>
+
+                {% block shared_extra %}{% endblock %}
+
+                <div class="kd-sharelink__actions">
+                    <a href="{{ url }}" target="_blank" rel="noopener" class="kd-btn kd-btn--ghost kd-btn--sm">
+                        {{ ux_icon('lucide:external-link') }} Voir la page publique
+                    </a>
+                    <form method="post" action="{{ action }}">
+                        <input type="hidden" name="_token" value="{{ csrf_token(csrf) }}">
+                        <input type="hidden" name="action" value="close">
+                        <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm">
+                            {{ ux_icon('lucide:lock') }} Arrêter le partage
+                        </button>
+                    </form>
+                </div>
+                <p class="kd-sharelink__hint">Arrêter coupe ce lien pour de bon. Repartager en crée un nouveau.</p>
+            {% else %}
+                <p class="kd-sharelink__state">
+                    {{ ux_icon('lucide:lock') }}
+                    <span>{{ plan ? 'Plan privé' : 'Séance privée' }} : seuls toi et ton éventuel coach {{ plan ? 'le' : 'la' }} voyez.</span>
+                </p>
+                <p class="kd-sharelink__hint">
+                    Partager par lien crée une adresse impossible à deviner, lisible sans
+                    compte par toute personne qui la reçoit :
+                    {{ plan ? 'titre, description, semaines, séances et consignes des exercices' : 'titre, description, exercices et leurs consignes' }}.
+                    Jamais tes notes privées{{ plan ? ', tes objectifs' }} ni ce que tu as réalisé.
+                </p>
+                <form method="post" action="{{ action }}" class="kd-sharelink__actions">
+                    <input type="hidden" name="_token" value="{{ csrf_token(csrf) }}">
+                    <input type="hidden" name="action" value="open">
+                    <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">
+                        {{ ux_icon('lucide:globe') }} Partager par lien
+                    </button>
+                </form>
+            {% endif %}
+        </section>
+    {% endif %}
+{% endif %}

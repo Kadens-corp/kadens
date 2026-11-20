@@ -3,8 +3,9 @@
    semaines × jours).
 
    Paramètres optionnels :
-   - `public` (défaut false) : en page publique, les séances pointent leur page
-     publique (/s/{slug}) et non la route propriétaire (auth-gated).
+   - `public` (défaut false) : en page publique, chaque case ouvre sa séance sous
+     le jeton du plan (/s/plan/{token}/seance/{item}) et non la route
+     propriétaire (auth-gated). Une case n'a jamais de lien public à elle (#61).
    - `weeks` (défaut null) : liste de numéros de semaines à afficher (partage d'une
      plage). Null = toutes. #}
 {% import 'components/_activity.html.twig' as activity %}
@@ -61,7 +62,7 @@
                                     {% set acts = entry.workout.activities %}
                                     <a class="kd-planday__item{{ acts ? ' kd-planday__item--act ' ~ activity.surface(acts) }}"
                                        href="{{ public
-                                           ? path('app_public_share', {slug: entry.workout.workout.slug})
+                                           ? path('app_public_share_plan_item', {token: template.shareToken, item: entry.item.id})
                                            : path('app_workout_show', {id: entry.item.workout.id}|merge(back_to('plan', template.id))) }}">
                                         {{ ux_icon(acts ? activity.icon(acts|first)|trim : 'lucide:clipboard-list') }}
                                         <span>{{ entry.workout.workout.title }}</span>

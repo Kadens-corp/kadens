@@ -2,13 +2,17 @@
 
 namespace App\Controller;
 
+use App\Entity\Exercise;
 use App\Entity\PlanItem;
 use App\Entity\PlanTemplate;
 use App\Entity\ScheduledWorkout;
 use App\Entity\User;
 use App\Entity\Workout;
 use App\Enum\ActivityType;
+use App\Enum\ProgressionField;
 use App\Enum\ScheduledStatus;
+use App\Http\ProgressionInput;
+use App\Repository\CoachingRepository;
 use App\Repository\GoalRepository;
 use App\Repository\ImportedActivityRepository;
 use App\Repository\PlanTemplateRepository;
@@ -18,8 +22,11 @@ use App\Repository\WorkoutRepository;
 use App\Security\Voter\PlanTemplateVoter;
 use App\Service\CoachedLibrary;
 use App\Service\CoachingResolver;
+use App\Service\ExerciseNaming;
+use App\Service\LineageDivergence;
 use App\Service\LineageSeed;
 use App\Service\OffProgramRecap;
+use App\Service\PlanProgression;
 use App\Service\PlanFlattener;
 use App\Service\PlanScheduler;
 use App\Service\PlanTransfer;
@@ -28,13 +35,16 @@ use App\Service\SessionRating;
 use App\Service\ProgressionAggregator;
 use App\Service\SharedPlanCopier;
 use App\Service\SharedWorkoutCopier;
+use App\Service\ShareLink;
 use App\Service\SlugGenerator;
+use App\Service\UnitFormatter;
 use App\Service\WorkoutCloner;
 use App\Service\WorkoutMetrics;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Doctrine\Attribute\MapEntity;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\Form\FormInterface;
+use Symfony\Component\HttpFoundation\InputBag;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -46,11 +56,8 @@ final class PlanTemplateController extends AbstractController
     /** Exécutions notées d'une lignée résumées sur une carte de palette. */
     private const int PALETTE_RATINGS = 5;
 
-    /**
-     * Titre d'un brouillon créé en un clic. Sert aussi de repère pour savoir si le
-     * slug mérite d'être régénéré au premier vrai renommage (cf. updateMeta).
-     */
-    public const DRAFT_PLAN_TITLE = 'Nouveau plan';
+    /** Titre d'un brouillon créé en un clic, que l'éditeur ouvre aussitôt en édition. */
+    public const DRAFT_PLAN_TITLE = PlanTemplate::DRAFT_TITLE;
 
     /** Bloc de départ d'un nouveau plan : on ajoute ensuite semaine par semaine. */
     public const DRAFT_PLAN_WEEKS = 4;
@@ -69,6 +76,9 @@ final class PlanTemplateController extends AbstractController
         private readonly CoachingResolver $coachingResolver,
         private readonly CoachedLibrary $coachedLibrary,
         private readonly OffProgramRecap $offProgramRecap,
+        private readonly LineageDivergence $lineageDivergence,
+        private readonly ExerciseNaming $exerciseNaming,
+        private readonly UnitFormatter $unitFormatter,
     ) {
     }
 
@@ -242,13 +252,18 @@ final class PlanTemplateController extends AbstractController
      * formulaire de métadonnées ici, donc plus de POST sur cette route.
      */
     #[Route('/{id}/edit', name: 'app_plan_template_edit', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function edit(PlanTemplate $template, SlugGenerator $slugGenerator): Response
+    public function edit(PlanTemplate $template, SlugGenerator $slugGenerator, CoachingRepository $coachingRepository): Response
     {
         $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
         $this->ensureSlug($template, $slugGenerator);
 
+        /** @var User $user */
+        $user = $this->getUser();
+
         return $this->render('plan_template/edit.html.twig',
-            $this->gridContext($template) + $this->paletteContext($template) + $this->goalsContext($template)
+            // Notes privées du coach sur l'athlète propriétaire (#65), null pour soi.
+            ['coachRelation' => $coachingRepository->findAcceptedRelation($user, $template->getOwner())]
+            + $this->gridContext($template) + $this->paletteContext($template) + $this->goalsContext($template)
             + $this->assignContext($template)
         );
     }
@@ -272,7 +287,7 @@ final class PlanTemplateController extends AbstractController
         /** @var User $user */
         $user = $this->getUser();
         if ($template->getOwner()?->getId() !== $user->getId()) {
-            throw $this->createAccessDeniedException('Seul le propriétaire du plan peut le donner.');
+            throw $this->createAccessDeniedException('Seul le propriétaire du plan peut le transférer.');
         }
 
         $redirect = $this->redirectToRoute('app_plan_template_edit', ['id' => $template->getId()]);
@@ -296,25 +311,61 @@ final class PlanTemplateController extends AbstractController
         $transfer->transfer($template, $athlete);
         $this->entityManager->flush();
 
-        $this->addFlash('success', sprintf('« %s » est maintenant le plan de %s. Tu restes co-éditeur.', $template->getTitle(), $athlete->getDisplayName()));
+        $this->addFlash('success', sprintf('« %s » est maintenant le plan de %s. Tu restes co-éditeur tant que tu l\'entraînes.', $template->getTitle(), $athlete->getDisplayName()));
 
         return $redirect;
     }
 
     /**
-     * Copie dans SA bibliothèque un plan reçu par son lien public (#58). Même
-     * principe que `WorkoutController::copyShared` : le slug vaut droit de lecture,
-     * donc de copie. Les séances du plan arrivent avec lui dans sa bibliothèque
-     * (`SharedPlanCopier`). Sur son propre plan, rien à copier.
+     * Ouvre ou arrête le partage par lien du plan (#61). Geste de PROPRIÉTAIRE :
+     * l'attribut EDIT ne suffit pas, un coach accepté le porte aussi, et il ne
+     * publie pas le plan de son athlète (C-15). Le lien du plan ouvre aussi ses
+     * cases, qui n'en ont pas à elles.
      */
-    #[Route('/shared/{slug}/copy', name: 'app_plan_template_copy_shared', methods: ['POST'])]
+    #[Route('/{id}/share', name: 'app_plan_template_share', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function share(Request $request, PlanTemplate $template, ShareLink $shareLink): Response
+    {
+        $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
+
+        /** @var User $user */
+        $user = $this->getUser();
+        if ($template->getOwner()?->getId() !== $user->getId()) {
+            throw $this->createAccessDeniedException('Seul le propriétaire partage son plan.');
+        }
+
+        if (!$this->isCsrfTokenValid('plan_share'.$template->getId(), $request->getPayload()->getString('_token'))) {
+            throw $this->createAccessDeniedException('Jeton CSRF invalide.');
+        }
+
+        if ('close' === $request->getPayload()->getString('action')) {
+            $shareLink->close($template);
+            $this->addFlash('success', 'Partage arrêté : le lien ne répond plus.');
+        } else {
+            $shareLink->open($template);
+            $this->addFlash('success', 'Partage par lien activé. Copie le lien pour l\'envoyer.');
+        }
+
+        $this->entityManager->flush();
+
+        return $this->redirectToRoute('app_plan_template_show', ['id' => $template->getId()]);
+    }
+
+    /**
+     * Copie dans SA bibliothèque un plan reçu par son lien public (#58). Même
+     * principe que `WorkoutController::copyShared` : le jeton de partage vaut droit
+     * de lecture, donc de copie, et un partage arrêté ne se copie plus. Les séances
+     * du plan arrivent avec lui dans sa bibliothèque (`SharedPlanCopier`). Sur son
+     * propre plan, rien à copier.
+     */
+    #[Route('/shared/{token}/copy', name: 'app_plan_template_copy_shared', methods: ['POST'], requirements: ['token' => ShareLink::TOKEN])]
     public function copyShared(
         Request $request,
-        #[MapEntity(mapping: ['slug' => 'slug'])] PlanTemplate $template,
+        #[MapEntity(mapping: ['token' => 'shareToken'])] PlanTemplate $template,
         SharedPlanCopier $copier,
     ): Response {
-        if (!$this->isCsrfTokenValid('copy_shared_plan'.$template->getSlug(), $request->getPayload()->getString('_token'))) {
-            return $this->redirectToRoute('app_public_share_plan', ['slug' => $template->getSlug()]);
+        $token = (string) $template->getShareToken();
+        if (!$this->isCsrfTokenValid('copy_shared_plan'.$token, $request->getPayload()->getString('_token'))) {
+            return $this->redirectToRoute('app_public_share_plan', ['token' => $token]);
         }
 
         /** @var User $user */
@@ -337,10 +388,10 @@ final class PlanTemplateController extends AbstractController
      * le pare-feu le fait passer par le login, puis on le repose sur la page
      * publique du plan, où la copie est désormais possible.
      */
-    #[Route('/shared/{slug}/copy', name: 'app_plan_template_copy_shared_entry', methods: ['GET'])]
-    public function copySharedEntry(#[MapEntity(mapping: ['slug' => 'slug'])] PlanTemplate $template): Response
+    #[Route('/shared/{token}/copy', name: 'app_plan_template_copy_shared_entry', methods: ['GET'], requirements: ['token' => ShareLink::TOKEN])]
+    public function copySharedEntry(#[MapEntity(mapping: ['token' => 'shareToken'])] PlanTemplate $template): Response
     {
-        return $this->redirectToRoute('app_public_share_plan', ['slug' => $template->getSlug()]);
+        return $this->redirectToRoute('app_public_share_plan', ['token' => $template->getShareToken()]);
     }
 
     /**
@@ -369,10 +420,10 @@ final class PlanTemplateController extends AbstractController
                     return new Response('Le titre ne peut pas être vide.', Response::HTTP_UNPROCESSABLE_ENTITY);
                 }
                 $template->setTitle($value);
-                // Un plan créé en un clic naît avec un slug dérivé du titre par
-                // défaut : on le régénère au premier renommage, mais uniquement dans
-                // ce cas (un plan déjà nommé garde son lien de partage public).
-                if ($slugGenerator->derivesFrom($template->getSlug(), self::DRAFT_PLAN_TITLE)) {
+                // Le slug suit le titre : il ne nomme plus que le fichier d'export,
+                // le lien public est un jeton depuis #61. Un slug qui dérive déjà
+                // du titre reste, sans quoi il glisserait vers `-2` à chaque envoi.
+                if (!$slugGenerator->derivesFrom($template->getSlug(), $value)) {
                     $template->setSlug($slugGenerator->generate($value, PlanTemplate::class));
                 }
                 break;
@@ -409,6 +460,7 @@ final class PlanTemplateController extends AbstractController
     {
         $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
         $payload = $request->getPayload();
+        $notice = null;
 
         if ($this->isCsrfTokenValid('plan_goals'.$template->getId(), $payload->getString('_token'))) {
             $goal = $this->goalRepository->find($payload->getInt('goalId'));
@@ -416,26 +468,40 @@ final class PlanTemplateController extends AbstractController
             if (null !== $goal && $goal->getOwner() === $template->getOwner()) {
                 if ('detach' === $payload->getString('action')) {
                     $template->removeGoal($goal);
+                    $notice = sprintf('Objectif « %s » détaché.', $goal->getTitle());
                 } else {
                     $template->addGoal($goal);
+                    $notice = sprintf('Plan associé à « %s ».', $goal->getTitle());
                 }
                 $this->entityManager->flush();
             }
         }
 
-        return $this->goalsResponse($request, $template);
+        return $this->goalsResponse($request, $template, $notice);
     }
 
     /**
      * Réponse d'une mutation de rattachement : stream ciblé sur #plan-goals (repli
-     * sans JS : redirection vers l'éditeur), calqué sur `gridResponse()`.
+     * sans JS : redirection vers l'éditeur, le message en flash), calqué sur
+     * `gridResponse()`.
+     *
+     * La confirmation s'affiche DANS le bandeau, là où l'on vient de cliquer, et
+     * le stream retire les flashes de la page : celui de l'arrivée (« Plan créé
+     * pour… ») restait sinon en haut de l'éditeur, et passait pour la réponse au
+     * rattachement (B-05 coach).
      */
-    private function goalsResponse(Request $request, PlanTemplate $template): Response
+    private function goalsResponse(Request $request, PlanTemplate $template, ?string $notice): Response
     {
         if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
             $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
 
-            return $this->render('plan_template/stream/goals.stream.html.twig', $this->goalsContext($template));
+            return $this->render('plan_template/stream/goals.stream.html.twig', [
+                'goalsNotice' => $notice,
+            ] + $this->goalsContext($template));
+        }
+
+        if (null !== $notice) {
+            $this->addFlash('success', $notice);
         }
 
         return $this->redirectToRoute('app_plan_template_edit', ['id' => $template->getId()]);
@@ -743,42 +809,63 @@ final class PlanTemplateController extends AbstractController
     }
 
     /**
-     * Copie le contenu d'une semaine vers une autre (cible libre). Chaque séance est
-     * clonée en copie locale indépendante ; le contenu de la semaine cible est
-     * d'abord REMPLACÉ (ses cases détachées, réalisé préservé). Support de la
-     * construction incrémentale (« ma S1 est bonne, je la reporte en S3 »).
+     * Copie le contenu d'une semaine vers une ou plusieurs autres (#111). Chaque
+     * séance est clonée en copie locale indépendante, une par semaine cible ; le
+     * contenu de chaque cible est d'abord REMPLACÉ (ses cases détachées, réalisé
+     * préservé). Support de la construction incrémentale (« ma S1 est bonne, je
+     * la reporte sur S2 à S4 » en un geste, et non trois).
+     *
+     * La confirmation dit ce qui a été fait (« Semaine 1 copiée sur S2, S3 et
+     * S4. »), sous l'en-tête de la semaine source, là où l'on vient de cliquer.
      */
     #[Route('/{id}/weeks/{week}/copy', name: 'app_plan_template_week_copy', methods: ['POST'], requirements: ['id' => '\d+', 'week' => '\d+'])]
     public function copyWeek(Request $request, PlanTemplate $template, int $week, WorkoutCloner $cloner, ScheduledWorkoutRepository $scheduledRepository, PlanScheduler $scheduler): Response
     {
         $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
         $payload = $request->getPayload();
-        $target = $payload->getInt('target');
+        $duration = (int) $template->getDurationWeeks();
 
-        if ($this->isCsrfTokenValid('week_copy'.$week, $payload->getString('_token'))
-            && $week >= 1 && $week <= (int) $template->getDurationWeeks()
-            && $target >= 1 && $target <= (int) $template->getDurationWeeks() && $target !== $week) {
-            // Snapshots AVANT toute modification de la collection.
-            $sources = [];
-            $targetItems = [];
-            foreach ($template->getPlanItems() as $item) {
-                if ($item->getWeekNumber() === $week) {
-                    $sources[] = $item;
-                } elseif ($item->getWeekNumber() === $target) {
-                    $targetItems[] = $item;
-                }
+        if (!$this->isCsrfTokenValid('week_copy'.$week, $payload->getString('_token')) || $week < 1 || $week > $duration) {
+            return $this->gridResponse($request, $template);
+        }
+
+        // « Toutes les suivantes » l'emporte sur les cases cochées : c'est le
+        // bouton cliqué qui dit l'intention.
+        $allAfter = $payload->getBoolean('all_after') && $week < $duration;
+        $targets = $allAfter
+            ? range($week + 1, $duration)
+            : self::copyTargets($payload->all('targets'), $week, $duration);
+        if ([] === $targets) {
+            return $this->gridResponse($request, $template, [
+                'week' => $week,
+                'tone' => 'error',
+                'text' => 'Coche au moins une semaine de destination.',
+            ]);
+        }
+
+        // Snapshots AVANT toute modification de la collection.
+        $sources = [];
+        $targetItems = [];
+        foreach ($template->getPlanItems() as $item) {
+            if ($item->getWeekNumber() === $week) {
+                $sources[] = $item;
+            } elseif (\in_array($item->getWeekNumber(), $targets, true)) {
+                $targetItems[] = $item;
             }
+        }
 
-            // 1) Vider la semaine cible (remplacement, réalisé préservé).
-            $orphans = [];
-            foreach ($targetItems as $item) {
-                $orphan = $this->detachItem($template, $item, $scheduledRepository);
-                if (null !== $orphan) {
-                    $orphans[] = $orphan;
-                }
+        // 1) Vider les semaines cibles (remplacement, réalisé préservé).
+        $orphans = [];
+        foreach ($targetItems as $item) {
+            $orphan = $this->detachItem($template, $item, $scheduledRepository);
+            if (null !== $orphan) {
+                $orphans[] = $orphan;
             }
+        }
 
-            // 2) Cloner les cases de la source vers la cible.
+        // 2) Cloner les cases de la source vers chaque cible : une copie locale
+        // par case ET par semaine, pour que chacune progresse seule.
+        foreach ($targets as $target) {
             foreach ($sources as $item) {
                 $source = $item->getWorkout();
                 if (null === $source) {
@@ -793,20 +880,66 @@ final class PlanTemplateController extends AbstractController
                 $template->addPlanItem($newItem);
                 $this->entityManager->persist($newItem);
             }
-
-            $this->entityManager->flush();
-
-            if ([] !== $orphans) {
-                foreach ($orphans as $copy) {
-                    $this->entityManager->remove($copy);
-                }
-                $this->entityManager->flush();
-            }
-
-            $scheduler->resync($template);
         }
 
-        return $this->gridResponse($request, $template);
+        $this->entityManager->flush();
+
+        if ([] !== $orphans) {
+            foreach ($orphans as $copy) {
+                $this->entityManager->remove($copy);
+            }
+            $this->entityManager->flush();
+        }
+
+        $scheduler->resync($template);
+
+        return $this->gridResponse($request, $template, [
+            'week' => $week,
+            'tone' => 'success',
+            'text' => $allAfter && \count($targets) > 1
+                ? sprintf('Semaine %d copiée sur toutes les suivantes (S%d à S%d).', $week, $week + 1, $duration)
+                : self::weekCopyMessage($week, $targets),
+        ]);
+    }
+
+    /**
+     * Les semaines cibles cochées, nettoyées : entiers du plan, sans la source,
+     * sans doublon, dans l'ordre. Une valeur hors plan est ignorée, pas refusée
+     * en bloc : le plan a pu raccourcir dans un autre onglet.
+     *
+     * @param array<mixed> $raw
+     *
+     * @return list<int>
+     */
+    private static function copyTargets(array $raw, int $week, int $duration): array
+    {
+        $targets = [];
+        foreach ($raw as $value) {
+            if (!\is_scalar($value) || !ctype_digit((string) $value)) {
+                continue;
+            }
+            $target = (int) $value;
+            if ($target >= 1 && $target <= $duration && $target !== $week) {
+                $targets[$target] = $target;
+            }
+        }
+        ksort($targets);
+
+        return array_values($targets);
+    }
+
+    /**
+     * « Semaine 1 copiée sur S2. », « … sur S2 et S3. », « … sur S2, S3 et S4. »
+     *
+     * @param non-empty-list<int> $targets
+     */
+    private static function weekCopyMessage(int $week, array $targets): string
+    {
+        $labels = array_map(static fn (int $w): string => 'S'.$w, $targets);
+        $last = array_pop($labels);
+        $list = [] === $labels ? $last : implode(', ', $labels).' et '.$last;
+
+        return sprintf('Semaine %d copiée sur %s.', $week, $list);
     }
 
     /**
@@ -878,6 +1011,107 @@ final class PlanTemplateController extends AbstractController
         return $this->gridResponse($request, $template);
     }
 
+    /**
+     * Outil de progression (#110) : faire progresser la charge ou les répétitions
+     * d'un exercice sur une plage de semaines, dans toutes les cases de sa séance.
+     *
+     * Une page à part plutôt qu'une modale : l'aperçu est un tableau de toutes les
+     * cases concernées, rendu par le serveur, qui marche sans JS. GET = choisir et
+     * voir l'aperçu (le formulaire se recharge sur lui-même), POST = appliquer ce
+     * même aperçu, puis retour à l'éditeur. Les deux passent par
+     * `ProgressionInput::parse()` et `PlanProgression::preview()` : on applique
+     * exactement ce qu'on a vu.
+     */
+    #[Route('/{id}/progression', name: 'app_plan_template_progression', methods: ['GET', 'POST'], requirements: ['id' => '\d+'])]
+    public function progression(Request $request, PlanTemplate $template, PlanProgression $progression): Response
+    {
+        $this->denyAccessUnlessGranted(PlanTemplateVoter::EDIT, $template);
+
+        $targets = $progression->targets($template);
+        $weeks = (int) $template->getDurationWeeks();
+        $isPost = $request->isMethod('POST');
+        $bag = $isPost ? $request->request : $request->query;
+
+        // Première visite : l'exercice le plus haut de la liste, sur les semaines où
+        // il apparaît, à +2,5 kg (ou +1 rép.) par semaine. L'aperçu se montre
+        // d'emblée : on voit ce que l'outil fait avant d'avoir rien réglé.
+        if (!$isPost && !$bag->has('target') && [] !== $targets) {
+            $first = $targets[0]['exercises'][0];
+            $bag = new InputBag([
+                'target' => $first['key'],
+                'field' => $first['defaultField']->value,
+                'from' => (string) $first['firstWeek'],
+                'to' => (string) max($first['lastWeek'], $first['firstWeek']),
+                'step' => ProgressionField::REPS === $first['defaultField'] ? '1' : '2,5',
+                'start' => '',
+            ]);
+        }
+
+        $preview = null;
+        $error = null;
+        if ([] !== $targets) {
+            try {
+                $input = ProgressionInput::parse($bag, $weeks);
+
+                if ($isPost) {
+                    if (!$this->isCsrfTokenValid('plan_progression'.$template->getId(), $request->getPayload()->getString('_token'))) {
+                        throw new \InvalidArgumentException('La page a expiré : vérifie l\'aperçu et applique à nouveau.');
+                    }
+                    $result = $progression->apply($template, $input);
+                    $this->entityManager->flush();
+
+                    $this->addFlash('success', $this->progressionMessage($result, $input));
+
+                    return $this->redirectToRoute('app_plan_template_edit', ['id' => $template->getId()]);
+                }
+
+                $preview = $progression->preview($template, $input);
+            } catch (\InvalidArgumentException $e) {
+                $error = $e->getMessage();
+            }
+        }
+
+        return $this->render('plan_template/progression.html.twig', [
+            'template' => $template,
+            'targets' => $targets,
+            'values' => $bag->all(),
+            'preview' => $preview,
+            'error' => $error,
+            'fields' => ProgressionField::cases(),
+        ], new Response(null, null !== $error && $isPost ? Response::HTTP_UNPROCESSABLE_ENTITY : Response::HTTP_OK));
+    }
+
+    /**
+     * « Développé militaire (Upper A) : 3 cases mises à jour, de 60 kg en S1 à
+     * 67,5 kg en S4. » Rien à changer se dit aussi : sinon on croit à un échec.
+     *
+     * @param array{root: Workout, exercise: Exercise, start: float, changes: int} $result
+     */
+    private function progressionMessage(array $result, ProgressionInput $input): string
+    {
+        $what = \sprintf('%s (%s)', $this->exerciseNaming->label($result['exercise']), $result['root']->getTitle());
+        if (0 === $result['changes']) {
+            return $what.' : aucune case à changer, le plan prescrivait déjà ces valeurs.';
+        }
+
+        $end = $result['start'] + ($input->toWeek - $input->fromWeek) * $input->step;
+        $format = fn (float $v): string => ProgressionField::WEIGHT === $input->field
+            ? $this->unitFormatter->weight(max(0.0, $v))
+            : \sprintf('%d %s', max(1, (int) round($v)), $input->field->unit());
+
+        return \sprintf(
+            '%s : %d case%s mise%s à jour, de %s en S%d à %s en S%d.',
+            $what,
+            $result['changes'],
+            $result['changes'] > 1 ? 's' : '',
+            $result['changes'] > 1 ? 's' : '',
+            $format($result['start']),
+            $input->fromWeek,
+            $format($end),
+            $input->toWeek,
+        );
+    }
+
     // ---- Helpers -----------------------------------------------------------
 
     /**
@@ -934,7 +1168,7 @@ final class PlanTemplateController extends AbstractController
     }
 
     /**
-     * Garantit un slug (partage public). Les plans créés/dupliqués en ont déjà un ;
+     * Garantit un slug (nom du fichier d'export). Les plans créés/dupliqués en ont déjà un ;
      * ce repli couvre d'éventuelles données anciennes au slug null.
      */
     private function ensureSlug(PlanTemplate $template, SlugGenerator $slugGenerator): void
@@ -1027,6 +1261,8 @@ final class PlanTemplateController extends AbstractController
             // Le ressenti par racine de lignée, pour l'aperçu d'une case posée :
             // la copie locale y renvoie par `origin`.
             'lineageFeelings' => $feelings,
+            // Cases qui répètent à l'identique la fois d'avant de leur lignée (#93).
+            'repeats' => $this->lineageDivergence->repeatsInPlan($template),
         ];
     }
 
@@ -1073,7 +1309,8 @@ final class PlanTemplateController extends AbstractController
      * retrouver les séances de cet athlète — dont celles qu'il a lui-même créées
      * pour lui, qui appartiennent à l'athlète (cf. CLAUDE.md §3). S'y ajoutent,
      * pour ce coach seulement, ses propres séances pas encore copiées chez
-     * l'athlète (#58) : la pose les y copie (`placeableSource()`).
+     * l'athlète (#58) : la pose les y copie (`placeableSource()`). Les déjà
+     * copiées ne restent nommées que par `paletteAlreadyCopied` (#112).
      *
      * @return array<string, mixed>
      */
@@ -1085,14 +1322,23 @@ final class PlanTemplateController extends AbstractController
         // Le coach qui compose le plan de son athlète voit aussi SES séances (#58).
         // Celles déjà copiées chez l'athlète s'effacent : leur copie est dans la
         // liste ci-dessus, et c'est elle que la pose reprendrait de toute façon.
+        // Mais l'effacement se dit (#112) : la copie porte « Copie de la tienne »
+        // et une ligne sous les pastilles les compte, sans quoi « Moi · 0 » se lit
+        // comme une séance perdue.
         $coach = $this->coachComposing($template);
         $coachWorkouts = [];
+        $coachIds = [];
+        $alreadyCopied = [];
         if (null !== $coach) {
             $copied = array_flip($this->workoutRepository->findCopiedSourceIds($owner));
-            $coachWorkouts = array_values(array_filter(
-                $this->workoutRepository->findLibraryForOwnerWithContent($coach),
-                static fn (Workout $w): bool => !isset($copied[(int) $w->getId()]),
-            ));
+            foreach ($this->workoutRepository->findLibraryForOwnerWithContent($coach) as $w) {
+                $coachIds[(int) $w->getId()] = true;
+                if (isset($copied[(int) $w->getId()])) {
+                    $alreadyCopied[] = $w;
+                } else {
+                    $coachWorkouts[] = $w;
+                }
+            }
         }
         // La pose part de la dernière réalisation : la carte le dit, pour que
         // les valeurs de la case ne changent pas de source en silence.
@@ -1125,6 +1371,10 @@ final class PlanTemplateController extends AbstractController
                 'offProgram' => $offProgram[(int) $workout->getId()] ?? 0,
                 // À la séance du coach : la poser la copiera chez l'athlète.
                 'mine' => $index >= \count($workouts),
+                // Chez l'athlète, la copie d'une séance du coach (#112) : c'est
+                // elle qui remplace l'original effacé de « Moi ». Lire l'id d'un
+                // proxy ne le charge pas.
+                'copyOfMine' => isset($coachIds[(int) $workout->getCopiedFrom()?->getId()]),
             ];
         }
 
@@ -1150,19 +1400,33 @@ final class PlanTemplateController extends AbstractController
                 'owner' => ['label' => $owner->getDisplayName(), 'count' => \count($workouts)],
                 'mine' => ['label' => 'Moi', 'count' => \count($coachWorkouts)],
             ],
+            'paletteAlreadyCopied' => $alreadyCopied,
         ];
     }
 
     /**
      * Répond à une mutation de la trame : Turbo Stream si accepté, sinon repli
      * par redirection vers l'édition (dégradation sans JS).
+     *
+     * `$notice` (facultatif) confirme le geste sous l'en-tête de la semaine
+     * concernée ; le stream retire d'abord les flashes de la page, qui se liraient
+     * sinon comme la réponse (même logique que `goalsResponse()`). Sans JS, il
+     * devient un flash sur l'éditeur.
+     *
+     * @param array{week: int, tone: 'success'|'error', text: string}|null $notice
      */
-    private function gridResponse(Request $request, PlanTemplate $template): Response
+    private function gridResponse(Request $request, PlanTemplate $template, ?array $notice = null): Response
     {
         if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
             $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
 
-            return $this->render('plan_template/stream/grid.stream.html.twig', $this->gridContext($template));
+            return $this->render('plan_template/stream/grid.stream.html.twig', [
+                'gridNotice' => $notice,
+            ] + $this->gridContext($template));
+        }
+
+        if (null !== $notice) {
+            $this->addFlash($notice['tone'], $notice['text']);
         }
 
         return $this->redirectToRoute('app_plan_template_edit', ['id' => $template->getId()]);

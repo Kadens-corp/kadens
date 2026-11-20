@@ -2,21 +2,26 @@
 
 namespace App\Controller;
 
+use App\Entity\Coaching;
 use App\Entity\Exercise;
 use App\Entity\PlanTemplate;
 use App\Entity\ScheduledWorkout;
 use App\Entity\User;
 use App\Entity\Workout;
+use App\Enum\CoachingStatus;
 use App\Enum\MuscleGroup;
 use App\Enum\ScheduledStatus;
 use App\Enum\StatsRange;
 use App\Enum\StatsTab;
 use App\Http\BackTarget;
+use App\Http\NoLongerCoachException;
+use App\Repository\CoachingRepository;
 use App\Repository\GoalRepository;
 use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
 use App\Repository\WorkoutRepository;
 use App\Security\Voter\ExerciseVoter;
+use App\Service\CalendarWeek;
 use App\Service\CoachingResolver;
 use App\Service\ExerciseBodyMap;
 use App\Service\ExerciseProgress;
@@ -24,6 +29,7 @@ use App\Service\ExerciseTrajectory;
 use App\Service\HeartRateZones;
 use App\Service\PlanScheduler;
 use App\Service\ProfileStats;
+use App\Service\RecentSessions;
 use App\Service\SharedPlanCopier;
 use App\Service\SharedWorkoutCopier;
 use App\Service\SlugGenerator;
@@ -37,6 +43,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\UX\Turbo\TurboBundle;
 
 /**
  * Espace de travail du coach (ROLE_COACH, cf. access_control).
@@ -58,12 +65,16 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/coach')]
 final class CoachController extends AbstractController
 {
-    /** Profondeur du réalisé montré sur la fiche athlète. Au-delà, ce n'est plus une fiche. */
-    private const LOGGED_SESSIONS = 10;
+    /** Les sections de la fiche où l'on reste après le geste : leur ancre (#125). */
+    private const SECTION_SCHEDULE = 'poser-une-seance';
+    private const SECTION_PLACE = 'placer-un-plan';
+    private const SECTION_PLAN_COPY = 'un-de-mes-plans';
+    private const SECTION_WORKOUT_COPY = 'une-de-mes-seances';
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly CoachingResolver $coachingResolver,
+        private readonly CoachingRepository $coachingRepository,
     ) {
     }
 
@@ -91,6 +102,9 @@ final class CoachController extends AbstractController
         ProfileStats $profileStats,
         HeartRateZones $heartRateZones,
         TrainingLog $trainingLog,
+        RecentSessions $recentSessions,
+        PlanScheduler $planScheduler,
+        Request $request,
     ): Response {
         $this->denyUnlessCoachOf($athlete);
 
@@ -98,22 +112,39 @@ final class CoachController extends AbstractController
         $coach = $this->getUser();
         $today = new \DateTimeImmutable('today');
 
-        // Les dernières séances consignées, en agrégats scalaires : TrainingLog
-        // rend la même ligne ici et sur le journal complet, et ne remonte aucune
-        // série. Le total dit combien il y en a derrière ces dix-là — sans lui,
-        // la fiche laissait croire que l'athlète n'avait fait que ça.
-        $logged = $trainingLog->recent($athlete, self::LOGGED_SESSIONS);
+        // L'agenda garde ce qui est encore à venir, « Ses dernières séances » ce
+        // qui est échu : une séance d'aujourd'hui déjà cochée passe de l'un à
+        // l'autre, jamais dans les deux (#76).
+        $upcoming = array_values(array_filter(
+            $scheduledWorkoutRepository->findByOwnerBetween($athlete, $today, $today->modify('+8 weeks')),
+            static fn (ScheduledWorkout $scheduled): bool => !RecentSessions::isPast($scheduled, $today),
+        ));
+        $plans = $planTemplateRepository->findBy(['owner' => $athlete], ['title' => 'ASC']);
+        $workouts = $workoutRepository->findLibraryForOwner($athlete);
+        $coachWorkouts = $workoutRepository->findLibraryForOwner($coach);
 
         return $this->render('coach/athlete.html.twig', [
             'athlete' => $athlete,
-            'workouts' => $workoutRepository->findLibraryForOwner($athlete),
+            // La relation porte les notes privées du coach (#65).
+            'coaching' => $this->acceptedRelation($coach, $athlete),
+            'workouts' => $workouts,
             // Le seul élément de la page qui parle du coach : ce qu'il peut donner.
-            'coachWorkouts' => $workoutRepository->findLibraryForOwner($coach),
-            'plans' => $planTemplateRepository->findBy(['owner' => $athlete], ['title' => 'ASC']),
+            'coachWorkouts' => $coachWorkouts,
+            // Prévenir le doublon avant de redonner une séance (#82).
+            'existingCopies' => $this->existingCopies($workouts, $coachWorkouts, $athlete),
+            'plans' => $plans,
+            // Aperçu des dates avant de placer un plan (#68), et présélection
+            // depuis « Placer dans son agenda » sur la page du plan.
+            'planPlacement' => $planScheduler->placementPreviews($plans, $athlete),
+            'preselectPlanId' => $request->query->getInt('plan'),
             'coachPlans' => $planTemplateRepository->findBy(['owner' => $coach], ['title' => 'ASC']),
-            'upcoming' => $scheduledWorkoutRepository->findByOwnerBetween($athlete, $today, $today->modify('+8 weeks')),
-            'logged' => $logged,
+            'upcoming' => $upcoming,
+            // Faites, manquées ou pas cochées, consignées ou non (C-10, C-11) :
+            // le journal ne listait que le réalisé consigné.
+            'recent' => $recentSessions->for($athlete, $today),
+            'recentWeeks' => RecentSessions::WEEKS,
             'loggedTotal' => $trainingLog->total($athlete),
+            'unloggedStrength' => $trainingLog->unloggedStrength($athlete),
             'goals' => $goalRepository->findUpcomingForOwner($athlete, 3),
             // Mêmes services que la page profil : ils prennent n'importe quel User.
             // Le coach a besoin des 1RM, records et zones cardio pour programmer.
@@ -185,6 +216,7 @@ final class CoachController extends AbstractController
             'period' => $period,
             'ranges' => StatsRange::pickable(),
             'months' => $training->availableMonths($athlete),
+            'years' => $training->availableYears($athlete),
             'tab' => StatsTab::resolve($request->query->getString('tab')),
             'tabs' => StatsTab::cases(),
             'subject' => $athlete,
@@ -211,13 +243,50 @@ final class CoachController extends AbstractController
     }
 
     /**
+     * L'agenda de l'athlète, semaine par semaine — `/calendar/week` lu au nom de
+     * quelqu'un d'autre, même template et même service (`CalendarWeek` prend
+     * n'importe quel `User`) (#77, C-14).
+     *
+     * La fiche ne listait ses huit prochaines semaines qu'en texte : le coach ne
+     * pouvait ni ouvrir, ni déplacer, ni retirer une séance prévue. Ici chaque
+     * pastille porte les gestes du calendrier (statut, déplacer, retirer), tous
+     * gardés par `ScheduledWorkoutVoter::EDIT`, qui a déjà sa branche coach. Le
+     * réalisé et le ressenti restent à l'athlète (`LOG`) : la modale ne les
+     * propose pas.
+     *
+     * Ce qui ne s'y trouve PAS, volontairement : la barre d'ajout, l'export et
+     * l'abonnement ICS. La première pose depuis la bibliothèque du lecteur, les
+     * deux autres livrent le calendrier du lecteur. Poser pour l'athlète reste
+     * sur sa fiche, qui sait déjà le faire avec SA bibliothèque.
+     */
+    #[Route('/athlete/{id}/calendar/{date}', name: 'app_coach_athlete_calendar', methods: ['GET'], requirements: ['id' => '\d+', 'date' => '\d{4}-\d{2}-\d{2}'], defaults: ['date' => null])]
+    public function athleteCalendar(
+        #[MapEntity(id: 'id')] User $athlete,
+        CalendarWeek $calendarWeek,
+        ?string $date = null,
+    ): Response {
+        $this->denyUnlessCoachOf($athlete);
+
+        $ref = null === $date ? false : \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        if (false === $ref) {
+            $ref = new \DateTimeImmutable('today');
+        }
+
+        return $this->render('calendar/week.html.twig', [
+            ...$calendarWeek->for($athlete, $ref),
+            'statuses' => ScheduledStatus::cases(),
+            'subject' => $athlete,
+        ]);
+    }
+
+    /**
      * Le journal du réalisé de l'athlète — `/profile/log` lu au nom de quelqu'un
      * d'autre, même template et même service (`TrainingLog` prend n'importe quel
      * `User`).
      *
-     * C'est la sortie de la fiche, qui ne montre que les dix dernières : au-delà,
-     * ce n'était plus une fiche, mais il fallait bien un endroit où lire la
-     * suite. La fenêtre est un paramètre d'URL, comme pour les statistiques.
+     * C'est la sortie de la fiche, qui ne montre que ses dernières semaines :
+     * au-delà, ce n'était plus une fiche, mais il fallait bien un endroit où lire
+     * la suite. La fenêtre est un paramètre d'URL, comme pour les statistiques.
      */
     #[Route('/athlete/{id}/log', name: 'app_coach_athlete_log', methods: ['GET'], requirements: ['id' => '\d+'])]
     public function athleteLog(
@@ -236,9 +305,11 @@ final class CoachController extends AbstractController
             'groups' => $groups,
             'sessions' => array_sum(array_column($groups, 'sessions')),
             'total' => $log->total($athlete),
+            'unloggedStrength' => $log->unloggedStrength($athlete, $period),
             'period' => $period,
             'ranges' => StatsRange::pickable(),
             'months' => $training->availableMonths($athlete),
+            'years' => $training->availableYears($athlete),
             'subject' => $athlete,
         ]);
     }
@@ -257,7 +328,7 @@ final class CoachController extends AbstractController
         $this->denyUnlessCoachOf($athlete);
         $this->denyUnlessCsrf($request, 'coach_workout_new'.$athlete->getId());
 
-        $title = trim($request->getPayload()->getString('title')) ?: 'Nouvelle séance';
+        $title = trim($request->getPayload()->getString('title')) ?: Workout::DRAFT_TITLE;
 
         $workout = (new Workout())
             ->setOwner($athlete)
@@ -300,20 +371,70 @@ final class CoachController extends AbstractController
         $source = $workoutRepository->find($request->getPayload()->getInt('workout'));
 
         if (!$source instanceof Workout || $source->getOwner()?->getId() !== $coach->getId() || $source->isPlanLocal()) {
-            $this->addFlash('error', 'Choisis une séance de ta bibliothèque.');
-
-            return $this->redirectToRoute('app_coach_athlete', ['id' => $athlete->getId()]);
+            return $this->backToSection($request, $athlete, self::SECTION_WORKOUT_COPY, 'error', 'Choisis une séance de ta bibliothèque.');
         }
 
         $copy = $copier->copyFor($source, $athlete)->workout;
         $this->entityManager->flush();
 
-        $this->addFlash('success', sprintf('« %s » ajoutée à la bibliothèque de %s. Ajuste-la à son niveau si besoin.', $copy->getTitle(), $athlete->getDisplayName()));
+        // On reste sur la fiche (#125), comme pour la copie de plan : la séance
+        // apparaît dans « Ses séances », d'où elle s'ouvre, et le formulaire
+        // annonce désormais la copie existante (#82).
+        return $this->backToSection($request, $athlete, self::SECTION_WORKOUT_COPY, 'success', sprintf(
+            'Copie de « %s » donnée à %s. Ajuste-la à son niveau si besoin.', $copy->getTitle(), $athlete->getDisplayName(),
+        ));
+    }
 
-        return $this->redirectToRoute('app_workout_edit', [
-            'id' => $copy->getId(),
-            'from' => BackTarget::token(BackTarget::ATHLETE, (int) $athlete->getId()),
-        ]);
+    /**
+     * Les copies que l'athlète a déjà des séances du coach (#82), par id de séance
+     * source : combien, et la plus récemment modifiée, celle qu'on lui propose
+     * d'ouvrir plutôt que d'en créer une de plus. Toute copie de bibliothèque
+     * compte, qu'elle vienne de « Ajouter à sa bibliothèque » ou d'une séance
+     * posée dans son plan (`SharedWorkoutCopier::libraryCopyFor`).
+     *
+     * Filtré sur les ids des séances du coach, sans remonter `copiedFrom` : lire
+     * l'id d'un proxy ne le charge pas, lire son propriétaire si.
+     *
+     * @param list<Workout> $athleteWorkouts
+     * @param list<Workout> $coachWorkouts
+     *
+     * @return array<int, array{count: int, title: string, modifiedAt: string, url: string}>
+     */
+    private function existingCopies(array $athleteWorkouts, array $coachWorkouts, User $athlete): array
+    {
+        $sourceIds = array_flip(array_map(static fn (Workout $workout): int => (int) $workout->getId(), $coachWorkouts));
+
+        /** @var array<int, list<Workout>> $bySource */
+        $bySource = [];
+        foreach ($athleteWorkouts as $workout) {
+            $sourceId = $workout->getCopiedFrom()?->getId();
+            if (null !== $sourceId && isset($sourceIds[$sourceId])) {
+                $bySource[$sourceId][] = $workout;
+            }
+        }
+
+        $copies = [];
+        foreach ($bySource as $sourceId => $workouts) {
+            usort($workouts, static fn (Workout $a, Workout $b): int => self::modifiedAt($b) <=> self::modifiedAt($a));
+            $latest = $workouts[0];
+
+            $copies[$sourceId] = [
+                'count' => count($workouts),
+                'title' => (string) $latest->getTitle(),
+                'modifiedAt' => self::modifiedAt($latest)->format('d/m/Y'),
+                'url' => $this->generateUrl('app_workout_edit', [
+                    'id' => $latest->getId(),
+                    'from' => BackTarget::token(BackTarget::ATHLETE, (int) $athlete->getId()),
+                ]),
+            ];
+        }
+
+        return $copies;
+    }
+
+    private static function modifiedAt(Workout $workout): \DateTimeImmutable
+    {
+        return $workout->getUpdatedAt() ?? $workout->getCreatedAt() ?? new \DateTimeImmutable();
     }
 
     /**
@@ -339,17 +460,17 @@ final class CoachController extends AbstractController
         $source = $planTemplateRepository->find($request->getPayload()->getInt('plan'));
 
         if (!$source instanceof PlanTemplate || $source->getOwner()?->getId() !== $coach->getId()) {
-            $this->addFlash('error', 'Choisis un plan de ta bibliothèque.');
-
-            return $this->redirectToRoute('app_coach_athlete', ['id' => $athlete->getId()]);
+            return $this->backToSection($request, $athlete, self::SECTION_PLAN_COPY, 'error', 'Choisis un plan de ta bibliothèque.');
         }
 
         $copy = $copier->copyFor($source, $athlete);
         $this->entityManager->flush();
 
-        $this->addFlash('success', sprintf('« %s » ajouté aux plans de %s, avec ses séances.', $copy->getTitle(), $athlete->getDisplayName()));
-
-        return $this->redirectToRoute('app_plan_template_edit', ['id' => $copy->getId()]);
+        // On reste sur la fiche (#125) : le plan apparaît dans « Ses plans », d'où
+        // il s'ouvre. L'éditeur s'ouvrait d'office et faisait perdre la fiche.
+        return $this->backToSection($request, $athlete, self::SECTION_PLAN_COPY, 'success', sprintf(
+            '« %s » ajouté aux plans de %s, avec ses séances.', $copy->getTitle(), $athlete->getDisplayName(),
+        ));
     }
 
     /**
@@ -365,7 +486,7 @@ final class CoachController extends AbstractController
         $this->denyUnlessCsrf($request, 'coach_plan_new'.$athlete->getId());
 
         $payload = $request->getPayload();
-        $title = trim($payload->getString('title')) ?: 'Nouveau plan';
+        $title = trim($payload->getString('title')) ?: PlanTemplate::DRAFT_TITLE;
         $weeks = max(1, min(52, $payload->getInt('durationWeeks', 4)));
 
         $template = (new PlanTemplate())
@@ -377,7 +498,7 @@ final class CoachController extends AbstractController
         $this->entityManager->persist($template);
         $this->entityManager->flush();
 
-        $this->addFlash('success', sprintf('Plan créé pour %s. Compose sa trame maintenant.', $athlete->getDisplayName()));
+        $this->addFlash('success', sprintf('Plan créé pour %s. Ajoute maintenant ses séances dans la grille.', $athlete->getDisplayName()));
 
         return $this->redirectToRoute('app_plan_template_edit', ['id' => $template->getId()]);
     }
@@ -397,7 +518,6 @@ final class CoachController extends AbstractController
         $this->denyUnlessCsrf($request, 'coach_schedule'.$athlete->getId());
 
         $payload = $request->getPayload();
-        $redirect = $this->redirectToRoute('app_coach_athlete', ['id' => $athlete->getId()]);
 
         $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $payload->getString('date')) ?: null;
         $workout = $workoutRepository->find($payload->getInt('workoutId'));
@@ -407,9 +527,7 @@ final class CoachController extends AbstractController
         // appartienne bien à cet athlète : sans ça, un coach poserait sa propre
         // séance (ou celle d'un autre athlète) sur ce calendrier.
         if (null === $date || null === $workout || $workout->isPlanLocal() || $workout->getOwner() !== $athlete) {
-            $this->addFlash('error', 'Impossible de planifier cette séance.');
-
-            return $redirect;
+            return $this->backToSection($request, $athlete, self::SECTION_SCHEDULE, 'error', 'Impossible de planifier cette séance.');
         }
 
         $scheduled = (new ScheduledWorkout())
@@ -421,15 +539,15 @@ final class CoachController extends AbstractController
         $this->entityManager->persist($scheduled);
         $this->entityManager->flush();
 
-        $this->addFlash('success', sprintf('Séance posée au %s sur le calendrier de %s.', $date->format('d/m/Y'), $athlete->getDisplayName()));
-
-        return $redirect;
+        return $this->backToSection($request, $athlete, self::SECTION_SCHEDULE, 'success', sprintf(
+            'Séance posée au %s sur le calendrier de %s.', $date->format('d/m/Y'), $athlete->getDisplayName(),
+        ));
     }
 
     /**
-     * Instancie un plan de l'athlète sur son calendrier. `PlanScheduler` prend un
-     * owner explicite : on lui passe l'athlète, donc l'instanciation et les resync
-     * ultérieurs restent les siens.
+     * Place un plan de l'athlète dans son agenda. `PlanScheduler` prend un owner
+     * explicite : on lui passe l'athlète, donc la pose et les resync ultérieurs
+     * restent les siens.
      */
     #[Route('/athlete/{id}/instantiate', name: 'app_coach_instantiate', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function instantiatePlan(
@@ -442,25 +560,105 @@ final class CoachController extends AbstractController
         $this->denyUnlessCsrf($request, 'coach_instantiate'.$athlete->getId());
 
         $payload = $request->getPayload();
-        $redirect = $this->redirectToRoute('app_coach_athlete', ['id' => $athlete->getId()]);
 
         $template = $planTemplateRepository->find($payload->getInt('planId'));
         $startDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $payload->getString('startDate')) ?: null;
 
         if (null === $template || null === $startDate || $template->getOwner() !== $athlete) {
-            $this->addFlash('error', 'Impossible d\'instancier ce plan.');
-
-            return $redirect;
+            return $this->backToSection($request, $athlete, self::SECTION_PLACE, 'error', 'Impossible de placer ce plan dans l\'agenda.');
         }
 
         $alreadyOnCalendar = $planScheduler->isInstantiated($template, $athlete);
         $created = $planScheduler->instantiate($template, $athlete, $startDate);
 
-        $this->addFlash('success', $alreadyOnCalendar
-            ? sprintf('Plan « %s » resynchronisé : %d nouvelle(s) séance(s).', $template->getTitle(), \count($created))
-            : sprintf('Plan « %s » posé chez %s : %d séance(s).', $template->getTitle(), $athlete->getDisplayName(), \count($created)));
+        $count = \count($created);
+        $plural = $count > 1 ? 's' : '';
+        return $this->backToSection($request, $athlete, self::SECTION_PLACE, 'success', $alreadyOnCalendar
+            ? sprintf(
+                'Le plan « %s » était déjà dans l\'agenda de %s : %d nouvelle%s séance%s ajoutée%s, les autres n\'ont pas bougé.',
+                $template->getTitle(), $athlete->getDisplayName(), $count, $plural, $plural, $plural,
+            )
+            : sprintf(
+                'Plan « %s » placé dans l\'agenda de %s : %d séance%s.',
+                $template->getTitle(), $athlete->getDisplayName(), $count, $plural,
+            ));
+    }
 
-        return $redirect;
+    /**
+     * La fin d'un geste fait depuis la fiche (#125) : poser une séance, placer un
+     * plan, lui donner une de ses séances ou un de ses plans. On reste où l'on a
+     * cliqué.
+     *
+     * Ces gestes redirigeaient vers la fiche, qui se rouvrait en haut : le coach
+     * perdait le formulaire qu'il venait de remplir. Désormais :
+     *  - avec Turbo, la fiche se relit en arrière-plan et se morphe, défilement
+     *    gardé (même motif que le calendrier, #120) : ce que le geste change
+     *    ailleurs sur la fiche (prochaines séances, « Ses plans », aperçu « déjà
+     *    placé ») suit ;
+     *  - sans JS, la redirection vise l'ancre de la section, que le navigateur
+     *    sait suivre seul (Turbo, lui, perd le fragment d'une redirection).
+     * Le message reste un flash ordinaire, rendu en toast en bas à droite comme
+     * sur toute page (`base.html.twig`, #129) : en tête, il ne se lirait pas.
+     *
+     * @param 'success'|'error' $tone
+     */
+    private function backToSection(Request $request, User $athlete, string $section, string $tone, string $message): Response
+    {
+        $this->addFlash($tone, $message);
+
+        if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
+            $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
+
+            return $this->render('coach/stream/refresh.stream.html.twig');
+        }
+
+        return $this->redirect($this->generateUrl('app_coach_athlete', ['id' => $athlete->getId()]).'#'.$section);
+    }
+
+    /**
+     * Notes privées du coach sur son athlète (#65), en édition en ligne. Même
+     * contrat que les métadonnées (`inline-edit`) : champ `notes`, réponse = la
+     * valeur persistée en texte brut.
+     *
+     * La garde est celle de la fiche, et elle suffit : la relation lue est celle
+     * où l'utilisateur courant est le COACH. L'athlète n'a aucun chemin vers ce
+     * champ, ni en lecture ni en écriture.
+     */
+    #[Route('/athlete/{id}/notes', name: 'app_coach_athlete_notes', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function notes(Request $request, #[MapEntity(id: 'id')] User $athlete): Response
+    {
+        $this->denyUnlessCoachOf($athlete);
+
+        /** @var User $coach */
+        $coach = $this->getUser();
+        $payload = $request->getPayload();
+
+        if (!$this->isCsrfTokenValid('coach_notes'.$athlete->getId(), $payload->getString('_token'))) {
+            return new Response('', Response::HTTP_FORBIDDEN);
+        }
+        if ('notes' !== $payload->getString('field')) {
+            return new Response('', Response::HTTP_BAD_REQUEST);
+        }
+
+        $value = trim($payload->getString('value'));
+        $this->acceptedRelation($coach, $athlete)->setCoachNotes('' === $value ? null : $value);
+        $this->entityManager->flush();
+
+        return new Response($value);
+    }
+
+    /**
+     * La relation acceptée coach → athlète. À n'appeler qu'après
+     * `denyUnlessCoachOf()`, qui garantit qu'elle existe.
+     */
+    private function acceptedRelation(User $coach, User $athlete): Coaching
+    {
+        $coaching = $this->coachingRepository->findAcceptedRelation($coach, $athlete);
+        if (null === $coaching) {
+            throw $this->createAccessDeniedException('Tu n\'es pas le coach de cet athlète.');
+        }
+
+        return $coaching;
     }
 
     /**
@@ -473,9 +671,17 @@ final class CoachController extends AbstractController
         /** @var User $user */
         $user = $this->getUser();
 
-        if (!$this->coachingResolver->isAcceptedCoachOf($user, $athlete)) {
-            throw $this->createAccessDeniedException('Tu n\'es pas le coach de cet athlète.');
+        if ($this->coachingResolver->isAcceptedCoachOf($user, $athlete)) {
+            return;
         }
+
+        // Ancien lien vers un athlète qu'il ne suit plus (#81) : la page d'erreur
+        // le lui dit, au lieu de « ce contenu ne t'appartient pas ».
+        if (CoachingStatus::ENDED === $this->coachingRepository->findRelation($user, $athlete)?->getStatus()) {
+            throw new NoLongerCoachException();
+        }
+
+        throw $this->createAccessDeniedException('Tu n\'es pas le coach de cet athlète.');
     }
 
     private function denyUnlessCsrf(Request $request, string $tokenId): void

@@ -7,6 +7,8 @@ use App\Form\PlanInstantiationType;
 use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
 use App\Repository\WorkoutRepository;
+use App\Service\CalendarWeek;
+use App\Service\PlanScheduler;
 use App\Service\WorkoutMetrics;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Cookie;
@@ -31,27 +33,25 @@ final class CalendarController extends AbstractController
     ) {
     }
 
-    /** Noms de mois en français (index 1..12), le calendrier étant mono-langue. */
-    private const MONTH_NAMES = [
-        1 => 'Janvier', 2 => 'Février', 3 => 'Mars', 4 => 'Avril',
-        5 => 'Mai', 6 => 'Juin', 7 => 'Juillet', 8 => 'Août',
-        9 => 'Septembre', 10 => 'Octobre', 11 => 'Novembre', 12 => 'Décembre',
-    ];
-
     #[Route('', name: 'app_calendar_index', methods: ['GET'])]
     public function index(Request $request): Response
     {
         $now = new \DateTimeImmutable('today');
 
+        // « Placer dans mon agenda » depuis la page d'un plan (#68) arrive ici avec
+        // `place` : on le reconduit, la vue ouvrira la modale sur ce plan.
+        $carry = $request->query->getInt('place') > 0 ? ['place' => $request->query->getInt('place')] : [];
+
         // Respecte la dernière vue choisie (cookie posé au rendu mois/semaine) :
         // l'entrée « Calendrier » et un refresh retombent sur la bonne vue.
         if ('week' === $request->cookies->get('kd_calview')) {
-            return $this->redirectToRoute('app_calendar_week', ['date' => $now->format('Y-m-d')]);
+            return $this->redirectToRoute('app_calendar_week', ['date' => $now->format('Y-m-d'), ...$carry]);
         }
 
         return $this->redirectToRoute('app_calendar_month', [
             'year' => (int) $now->format('Y'),
             'month' => (int) $now->format('n'),
+            ...$carry,
         ]);
     }
 
@@ -65,6 +65,7 @@ final class CalendarController extends AbstractController
         PlanTemplateRepository $planTemplateRepository,
         \App\Repository\GoalRepository $goalRepository,
         \App\Service\PlanFlattener $planFlattener,
+        PlanScheduler $planScheduler,
     ): Response {
         if ($month < 1 || $month > 12) {
             throw $this->createNotFoundException('Mois invalide.');
@@ -80,7 +81,7 @@ final class CalendarController extends AbstractController
         $gridStart = $first->modify(sprintf('-%d days', (int) $first->format('N') - 1));
         $last = $first->modify('last day of this month');
         $gridEnd = $last->modify(sprintf('+%d days', 7 - (int) $last->format('N')));
-        $goalsByDate = $this->indexGoalsByDate($goalRepository->findByOwnerBetween($user, $gridStart, $gridEnd));
+        $goalsByDate = CalendarWeek::goalsByDate($goalRepository->findByOwnerBetween($user, $gridStart, $gridEnd));
         $nextGoal = $goalRepository->findNextForOwner($user);
 
         // Aperçu au survol : une mise à plat par séance distincte du mois,
@@ -88,8 +89,11 @@ final class CalendarController extends AbstractController
         // Une séance datée sans source (séance libre) n'a rien à aplatir : la
         // pastille retombe sur son titre.
         $flattened = [];
+        $instructions = [];
         foreach ($weeks as $week) {
             foreach ($week as $cell) {
+                // Consigne de case dans la modale (#95), même source que la page.
+                $instructions += $planFlattener->planInstructions($cell['scheduled']);
                 foreach ($cell['scheduled'] as $scheduled) {
                     $workout = $scheduled->getWorkout();
                     if (null !== $workout) {
@@ -111,9 +115,10 @@ final class CalendarController extends AbstractController
         return $this->rememberView($this->render('calendar/index.html.twig', [
             'year' => $year,
             'month' => $month,
-            'monthLabel' => self::MONTH_NAMES[$month].' '.$year,
+            'monthLabel' => CalendarWeek::MONTH_NAMES[$month].' '.$year,
             'weeks' => $weeks,
             'flattened' => $flattened,
+            'instructions' => $instructions,
             'goalsByDate' => $goalsByDate,
             'nextGoal' => $nextGoal,
             'weekPivot' => $weekPivot->format('Y-m-d'),
@@ -125,7 +130,7 @@ final class CalendarController extends AbstractController
             'viewRemembered' => $request->cookies->has('kd_calview'),
             'prev' => ['year' => (int) $prev->format('Y'), 'month' => (int) $prev->format('n')],
             'next' => ['year' => (int) $next->format('Y'), 'month' => (int) $next->format('n')],
-            ...$this->buildAddContext($workoutRepository, $planTemplateRepository, $scheduledWorkoutRepository),
+            ...$this->buildAddContext($request, $workoutRepository, $planTemplateRepository, $scheduledWorkoutRepository, $planScheduler),
         ]), 'month');
     }
 
@@ -171,11 +176,12 @@ final class CalendarController extends AbstractController
     #[Route('/week/{date}', name: 'app_calendar_week', methods: ['GET'], requirements: ['date' => '\d{4}-\d{2}-\d{2}'])]
     public function week(
         string $date,
+        Request $request,
         ScheduledWorkoutRepository $scheduledWorkoutRepository,
         WorkoutRepository $workoutRepository,
         PlanTemplateRepository $planTemplateRepository,
-        \App\Repository\GoalRepository $goalRepository,
-        \App\Service\PlanFlattener $planFlattener,
+        CalendarWeek $calendarWeek,
+        PlanScheduler $planScheduler,
     ): Response {
         try {
             $ref = new \DateTimeImmutable($date);
@@ -183,70 +189,14 @@ final class CalendarController extends AbstractController
             throw $this->createNotFoundException('Date invalide.');
         }
 
-        // Ancrage au lundi ISO de la semaine contenant la date.
-        $monday = $ref->modify(sprintf('-%d days', (int) $ref->format('N') - 1))->setTime(0, 0);
-        $sunday = $monday->modify('+6 days');
-        $todayKey = (new \DateTimeImmutable('today'))->format('Y-m-d');
-
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
-        $byDate = [];
-        $flattened = [];
-        $ids = [];
-        foreach ($scheduledWorkoutRepository->findByOwnerBetween($user, $monday, $sunday) as $scheduled) {
-            $byDate[$scheduled->getScheduledDate()->format('Y-m-d')][] = $scheduled;
-            $ids[] = (int) $scheduled->getId();
-            $workout = $scheduled->getWorkout();
-            if (null !== $workout) {
-                $flattened[(int) $workout->getId()] ??= $planFlattener->flattenWorkout($workout);
-            }
-        }
 
-        $goalsByDate = $this->indexGoalsByDate($goalRepository->findByOwnerBetween($user, $monday, $sunday));
-
-        $dayNames = [1 => 'Lundi', 2 => 'Mardi', 3 => 'Mercredi', 4 => 'Jeudi', 5 => 'Vendredi', 6 => 'Samedi', 7 => 'Dimanche'];
-        $days = [];
-        $totalMinutes = 0;
-        $cursor = $monday;
-        for ($i = 0; $i < 7; ++$i) {
-            $key = $cursor->format('Y-m-d');
-            $scheduled = $byDate[$key] ?? [];
-            foreach ($scheduled as $s) {
-                $totalMinutes += (int) $s->getWorkout()?->getEstimatedDurationMinutes();
-            }
-            $days[] = [
-                'date' => $cursor,
-                'dayName' => $dayNames[(int) $cursor->format('N')],
-                'isToday' => $key === $todayKey,
-                'isPast' => $key < $todayKey,
-                'weekend' => (int) $cursor->format('N') >= 6,
-                'scheduled' => $scheduled,
-                'goals' => $goalsByDate[$key] ?? [],
-            ];
-            $cursor = $cursor->modify('+1 day');
-        }
-
-        $counts = $scheduledWorkoutRepository->countByStatusForOwnerBetween($user, $monday, $sunday);
-
+        // La semaine se construit au nom d'un propriétaire : ici soi, sur la
+        // fiche athlète le coach la lit au nom de l'athlète (#77).
         return $this->rememberView($this->render('calendar/week.html.twig', [
-            'monday' => $monday,
-            'sunday' => $sunday,
-            'weekLabel' => $this->formatWeekLabel($monday, $sunday),
-            'isoWeek' => (int) $monday->format('W'),
-            'days' => $days,
-            'flattened' => $flattened,
-            // Le ressenti des séances faites, sur la carte haute : une requête
-            // pour la semaine. La vue mois ne l'affiche pas, faute de place.
-            'ratings' => $scheduledWorkoutRepository->ratingsFor($ids),
-            'nextGoal' => $goalRepository->findNextForOwner($user),
-            'counts' => $counts,
-            'sessionCount' => array_sum($counts),
-            'totalMinutes' => $totalMinutes,
-            'todayKey' => $todayKey,
-            'prevDate' => $monday->modify('-7 days')->format('Y-m-d'),
-            'nextDate' => $monday->modify('+7 days')->format('Y-m-d'),
-            'monthPivot' => ['year' => (int) $monday->modify('+3 days')->format('Y'), 'month' => (int) $monday->modify('+3 days')->format('n')],
-            ...$this->buildAddContext($workoutRepository, $planTemplateRepository, $scheduledWorkoutRepository),
+            ...$calendarWeek->for($user, $ref),
+            ...$this->buildAddContext($request, $workoutRepository, $planTemplateRepository, $scheduledWorkoutRepository, $planScheduler),
         ]), 'week');
     }
 
@@ -266,37 +216,26 @@ final class CalendarController extends AbstractController
     }
 
     /**
-     * Libellé lisible d'une semaine : « 21 – 27 juillet 2026 », en compactant le
-     * mois/l'année communs aux deux bornes.
-     */
-    private function formatWeekLabel(\DateTimeImmutable $monday, \DateTimeImmutable $sunday): string
-    {
-        $mFrom = self::MONTH_NAMES[(int) $monday->format('n')];
-        $mTo = self::MONTH_NAMES[(int) $sunday->format('n')];
-        $yFrom = $monday->format('Y');
-        $yTo = $sunday->format('Y');
-
-        if ($yFrom !== $yTo) {
-            return sprintf('%d %s %s – %d %s %s', (int) $monday->format('j'), $mFrom, $yFrom, (int) $sunday->format('j'), $mTo, $yTo);
-        }
-        if ($mFrom !== $mTo) {
-            return sprintf('%d %s – %d %s %s', (int) $monday->format('j'), $mFrom, (int) $sunday->format('j'), $mTo, $yTo);
-        }
-
-        return sprintf('%d – %d %s %s', (int) $monday->format('j'), (int) $sunday->format('j'), $mTo, $yTo);
-    }
-
-    /**
      * Contexte commun aux vues mois et semaine : cartes de séances (modale « poser
      * une séance » ouverte par le « + » d'un jour), formulaire + cartes de plans
-     * (modale « instancier un plan »), plans instanciés (retrait rapide) et statuts.
+     * (modale « placer un plan dans l'agenda »), plans déjà posés (retrait rapide)
+     * et statuts.
+     *
+     * Deux paramètres de query, tous deux des réglages d'affichage (une valeur
+     * inconnue est ignorée, pas une erreur) :
+     * - `place` : id d'un plan à présélectionner, la modale s'ouvre dessus (#68,
+     *   bouton « Placer dans mon agenda » de la page du plan) ;
+     * - `focus` : date (Y-m-d) à faire défiler à l'écran, posée par la redirection
+     *   qui suit une pose de plan (la première séance).
      *
      * @return array<string, mixed>
      */
     private function buildAddContext(
+        Request $request,
         WorkoutRepository $workoutRepository,
         PlanTemplateRepository $planTemplateRepository,
         ScheduledWorkoutRepository $scheduledWorkoutRepository,
+        PlanScheduler $planScheduler,
     ): array {
         $plans = $planTemplateRepository->findBy(['owner' => $this->getUser()], ['title' => 'ASC']);
 
@@ -308,9 +247,17 @@ final class CalendarController extends AbstractController
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
 
+        $place = $request->query->getInt('place');
+        $placeable = array_filter($plans, static fn ($plan): bool => $plan->getId() === $place);
+        $focus = $request->query->getString('focus');
+
         return [
             'instantiateForm' => $instantiateForm,
             'instantiatedPlans' => $scheduledWorkoutRepository->findInstantiatedPlansForOwner($user),
+            // Aperçu des dates dans la modale : la règle d'ancrage reste au service.
+            'planPlacement' => $planScheduler->placementPreviews($plans, $user),
+            'preselectPlanId' => [] !== $placeable ? $place : null,
+            'focusDate' => 1 === preg_match('/^\d{4}-\d{2}-\d{2}$/', $focus) ? $focus : null,
             'statuses' => \App\Enum\ScheduledStatus::cases(),
             // Abonnement ICS : jeton (null tant que non activé) consommé par la
             // modale « S'abonner » ; les URLs de flux sont bâties côté Twig via url().
@@ -379,27 +326,6 @@ final class CalendarController extends AbstractController
             'workoutActivities' => $activityFilters,
             'planCards' => $planCards,
         ];
-    }
-
-    /**
-     * Indexe des objectifs par date d'échéance (Y-m-d). Plusieurs objectifs peuvent
-     * tomber le même jour, d'où une liste par clé.
-     *
-     * @param list<\App\Entity\Goal> $goals
-     *
-     * @return array<string, list<\App\Entity\Goal>>
-     */
-    private function indexGoalsByDate(array $goals): array
-    {
-        $byDate = [];
-        foreach ($goals as $goal) {
-            $date = $goal->getTargetDate();
-            if (null !== $date) {
-                $byDate[$date->format('Y-m-d')][] = $goal;
-            }
-        }
-
-        return $byDate;
     }
 
     /**

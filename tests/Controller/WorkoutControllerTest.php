@@ -88,10 +88,11 @@ final class WorkoutControllerTest extends WebTestCase
     }
 
     /**
-     * Le slug d'un brouillon suit son PREMIER vrai renommage ; une séance déjà
-     * nommée garde le sien, pour ne pas casser son lien de partage public.
+     * Le slug suit le titre à chaque renommage : il ne nomme plus que le fichier
+     * d'export, aucun lien public n'en dépend depuis #61. Réenregistrer le même
+     * titre ne le fait pas glisser vers `-2`.
      */
-    public function testRenamingRefreshesDraftSlugOnlyOnce(): void
+    public function testTheSlugFollowsTheTitle(): void
     {
         $user = $this->createUser('owner@example.com');
         $this->client->loginUser($user);
@@ -108,10 +109,13 @@ final class WorkoutControllerTest extends WebTestCase
         $this->em->clear();
         self::assertSame('seance-jambes', $this->mustFind(Workout::class, $id)->getSlug());
 
-        // Second renommage : le slug ne bouge plus.
         $this->renameWorkout($id, 'Séance jambes lourdes');
         $this->em->clear();
-        self::assertSame('seance-jambes', $this->mustFind(Workout::class, $id)->getSlug());
+        self::assertSame('seance-jambes-lourdes', $this->mustFind(Workout::class, $id)->getSlug());
+
+        $this->renameWorkout($id, 'Séance jambes lourdes');
+        $this->em->clear();
+        self::assertSame('seance-jambes-lourdes', $this->mustFind(Workout::class, $id)->getSlug());
     }
 
     private function renameWorkout(int $id, string $title): void
@@ -171,7 +175,7 @@ final class WorkoutControllerTest extends WebTestCase
         $form['prescribed_'.$prescribedId.'[sets]'] = '4';
         $form['prescribed_'.$prescribedId.'[reps]'] = '8';
         $form['prescribed_'.$prescribedId.'[weightKg]'] = '60';
-        $form['prescribed_'.$prescribedId.'[distanceMeters]'] = '999';
+        $form['prescribed_'.$prescribedId.'[distanceMeters][value]'] = '999';
         $this->client->submit($form);
 
         $this->em->clear();
@@ -217,6 +221,109 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertSame(PrescriptionType::SETS_REPS, $prescribed->getPrescriptionType());
         self::assertSame($blockId, $prescribed->getBlock()?->getId());
         self::assertNull($prescribed->getSets(), 'Ajout express : aucune valeur posée, à affiner ensuite.');
+    }
+
+    public function testQuickAddWithoutBlockCreatesTheFirstOne(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $exercise = $this->createExercise($user, 'Squat');
+        $workout = $this->createWorkout($user, 'Séance vide');
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        // L'état vide n'impose plus de créer un bloc d'abord, et dit où part l'ajout.
+        self::assertSelectorTextContains('.kd-cblocks__empty', 'un premier bloc se crée tout seul');
+        self::assertSelectorExists('.kd-cblocks__empty button[data-action="composer#openLib"]');
+        self::assertSelectorTextContains('.kd-libpanel__target', 'Ajout dans : un nouveau bloc');
+        $token = $crawler->filter('form[data-composer-target="quickAddForm"] input[name="_token"]')->attr('value');
+
+        $this->client->request('POST', '/workout/'.$workout->getId().'/exercises/quick-add', [
+            '_token' => $token,
+            'exerciseId' => $exercise->getId(),
+            'blockId' => 0,
+        ]);
+
+        $this->em->clear();
+        $workout = $this->mustFind(Workout::class, $workout->getId());
+        self::assertCount(1, $workout->getBlocks());
+        $block = $workout->getBlocks()->first();
+        self::assertNotFalse($block);
+        self::assertSame(BlockRole::MAIN, $block->getRole());
+        self::assertSame(1, $block->getRounds());
+        self::assertCount(1, $block->getPrescribedExercises());
+        $prescribed = $block->getPrescribedExercises()->first();
+        self::assertNotFalse($prescribed);
+        self::assertSame($exercise->getId(), $prescribed->getExercise()?->getId());
+    }
+
+    public function testQuickAddWithoutBlockLeavesNoEmptyBlockWhenRefused(): void
+    {
+        $owner = $this->createUser('owner@example.com');
+        $stranger = $this->createUser('stranger@example.com');
+        $foreignExercise = $this->createExercise($stranger, 'Exo privé');
+        $workout = $this->createWorkout($owner, 'Séance vide');
+
+        $this->client->loginUser($owner);
+        $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        $token = $crawler->filter('form[data-composer-target="quickAddForm"] input[name="_token"]')->attr('value');
+
+        $this->client->request('POST', '/workout/'.$workout->getId().'/exercises/quick-add', [
+            '_token' => $token,
+            'exerciseId' => $foreignExercise->getId(),
+            'blockId' => 0,
+        ]);
+
+        $this->em->clear();
+        self::assertCount(0, $this->mustFind(Workout::class, $workout->getId())->getBlocks());
+    }
+
+    public function testComposerOffersChainingBetweenExercisesAndSaysWhichRestCounts(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Haut du corps');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $workout->addBlock($block);
+        $this->em->persist($block);
+
+        $made = [];
+        foreach (['Développé couché', 'Rowing', 'Curl'] as $i => $name) {
+            $prescribed = (new PrescribedExercise())
+                ->setExercise($this->createExercise($user, $name))
+                ->setPrescriptionType(PrescriptionType::SETS_REPS)
+                ->setRestSeconds(90)
+                ->setPosition($i);
+            $block->addPrescribedExercise($prescribed);
+            $this->em->persist($prescribed);
+            $made[] = $prescribed;
+        }
+        // Développé couché + Rowing en superset A1/A2, Curl isolé.
+        $made[0]->setSupersetGroup(1);
+        $made[1]->setSupersetGroup(1);
+        $this->em->flush();
+        [$bench, $row, $curl] = array_map(static fn (PrescribedExercise $p): int => (int) $p->getId(), $made);
+
+        $this->client->loginUser($user);
+        $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        self::assertResponseIsSuccessful();
+
+        // « Enchaîner » visible entre deux exercices non liés, et seulement là : rien
+        // en tête de bloc, rien entre A1 et A2 déjà liés.
+        self::assertSelectorNotExists('[data-prescribed-id="'.$bench.'"] .kd-cexo__seam');
+        self::assertSelectorNotExists('[data-prescribed-id="'.$row.'"] .kd-cexo__seam');
+        self::assertSelectorExists('[data-prescribed-id="'.$curl.'"] form.kd-cexo__seam[action$="/exercises/'.$curl.'/link"]');
+
+        // A1 enchaîne sans repos : son champ repos est masqué (classe), et l'on dit
+        // que c'est celui de A2 qui compte.
+        self::assertSelectorExists('.kd-cexo--chained[data-prescribed-id="'.$bench.'"]');
+        self::assertSelectorNotExists('.kd-cexo--chained[data-prescribed-id="'.$row.'"]');
+        self::assertSelectorExists('[data-prescribed-id="'.$bench.'"] .kd-fieldrow__cell--rest');
+        self::assertSelectorTextContains('[data-prescribed-id="'.$bench.'"] .kd-cexo__restnote', 'Le repos se règle sur A2');
+        self::assertSelectorTextContains('[data-prescribed-id="'.$row.'"] .kd-cexo__restnote', 'avant de reprendre A1');
+        self::assertSelectorNotExists('[data-prescribed-id="'.$curl.'"] .kd-cexo__restnote');
+
+        // La pastille de A1 ne promet plus un repos qui ne se prend pas.
+        self::assertSelectorTextNotContains('#cexo-row-'.$bench, 'repos');
+        self::assertSelectorTextContains('#cexo-row-'.$row, 'repos 90 s');
     }
 
     public function testQuickAddRejectsForeignExercise(): void
@@ -331,6 +438,39 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertStringContainsString('Fentes', $content);
     }
 
+    /**
+     * L'en-tête du compositeur suit les mutations (#118) : la page n'est jamais
+     * rechargée pendant l'édition, le compte « 0 bloc · 0 exercice » posé à
+     * l'ouverture d'une séance vide restait figé jusqu'au rechargement.
+     */
+    public function testQuickAddStreamRefreshesComposerMeta(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $exercise = $this->createExercise($user, 'Fentes');
+        $workout = $this->createWorkout($user, 'Séance');
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        self::assertSame('0 bloc · 0 exercice', trim($crawler->filter('#workout-meta')->text()));
+        $token = $crawler->filter('form[data-composer-target="quickAddForm"] input[name="_token"]')->attr('value');
+
+        // Séance vide : le premier exercice crée le premier bloc (#85).
+        $this->client->request(
+            'POST',
+            '/workout/'.$workout->getId().'/exercises/quick-add',
+            ['_token' => $token, 'exerciseId' => $exercise->getId()],
+            [],
+            ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html'],
+        );
+
+        self::assertResponseIsSuccessful();
+        $content = (string) $this->client->getResponse()->getContent();
+        self::assertMatchesRegularExpression(
+            '#<turbo-stream action="update" target="workout-meta">\s*<template>1 bloc · 1 exercice( · ≈ \d+ min estimées)?</template>#u',
+            $content,
+        );
+    }
+
     public function testShowRendersFlattenedSummary(): void
     {
         $user = $this->createUser('owner@example.com');
@@ -360,10 +500,10 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertCount(4, $crawler->filter('.kd-settable tbody tr'));
         self::assertStringContainsString('8 reps', $crawler->filter('.kd-settable')->text());
         self::assertStringContainsString('60 kg', $crawler->filter('.kd-settable')->text());
-        // Deux colonnes sans rien à dire disparaissent : le « % du max » n'aurait
+        // Deux colonnes sans rien à dire disparaissent : le pourcentage n'aurait
         // que des 100 % à charge constante, et « Type » que des cases vides.
         self::assertCount(3, $crawler->filter('.kd-settable thead th'));
-        self::assertStringNotContainsString('% du max', $crawler->filter('.kd-settable')->text());
+        self::assertStringNotContainsString('%', $crawler->filter('.kd-settable thead')->text());
         self::assertStringNotContainsString('Type', $crawler->filter('.kd-settable')->text());
 
         // Bandeau de synthèse : 4 séries × 8 reps × 60 kg = 1 920 kg.
@@ -376,11 +516,13 @@ final class WorkoutControllerTest extends WebTestCase
     }
 
     /**
-     * Le bouton « Partager » (#58) envoie le lien PUBLIC, pas l'adresse de la
-     * fiche : celle-ci est derrière la connexion et le voter, inutile au
-     * destinataire.
+     * #61 : une séance est privée tant que son propriétaire n'a pas ouvert le
+     * partage. La fiche le dit et ne propose aucun lien public ; une fois le
+     * partage ouvert, elle porte l'adresse publique (jamais celle de la fiche,
+     * derrière la connexion) et le seul geste d'envoi, « Copier le lien à
+     * envoyer ».
      */
-    public function testShowOffersToShareThePublicLink(): void
+    public function testShowKeepsTheWorkoutPrivateUntilTheOwnerSharesIt(): void
     {
         $user = $this->createUser('owner@example.com');
         $workout = $this->createWorkout($user, 'Jambes');
@@ -389,10 +531,23 @@ final class WorkoutControllerTest extends WebTestCase
         $crawler = $this->client->request('GET', '/workout/'.$workout->getId());
 
         self::assertResponseIsSuccessful();
-        self::assertSelectorExists('.kd-wk__baractions button[data-action="clipboard#share"]');
-        $bar = $crawler->filter('.kd-wk__bar');
-        self::assertStringEndsWith('/s/'.$workout->getSlug(), (string) $bar->attr('data-clipboard-url-value'));
-        self::assertSame('Jambes', $bar->attr('data-clipboard-title-value'));
+        self::assertSelectorTextContains('.kd-sharelink__state', 'Séance privée');
+        self::assertSelectorNotExists('[data-action="clipboard#copy"]');
+        self::assertSelectorNotExists('a[href*="/s/"]');
+
+        $this->client->submit($crawler->filter('.kd-sharelink form')->form());
+        self::assertResponseRedirects('/workout/'.$workout->getId());
+        $this->em->clear();
+        $token = $this->mustFind(Workout::class, (int) $workout->getId())->getShareToken();
+        self::assertNotNull($token);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{32}$/', $token);
+
+        $crawler = $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-sharelink__state', 'Séance partagée par lien');
+        $panel = $crawler->filter('.kd-sharelink');
+        self::assertStringEndsWith('/s/'.$token, (string) $panel->attr('data-clipboard-url-value'));
+        self::assertStringEndsWith('/s/'.$token, (string) $crawler->filter('.kd-sharelink__url input')->attr('value'));
+        self::assertSelectorTextContains('.kd-sharelink button[data-action="clipboard#copy"]', 'Copier le lien à envoyer');
     }
 
     public function testShowRendersOneRowPerDetailedSet(): void
@@ -425,8 +580,11 @@ final class WorkoutControllerTest extends WebTestCase
         // Une série est qualifiée (échauffement) : la colonne « Type » a un sens.
         self::assertCount(5, $crawler->filter('.kd-settable thead th'));
         self::assertStringContainsString('03', $crawler->filter('.kd-settable tbody tr:last-child')->text());
-        // % de la charge la plus lourde : l'échauffement à 70/140.
+        // % de la charge la plus lourde : l'échauffement à 70/140. L'en-tête dit
+        // à quoi il se rapporte, « % du max » se lisait comme un % du 1RM (#106).
         self::assertStringContainsString('50 %', $crawler->filter('.kd-settable')->text());
+        self::assertStringContainsString('% de la série la plus lourde', $crawler->filter('.kd-settable thead')->text());
+        self::assertStringNotContainsString('du max', $crawler->filter('.kd-settable thead')->text());
     }
 
     public function testShowDeniedToNonOwner(): void
@@ -689,6 +847,42 @@ final class WorkoutControllerTest extends WebTestCase
     }
 
     /**
+     * #125 : le compositeur rend son bandeau avec la page, en esquisse. Il
+     * arrivait vide puis poussait les blocs sous la main ; désormais légende et
+     * chiffres sont là dès l'ouverture, et chaque planche occupe déjà sa boîte
+     * (mêmes dimensions) sans porter un seul tracé : les ~70 Ko de dessin
+     * restent au fetch du contrôleur `composer`.
+     */
+    public function testTheComposerReservesTheVolumePanelWithoutItsDrawing(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $exercise = $this->createExercise($user, 'Développé couché');
+        $exercise->setTargetAreas([TargetArea::CHEST]);
+        $workout = $this->createWorkout($user, 'Séance');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setPosition(0);
+        $block->addPrescribedExercise($this->makePrescribed($exercise, 0)->setSets(4)->setReps(8)->setWeightKg(60.0));
+        $workout->addBlock($block);
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $page = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        $fragment = $this->client->request('GET', '/workout/'.$workout->getId().'/volume');
+
+        $sketch = $page->filter('#workout-volume .kd-bodymap__plate');
+        $drawn = $fragment->filter('.kd-bodymap__plate');
+        self::assertCount(2, $sketch);
+        self::assertCount(0, $sketch->filter('path'));
+        self::assertGreaterThan(0, $drawn->filter('path')->count());
+        foreach ([0, 1] as $i) {
+            foreach (['viewBox', 'width', 'height'] as $attribute) {
+                self::assertSame($drawn->eq($i)->attr($attribute), $sketch->eq($i)->attr($attribute));
+            }
+        }
+        self::assertStringContainsString('Pectoraux', $page->filter('#workout-volume .kd-wkvol__legend')->text());
+        self::assertStringContainsString('1 920', $page->filter('#workout-volume .kd-wkvol__kpis')->text());
+    }
+
+    /**
      * Le même bandeau vit AUSSI dans la page de consultation, et il y est rendu
      * d'emblée : une vue de consultation ne charge rien après coup.
      */
@@ -757,6 +951,104 @@ final class WorkoutControllerTest extends WebTestCase
         $this->client->loginUser($stranger);
         $this->client->request('GET', '/workout/'.$workout->getId().'/volume');
         self::assertResponseStatusCodeSame(403);
+    }
+
+    /**
+     * #83 : sur la séance d'un athlète, le menu nomme les deux bibliothèques
+     * d'arrivée. « Chez lui » reste le défaut : la copie lui appartient, et le
+     * message le dit au lieu d'un « Séance dupliquée » muet.
+     */
+    public function testACoachDuplicatesHisAthletesWorkoutIntoTheAthletesLibrary(): void
+    {
+        [$coach, $athlete, $source] = $this->coachFacingAthleteWorkout();
+
+        $crawler = $this->client->request('GET', '/workout/'.$source->getId());
+        self::assertSelectorTextContains('.kd-kebab__panel', 'Dupliquer chez Trailer38');
+        self::assertSelectorTextContains('.kd-kebab__panel', 'Copier chez moi');
+
+        $form = $crawler->filterXPath('//form[contains(@action, "/duplicate")][not(input[@name="target"])]');
+        self::assertCount(1, $form);
+        $this->client->request('POST', '/workout/'.$source->getId().'/duplicate', [
+            '_token' => $form->filter('input[name="_token"]')->attr('value'),
+        ]);
+
+        $copy = $this->em->getRepository(Workout::class)->findOneBy(['title' => 'Footing endurance 40 min (copie)']);
+        self::assertNotNull($copy);
+        self::assertSame($athlete->getId(), $copy->getOwner()?->getId());
+        self::assertResponseRedirects('/workout/'.$copy->getId().'/edit');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('body', 'Copie créée dans les séances de Trailer38.');
+    }
+
+    /**
+     * #83 : « Copier chez moi » en fait une séance du coach, par la copie vers une
+     * autre bibliothèque (`SharedWorkoutCopier` : titre gardé, `copiedFrom`).
+     * L'athlète n'y gagne rien dans sa bibliothèque.
+     */
+    public function testACoachCanCopyHisAthletesWorkoutIntoHisOwnLibrary(): void
+    {
+        [$coach, $athlete, $source] = $this->coachFacingAthleteWorkout();
+
+        $crawler = $this->client->request('GET', '/workout');
+        $form = $crawler->filter('form[action$="/'.$source->getId().'/duplicate"]:has(input[name="target"][value="mine"])');
+        self::assertCount(1, $form);
+        self::assertSelectorExists('summary[title="Dupliquer chez Trailer38 ou chez moi"]');
+
+        $this->client->request('POST', '/workout/'.$source->getId().'/duplicate', [
+            '_token' => $form->filter('input[name="_token"]')->attr('value'),
+            'target' => 'mine',
+        ]);
+
+        $copy = $this->em->getRepository(Workout::class)->findOneBy(['owner' => $coach]);
+        self::assertNotNull($copy);
+        self::assertSame('Footing endurance 40 min', $copy->getTitle());
+        self::assertSame($source->getId(), $copy->getCopiedFrom()?->getId());
+        self::assertCount(1, $this->em->getRepository(Workout::class)->findBy(['owner' => $athlete]));
+        self::assertResponseRedirects('/workout/'.$copy->getId().'/edit');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('body', 'Copie créée dans ta bibliothèque. Elle est à toi : Trailer38 ne la voit pas.');
+    }
+
+    /**
+     * Sur sa propre séance, rien ne change : un seul bouton, et `target=mine`
+     * forgé n'y fait rien de plus qu'une duplication ordinaire.
+     */
+    public function testDuplicatingOnesOwnWorkoutKeepsTheSingleButton(): void
+    {
+        $owner = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($owner, 'Upper A');
+        $this->client->loginUser($owner);
+
+        $crawler = $this->client->request('GET', '/workout');
+        self::assertSelectorNotExists('input[name="target"]');
+        self::assertSelectorExists('button[title="Dupliquer"]');
+
+        $this->client->request('POST', '/workout/'.$workout->getId().'/duplicate', [
+            '_token' => $crawler->filter('form[action$="/duplicate"] input[name="_token"]')->attr('value'),
+            'target' => 'mine',
+        ]);
+
+        $copy = $this->em->getRepository(Workout::class)->findOneBy(['title' => 'Upper A (copie)']);
+        self::assertNotNull($copy);
+        self::assertSame($owner->getId(), $copy->getOwner()?->getId());
+        self::assertNull($copy->getCopiedFrom());
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('body', 'Séance dupliquée. Compose-la maintenant.');
+    }
+
+    /**
+     * @return array{User, User, Workout} le coach connecté, son athlète, la séance de l'athlète
+     */
+    private function coachFacingAthleteWorkout(): array
+    {
+        $coach = $this->createUser('coach@example.com');
+        $athlete = $this->createUser('athlete@example.com');
+        $athlete->setUsername('Trailer38');
+        $this->acceptCoaching($coach, $athlete);
+        $source = $this->createWorkout($athlete, 'Footing endurance 40 min');
+        $this->client->loginUser($coach);
+
+        return [$coach, $athlete, $source];
     }
 
     private function acceptCoaching(User $coach, User $athlete): void
@@ -872,6 +1164,81 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertSame(6, $reloaded->getSets());
     }
 
+    /**
+     * #86 : l'édition rapide d'une case enregistre seule, comme le compositeur.
+     * Plus de bouton par exercice, et la réponse ne remplace que la ligne de
+     * résumé : re-rendre tout le panneau refermait l'exercice sous le curseur.
+     */
+    public function testQuickEditAutosavesAndAnswersWithTheSummaryOnly(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Haut du corps');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $prescribed = $this->makePrescribed($this->createExercise($user, 'Développé couché'), 0)->setSets(3)->setReps(10);
+        $block->addPrescribedExercise($prescribed);
+        $workout->addBlock($block);
+        $this->em->persist($block);
+        $this->em->flush();
+        $workoutId = $workout->getId();
+        $prescribedId = $prescribed->getId();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workoutId.'/quick-panel');
+        self::assertResponseIsSuccessful();
+        $form = $crawler->filter('form[name="prescribed_'.$prescribedId.'"]');
+        self::assertCount(0, $form->filter('button[type="submit"]'), 'Pas de bouton : tout s\'enregistre seul.');
+        self::assertStringContainsString('change->plangrid#submitForm', (string) $form->filter('input[name="prescribed_'.$prescribedId.'[reps]"]')->attr('data-action'));
+        self::assertCount(1, $crawler->filter('#quickexo-sum-'.$prescribedId));
+
+        $values = $form->form()->getPhpValues();
+        $values['prescribed_'.$prescribedId]['reps'] = '8';
+        $this->client->request('POST', (string) $form->attr('action'), $values, [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']);
+
+        self::assertResponseIsSuccessful();
+        $content = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('<turbo-stream action="replace" target="quickexo-sum-'.$prescribedId.'">', $content);
+        self::assertStringNotContainsString('target="quick-panel"', $content);
+        self::assertStringContainsString('Développé couché', $content);
+
+        $this->em->clear();
+        self::assertSame(8, $this->mustFind(PrescribedExercise::class, $prescribedId)->getReps());
+    }
+
+    /**
+     * L'édition rapide partage le traitement du compositeur : en séries détaillées,
+     * changer le compteur ajoute ou retire des séries de travail. Elle le sautait,
+     * et la liste restait à son ancien nombre.
+     */
+    public function testQuickEditSyncsTheDetailedSetsLikeTheComposer(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Jambes');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $prescribed = $this->makePrescribed($this->createExercise($user, 'Squat'), 0)->setSets(3);
+        foreach ([0, 1, 2] as $position) {
+            $prescribed->addDetailedSet((new PrescribedSet())->setSetType(SetType::NORMAL)->setPosition($position)->setReps(5)->setWeightKg(100.0));
+        }
+        $block->addPrescribedExercise($prescribed);
+        $workout->addBlock($block);
+        $this->em->persist($block);
+        $this->em->flush();
+        $workoutId = $workout->getId();
+        $prescribedId = $prescribed->getId();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workoutId.'/quick-panel');
+        $form = $crawler->filter('form[name="prescribed_'.$prescribedId.'"]');
+        $values = $form->form()->getPhpValues();
+        $values['prescribed_'.$prescribedId]['sets'] = '5';
+        $this->client->request('POST', (string) $form->attr('action'), $values, [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']);
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        $reloaded = $this->mustFind(PrescribedExercise::class, $prescribedId);
+        self::assertCount(5, $reloaded->getDetailedSets());
+        self::assertSame(5, $reloaded->getSets());
+    }
+
     private function createExercise(User $owner, string $name, ?string $nameEn = null): Exercise
     {
         $exercise = (new Exercise())
@@ -910,6 +1277,97 @@ final class WorkoutControllerTest extends WebTestCase
         }
 
         $this->em->flush();
+    }
+
+    /**
+     * Saisie d'une distance (#97) : l'unité se choisit à côté du champ, une
+     * distance sous le kilomètre se relit en mètres même en course, et « 6 ×
+     * 400 km » enregistré par erreur est signalé sous le champ par le stream de
+     * l'enregistrement automatique, sans être refusé.
+     */
+    public function testDistanceIsTypedWithItsUnitAndImplausibleTotalsAreFlagged(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $run = $this->createExercise($user, 'Course fractionnée')->setActivity(ActivityType::RUNNING);
+        $workout = $this->createWorkout($user, 'Fractionné');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $prescribed = $this->makePrescribed($run, 0)
+            ->setPrescriptionType(PrescriptionType::DISTANCE_PACE)
+            ->setSets(6)
+            ->setDistanceMeters(400);
+        $block->addPrescribedExercise($prescribed);
+        $workout->addBlock($block);
+        $this->em->persist($block);
+        $this->em->flush();
+        $workoutId = $workout->getId();
+        $prescribedId = (int) $prescribed->getId();
+        $name = 'prescribed_'.$prescribedId;
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workoutId.'/edit');
+        self::assertResponseIsSuccessful();
+
+        // 400 m se relit « 400 » + « m », pas « 0,4 » + « km », même en course.
+        self::assertSame('400', $crawler->filter('input[name="'.$name.'[distanceMeters][value]"]')->attr('value'));
+        self::assertSame('m', $crawler->filter('select[name="'.$name.'[distanceMeters][unit]"] option[selected]')->attr('value'));
+        // Le libellé pointe la saisie, et l'alerte est là, vide.
+        self::assertCount(1, $crawler->filter('label[for="'.$name.'_distanceMeters_value"]'));
+        self::assertSame('', trim($crawler->filter('#distance-check-'.$prescribedId)->text()));
+
+        // 400 avec « km » : enregistré tel quel, mais signalé.
+        $form = $crawler->filter('form[name="'.$name.'"]');
+        $values = $form->form()->getPhpValues();
+        $values[$name]['distanceMeters'] = ['value' => '400', 'unit' => 'km'];
+        $this->client->request('POST', (string) $form->attr('action'), $values, [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']);
+
+        self::assertResponseIsSuccessful();
+        $content = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('<turbo-stream action="update" target="distance-check-'.$prescribedId.'">', $content);
+        self::assertStringContainsString('6 × 400 km, soit 2 400 km au total : vérifie l&#039;unité (m ou km).', $content);
+        $this->em->clear();
+        self::assertSame(400_000, $this->mustFind(PrescribedExercise::class, $prescribedId)->getDistanceMeters());
+
+        // Corrigé en mètres : l'alerte se vide.
+        $values[$name]['distanceMeters'] = ['value' => '400', 'unit' => 'm'];
+        $this->client->request('POST', (string) $form->attr('action'), $values, [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']);
+
+        $content = (string) $this->client->getResponse()->getContent();
+        self::assertStringNotContainsString('vérifie', $content);
+        $this->em->clear();
+        self::assertSame(400, $this->mustFind(PrescribedExercise::class, $prescribedId)->getDistanceMeters());
+    }
+
+    /**
+     * Charges au format français dans le compositeur (#97) : « 62,5 » et non
+     * « 62.50 » ; la virgule comme le point sont acceptés à la saisie.
+     */
+    public function testWeightIsShownAndTypedInFrenchFormat(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $workout = $this->createWorkout($user, 'Haut du corps');
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $prescribed = $this->makePrescribed($this->createExercise($user, 'Développé couché'), 0)
+            ->setSets(3)->setReps(8)->setWeightKg(62.5);
+        $block->addPrescribedExercise($prescribed);
+        $workout->addBlock($block);
+        $this->em->persist($block);
+        $this->em->flush();
+        $prescribedId = (int) $prescribed->getId();
+        $name = 'prescribed_'.$prescribedId;
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        self::assertSame('62,5', $crawler->filter('input[name="'.$name.'[weightKg]"]')->attr('value'));
+
+        $form = $crawler->filter('form[name="'.$name.'"]')->form();
+        $form[$name.'[weightKg]'] = '70,25';
+        $this->client->submit($form);
+
+        $this->em->clear();
+        self::assertSame(70.25, $this->mustFind(PrescribedExercise::class, $prescribedId)->getWeightKg());
+
+        $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        self::assertSame('70,25', $crawler->filter('input[name="'.$name.'[weightKg]"]')->attr('value'));
     }
 
     private function makePrescribed(Exercise $exercise, int $position): PrescribedExercise

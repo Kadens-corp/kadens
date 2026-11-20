@@ -45,8 +45,15 @@
                 <div class="kd-inputgroup">
                     {{ ux_icon('lucide:lock') }}
                     <input type="password" name="_password" id="password"
-                           class="kd-input" autocomplete="current-password" placeholder="••••••••" required>
+                           class="kd-input" autocomplete="current-password" required>
                 </div>
+                {# Pas d'inscription publique ni de réinitialisation par email :
+                   le mot de passe se redéfinit par app:user:reset-password, d'où
+                   un renvoi vers l'administrateur plutôt qu'un lien mort. #}
+                <details class="kd-auth__forgot">
+                    <summary>Mot de passe oublié ?</summary>
+                    <p>Kadens n'envoie pas encore d'email de réinitialisation. Écris à l'administrateur de Kadens : il t'en définit un nouveau, que tu pourras changer ensuite dans tes paramètres.</p>
+                </details>
             </div>
 
             <label class="kd-check">

@@ -32,7 +32,7 @@ final class UsernameType extends AbstractType
             // Le NotBlank ne vaut que pour l'invitation : `required` seul n'est
             // qu'un attribut HTML, que rien n'oblige le client à respecter.
             'constraints' => $options['required'] ? [new NotBlank(message: 'Choisis un pseudo, ou réponds « Non merci ».')] : [],
-            'help' => 'Affiché à la place de ton email. Tu te connectes toujours avec ton email, et on t\'invite en coaching avec lui.',
+            'help' => 'Affiché à la place de ton email. La connexion et les invitations de coaching passent toujours par ton email.',
             'attr' => [
                 'maxlength' => User::USERNAME_MAX_LENGTH,
                 'autocomplete' => 'nickname',

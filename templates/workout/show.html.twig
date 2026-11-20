@@ -7,10 +7,11 @@
 {% block body %}
     {% import 'components/_rating.html.twig' as ratings %}
 
-    {# Arrivée d'une copie depuis un lien partagé (#58). #}
-    {% for message in app.flashes('success') %}
-        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
+    {# Séance d'un athlète ouverte par son coach : à qui elle est (#64). #}
+    {{ include('components/_owner_banner.html.twig', {owner: workout.owner, kind: 'Séance'}, with_context = false) }}
+    {# Et dans l'autre sens, ce qui vient du coach, chez l'athlète (#80). #}
+    {{ include('components/_added_by.html.twig', {by: workout.addedBy, banner: true, verb: 'Ajoutée par', on: workout.createdAt}, with_context = false) }}
+
     {# Vue de consultation auto-suffisante : aucun chargement AJAX post-rendu,
        condition du cache offline. Consomme PlanFlattener + WorkoutMetrics.
 
@@ -18,15 +19,14 @@
        composant partagé, que la page publique laisse vide. #}
     {% embed 'components/_workout_read.html.twig' with {
         flat: flat, summary: summary, blockStats: blockStats,
-        volume: volume, load: load, plates: plates, endurance: endurance
+        volume: volume, load: load, plates: plates, endurance: endurance,
+        deletion: deletion
     } only %}
         {% block actions %}
-            <div class="kd-wk__bar"
-                 data-controller="clipboard"
-                 data-clipboard-url-value="{{ url('app_public_share', {slug: flat.workout.slug}) }}"
-                 data-clipboard-title-value="{{ flat.workout.title }}">
+            <div class="kd-wk__bar">
                 {{ include('components/_backlink.html.twig', {
-                    fallback: 'app_workout_index', kicker: 'Mes séances', class: 'kd-wk__back'
+                    fallback: 'app_workout_index', kicker: 'Mes séances', class: 'kd-wk__back',
+                    owner: flat.workout.owner
                 }) }}
 
                 <div class="kd-wk__baractions">
@@ -39,12 +39,6 @@
                         </a>
                     {% endif %}
 
-                    {# Envoyer le lien public : feuille de partage du système, ou
-                       copie là où elle n'existe pas (cf. clipboard_controller). #}
-                    <button type="button" class="kd-btn kd-btn--sm kd-btn--onink" data-action="clipboard#share">
-                        {{ ux_icon('lucide:share-2') }} Partager
-                    </button>
-
                     {# Les actions secondaires vivent dans un <details> natif :
                        clavier et sans-JS d'office, comme le menu de compte. Le
                        contrôleur `dismiss` n'ajoute que le confort. #}
@@ -56,25 +50,40 @@
                             <a href="{{ path('app_export_workout', {id: flat.workout.id}) }}" class="kd-kebab__item">
                                 {{ ux_icon('lucide:file-down') }} Exporter en Excel
                             </a>
-                            <form method="post" action="{{ path('app_workout_duplicate', {id: flat.workout.id}) }}">
-                                <input type="hidden" name="_token" value="{{ csrf_token('duplicate' ~ flat.workout.id) }}">
-                                <button type="submit" class="kd-kebab__item">
-                                    {{ ux_icon('lucide:copy') }} Dupliquer la séance
-                                </button>
-                            </form>
-                            <button type="button" class="kd-kebab__item" data-action="clipboard#copy">
-                                {{ ux_icon('lucide:link-2') }} Copier le lien
-                            </button>
-                            <a href="{{ path('app_public_share', {slug: flat.workout.slug}) }}"
-                               target="_blank" rel="noopener" class="kd-kebab__item">
-                                {{ ux_icon('lucide:external-link') }} Ouvrir la page publique
-                            </a>
+                            {% if flat.workout.owner and flat.workout.owner.id != app.user.id %}
+                                {{ include('workout/_duplicate_items.html.twig', {workout: flat.workout}, with_context = false) }}
+                            {% else %}
+                                <form method="post" action="{{ path('app_workout_duplicate', {id: flat.workout.id}) }}">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('duplicate' ~ flat.workout.id) }}">
+                                    <button type="submit" class="kd-kebab__item">
+                                        {{ ux_icon('lucide:copy') }} Dupliquer la séance
+                                    </button>
+                                </form>
+                            {% endif %}
+                            {# En dernier et en rouge, comme partout ailleurs (#116).
+                               Rien pour une copie de case : elle se retire depuis
+                               la grille de son plan. #}
+                            {% if deletion is not null and not flat.workout.planLocal %}
+                                {{ include('workout/_delete_form.html.twig', {
+                                    workout: flat.workout, menu: true
+                                }|merge(deletion)) }}
+                            {% endif %}
                         </div>
                     </details>
-
-                    <span class="kd-wk__feedback" data-clipboard-target="feedback" role="status" aria-live="polite"></span>
                 </div>
             </div>
+        {% endblock %}
+
+        {# Partage par lien (#61) : privé par défaut, ouvert par le propriétaire
+           seul. Le composant ne se rend pas pour le coach. #}
+        {% block afterhero %}
+            {{ include('components/_share_link.html.twig', {
+                subject: flat.workout,
+                kind: 'workout',
+                url: flat.workout.shared ? url('app_public_share', {token: flat.workout.shareToken}) : null,
+                action: path('app_workout_share', {id: flat.workout.id}),
+                csrf: 'workout_share' ~ flat.workout.id,
+            }, with_context = false) }}
         {% endblock %}
     {% endembed %}
 

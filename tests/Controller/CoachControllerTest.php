@@ -126,11 +126,61 @@ final class CoachControllerTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         $html = $crawler->html();
-        self::assertStringContainsString('Fiche athlète', $html);
+        self::assertStringContainsString('Mesures et records', $html);
         self::assertStringContainsString('Statistiques', $html);
         self::assertStringContainsString('140', $html);
         // La fiche appartient à l'athlète : aucun lien d'édition côté coach.
         self::assertStringNotContainsString('/profile/edit', $html);
+    }
+
+    /**
+     * #78 (C-12) : la fiche ne compte que les exercices de l'athlète. La
+     * bibliothèque globale, commune à tous, se lisait comme la sienne
+     * (« 323 exercices »).
+     */
+    public function testAthleteSheetCountsOnlyTheAthletesOwnExercises(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createExercise(null, 'Squat');
+        $this->createExercise(null, 'Développé couché');
+        $this->createExercise($athlete, 'Squat pause');
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseIsSuccessful();
+        $metrics = $crawler->filter('.kd-metric')->each(fn ($m) => preg_replace('/\s+/', ' ', trim($m->text())));
+        self::assertContains('1 Exercices perso', $metrics);
+    }
+
+    /**
+     * #78 (C-12) : « Depuis le début » s'arrête à aujourd'hui. Ses séances
+     * encore « prévues » sont passées sans statut : elles se disent « à
+     * cocher », et les séances à venir n'y entrent pas (elles sont dans « Ce
+     * mois »). On lisait « 0 prévue » à côté d'un mois qui en annonçait six.
+     */
+    public function testAllTimeBlockSaysPastPlannedSessionsAreToBeChecked(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createScheduled($athlete, 'Oubliée', $this->daysAgo(3), ScheduledStatus::PLANNED);
+        $this->createScheduled($athlete, 'Faite', $this->daysAgo(2), ScheduledStatus::DONE);
+        $this->createScheduled($athlete, 'À venir', (new \DateTimeImmutable('+40 days'))->format('Y-m-d'), ScheduledStatus::PLANNED);
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseIsSuccessful();
+        $allTime = $crawler->filter('.kd-card')->reduce(fn ($c) => str_contains($c->filter('h3')->count() ? $c->filter('h3')->text() : '', 'Depuis le début'));
+        self::assertCount(1, $allTime);
+        $text = $allTime->text();
+        self::assertStringContainsString("Jusqu'à aujourd'hui", $text);
+        self::assertStringContainsString('1 à cocher', $text);
+        self::assertStringContainsString('1 faite', $text);
+        self::assertStringNotContainsString('prévue', $text);
     }
 
     /**
@@ -202,8 +252,8 @@ final class CoachControllerTest extends WebTestCase
 
     /**
      * #58 : le coach donne une de SES séances à son athlète. La copie appartient
-     * à l'athlète, l'original reste au coach, et le compositeur s'ouvre avec la
-     * fiche athlète comme retour.
+     * à l'athlète et l'original reste au coach. #125 : on reste sur la fiche, la
+     * copie s'y lit dans « Ses séances » et le formulaire l'annonce désormais.
      */
     public function testCoachCopiesOwnWorkoutIntoAthleteLibrary(): void
     {
@@ -221,9 +271,55 @@ final class CoachControllerTest extends WebTestCase
         $copies = $this->em->getRepository(Workout::class)->findBy(['owner' => $athlete]);
         self::assertCount(1, $copies);
         self::assertSame('Upper A', $copies[0]->getTitle());
-        self::assertResponseRedirects('/workout/'.$copies[0]->getId().'/edit?from=athlete-'.$athlete->getId());
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId().'#une-de-mes-seances');
         // L'original reste au coach, intact.
         self::assertSame($coach->getId(), $this->mustFind(Workout::class, $source->getId())->getOwner()?->getId());
+
+        $crawler = $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-toasts .kd-flash', 'Copie de « Upper A » donnée à');
+        self::assertSelectorExists('a[href^="/workout/'.$copies[0]->getId().'"]');
+        /** @var array<int, array{count: int}> $existing */
+        $existing = json_decode((string) $crawler->filter('form[action$="/workout/copy"]')->attr('data-copy-notice-copies-value'), true, flags: \JSON_THROW_ON_ERROR);
+        self::assertSame(1, $existing[(int) $source->getId()]['count'] ?? null);
+    }
+
+    /**
+     * #82 : le coach sait, avant d'envoyer, que la copie sera indépendante, et la
+     * fiche lui fournit la copie que l'athlète a déjà de chaque séance (la plus
+     * récemment modifiée, avec son nombre) pour lui proposer de l'ouvrir.
+     */
+    public function testCopyFormAnnouncesIndependentCopyAndExistingOnes(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $hills = $this->createWorkout($coach, 'Côtes 10 x 30 s');
+        $upper = $this->createWorkout($coach, 'Upper A');
+
+        $older = $this->createWorkout($athlete, 'Côtes 10x30')->setCopiedFrom($hills);
+        $latest = $this->createWorkout($athlete, 'Côtes adaptées')->setCopiedFrom($hills);
+        $this->em->flush();
+        // Le PreUpdate pose `updatedAt` à maintenant : on fixe les dates en SQL.
+        $this->em->getConnection()->executeStatement('UPDATE workout SET updated_at = ? WHERE id = ?', ['2026-11-02 10:00:00', $older->getId()]);
+        $this->em->getConnection()->executeStatement('UPDATE workout SET updated_at = ? WHERE id = ?', ['2026-11-12 10:00:00', $latest->getId()]);
+        $this->em->clear();
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertSelectorTextContains('.kd-coachform__hint', 'Une copie indépendante sera créée chez');
+        $form = $crawler->filter('form[action$="/workout/copy"]');
+        /** @var array<int, array{count: int, title: string, modifiedAt: string, url: string}> $copies */
+        $copies = json_decode((string) $form->attr('data-copy-notice-copies-value'), true, flags: \JSON_THROW_ON_ERROR);
+
+        self::assertSame([(int) $hills->getId()], array_keys($copies));
+        $copy = $copies[(int) $hills->getId()] ?? null;
+        self::assertNotNull($copy);
+        self::assertSame(2, $copy['count']);
+        self::assertSame('Côtes adaptées', $copy['title']);
+        self::assertSame('12/11/2026', $copy['modifiedAt']);
+        self::assertSame('/workout/'.$latest->getId().'/edit?from=athlete-'.$athlete->getId(), $copy['url']);
+        self::assertArrayNotHasKey((int) $upper->getId(), $copies);
     }
 
     /**
@@ -248,8 +344,10 @@ final class CoachControllerTest extends WebTestCase
             'workout' => (string) $foreign->getId(),
         ]);
 
-        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId());
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId().'#une-de-mes-seances');
         self::assertCount(0, $this->em->getRepository(Workout::class)->findBy(['owner' => $athlete]));
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-toasts .kd-flash--error', 'Choisis une séance de ta bibliothèque.');
     }
 
     public function testCopyToAthleteIsDeniedWithoutAcceptedRelation(): void
@@ -289,6 +387,44 @@ final class CoachControllerTest extends WebTestCase
         // La séance datée appartient à l'athlète : elle apparaît sur SON calendrier.
         self::assertSame($athlete->getId(), $scheduled[0]->getOwner()?->getId());
         self::assertSame($date, $scheduled[0]->getScheduledDate()->format('Y-m-d'));
+
+        // #125 : sans JS, retour à l'ancre de la section, et le message en toast
+        // plutôt qu'en tête de page.
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId().'#poser-une-seance');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-toasts .kd-flash', 'Séance posée au');
+    }
+
+    /**
+     * #125 : avec Turbo, la pose ne redirige plus (la fiche se rouvrait en haut) :
+     * elle répond par un refresh morphé qui garde le défilement, et la fiche relue
+     * porte le message en toast, lisible où que l'on soit dans la page.
+     */
+    public function testSchedulingFromTheSheetKeepsTheCoachInPlace(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $workout = $this->createWorkout($athlete, 'Seuil 3x8');
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+        $token = $crawler->filter('form[action$="/schedule"] input[name="_token"]')->attr('value');
+
+        $this->client->request('POST', '/coach/athlete/'.$athlete->getId().'/schedule', [
+            '_token' => $token,
+            'workoutId' => (string) $workout->getId(),
+            'date' => (new \DateTimeImmutable('+3 days'))->format('Y-m-d'),
+        ], [], ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html, text/html, application/xhtml+xml']);
+
+        self::assertResponseIsSuccessful();
+        self::assertResponseHeaderSame('Content-Type', 'text/vnd.turbo-stream.html; charset=UTF-8');
+        $stream = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('action="refresh" method="morph" scroll="preserve"', $stream);
+        self::assertCount(1, $this->em->getRepository(ScheduledWorkout::class)->findAll());
+
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+        self::assertSelectorTextContains('.kd-toasts .kd-flash', 'Séance posée au');
     }
 
     /** Un coach ne pose pas sa propre séance sur le calendrier d'un athlète. */
@@ -311,6 +447,9 @@ final class CoachControllerTest extends WebTestCase
         ]);
 
         self::assertCount(0, $this->em->getRepository(ScheduledWorkout::class)->findAll());
+        // Le refus se dit lui aussi en toast (#125).
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-toasts .kd-flash--error', 'Impossible de planifier cette séance.');
     }
 
     public function testCoachInstantiatesPlanOnAthleteCalendar(): void
@@ -337,6 +476,41 @@ final class CoachControllerTest extends WebTestCase
         self::assertCount(1, $scheduled);
         self::assertSame($athlete->getId(), $scheduled[0]->getOwner()?->getId());
         self::assertSame($monday->format('Y-m-d'), $scheduled[0]->getScheduledDate()->format('Y-m-d'));
+
+        // #68 : le verbe simple, et l'aperçu sait désormais que le plan est placé.
+        self::assertResponseRedirects('/coach/athlete/'.$athlete->getId().'#placer-un-plan');
+        $crawler = $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-toasts .kd-flash', 'Plan « Bloc 2 semaines » placé dans l\'agenda de');
+        $plans = json_decode((string) $crawler->filter('form[action$="/instantiate"]')->attr('data-plan-preview-plans-value'), true);
+        self::assertTrue($plans[$plan->getId()]['placed']);
+    }
+
+    /**
+     * #68 : la page du plan mène à l'agenda de son propriétaire. L'athlète part
+     * vers son calendrier, le plan présélectionné ; son coach vers la fiche de
+     * l'athlète, où le formulaire de pose a déjà ce plan choisi.
+     */
+    public function testPlanPageLeadsToTheOwnersAgenda(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createPlanTemplate($athlete, 'A Bloc 1', 2);
+        $plan = $this->createPlanTemplate($athlete, 'B Bloc 2', 2);
+        $id = (int) $plan->getId();
+
+        $this->client->loginUser($athlete);
+        $crawler = $this->client->request('GET', '/plan-template/'.$id);
+        self::assertSame('/calendar?place='.$id, $crawler->selectLink('Placer dans mon agenda')->attr('href'));
+        self::assertCount(0, $crawler->selectLink('Placer dans son agenda'));
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/plan-template/'.$id);
+        $href = (string) $crawler->selectLink('Placer dans son agenda')->attr('href');
+        self::assertSame(sprintf('/coach/athlete/%d?plan=%d#placer-un-plan', $athlete->getId(), $id), $href);
+
+        $crawler = $this->client->request('GET', strtok($href, '#'));
+        self::assertSame((string) $id, $crawler->filter('#coach_instantiate_plan option[selected]')->attr('value'));
     }
 
     // ------------------------------------------------- extension des voters
@@ -386,6 +560,40 @@ final class CoachControllerTest extends WebTestCase
         self::assertNotNull($this->em->getRepository(Workout::class)->find($workout->getId()));
     }
 
+    /**
+     * #81 : l'ancien lien vers la fiche d'un athlète qu'on ne suit plus lève
+     * l'exception dédiée, que la page 403 traduit par « Tu ne suis plus cet
+     * athlète » (rendu couvert par ErrorPageTest). Les sous-pages de la fiche
+     * passent par la même garde.
+     */
+    public function testEndedCoachIsToldTheRelationIsOver(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ENDED);
+
+        $this->client->loginUser($coach);
+
+        foreach (['', '/stats', '/history'] as $suffix) {
+            $this->client->request('GET', '/coach/athlete/'.$athlete->getId().$suffix);
+            self::assertResponseStatusCodeSame(403);
+            self::assertStringContainsString('NoLongerCoachException', (string) $this->client->getResponse()->getContent());
+        }
+    }
+
+    /** #81 : sans relation passée, le refus reste le refus générique. */
+    public function testStrangerCoachGetsTheGenericDenial(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseStatusCodeSame(403);
+        self::assertStringNotContainsString('NoLongerCoachException', (string) $this->client->getResponse()->getContent());
+    }
+
     public function testAcceptedCoachCanEditAthletePlan(): void
     {
         $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
@@ -428,6 +636,47 @@ final class CoachControllerTest extends WebTestCase
         self::assertStringContainsString('Ma séance perso', $palette);
         self::assertSame('mine', $crawler->filter('.kd-palettecard[data-workout-id="'.$mine->getId().'"]')->attr('data-owner'));
         self::assertSelectorExists('[data-owner-pill][data-owner="mine"]');
+    }
+
+    /**
+     * #112 : une séance du coach déjà copiée chez l'athlète s'efface de « Moi »
+     * (sa copie est listée, la pose la reprendrait). L'effacement se dit : la
+     * copie porte « Copie de la tienne », une ligne sous les pastilles nomme
+     * l'original, et « Moi » ne compte que ce qui reste à copier.
+     */
+    public function testPlanEditorPaletteSaysWhichCoachWorkoutsAreAlreadyCopied(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $hills = $this->createWorkout($coach, 'Côtes 10 x 30 s');
+        // Renommée par l'athlète : la marque suit le lien, pas le titre.
+        $copy = $this->createWorkout($athlete, 'Mes côtes')->setCopiedFrom($hills);
+        $own = $this->createWorkout($athlete, 'Fractionné athlète');
+        $plan = $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
+        $this->em->flush();
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/plan-template/'.$plan->getId().'/edit');
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorNotExists('.kd-palettecard[data-workout-id="'.$hills->getId().'"]');
+        self::assertSelectorTextContains('[data-owner-pill][data-owner="mine"]', 'Moi · 0');
+        self::assertStringContainsString(
+            'Copie de la tienne',
+            $crawler->filter('.kd-palettecard[data-workout-id="'.$copy->getId().'"]')->text(),
+        );
+        self::assertStringNotContainsString(
+            'Copie de la tienne',
+            $crawler->filter('.kd-palettecard[data-workout-id="'.$own->getId().'"]')->text(),
+        );
+        self::assertSelectorTextContains('.kd-libpanel__note', 'Côtes 10 x 30 s est déjà copiée chez athlete@example.com');
+
+        // L'athlète, dans son propre plan, ne voit ni la ligne ni la marque.
+        $this->client->loginUser($athlete);
+        $this->client->request('GET', '/plan-template/'.$plan->getId().'/edit');
+        self::assertSelectorNotExists('.kd-libpanel__note');
+        self::assertSelectorTextNotContains('.kd-palette', 'Copie de la tienne');
     }
 
     /** La relation est dirigée : l'athlète, dans son propre plan, ne voit que ses séances. */
@@ -618,6 +867,78 @@ final class CoachControllerTest extends WebTestCase
         );
     }
 
+    /**
+     * #75 : un coach sans séance à lui arrive sur « Moi ». La page prépare un
+     * état vide qui le dit et renvoie vers son athlète, distinct de celui de la
+     * recherche, et les effectifs des puces sont recalculables côté client.
+     */
+    public function testCoachIndexOffersOwnerEmptyStateWithJumpToAthlete(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createWorkout($athlete, 'Fractionné athlète');
+        $this->createWorkout($athlete, 'Côtes athlète');
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/workout');
+
+        self::assertResponseIsSuccessful();
+        $owner = $crawler->filter('[data-filter-target="empty"][data-empty-reason="owner"]');
+        self::assertCount(1, $owner);
+        self::assertSame((string) $coach->getId(), $owner->attr('data-empty-self'));
+        self::assertStringContainsString('Tu n\'as pas encore de séance à toi.', $owner->text());
+
+        // Un seul lien, vers l'athlète (jamais vers soi), avec son effectif.
+        $jump = $owner->filter('[data-filter-target="jump"]');
+        self::assertCount(1, $jump);
+        self::assertSame((string) $athlete->getId(), $jump->attr('data-filter-value-param'));
+        self::assertSame('2', $jump->filter('[data-facet-count]')->text());
+
+        // La recherche garde son propre message, les puces le leur.
+        self::assertStringContainsString(
+            'ta recherche',
+            $crawler->filter('[data-empty-reason="search"]')->text()
+        );
+        self::assertStringContainsString(
+            'ces filtres',
+            $crawler->filter('[data-empty-reason="filters"]')->text()
+        );
+        // Chaque puce expose un effectif que le contrôleur recalcule.
+        self::assertCount(
+            $crawler->filter('[data-filter-target="facet"]')->count(),
+            $crawler->filter('[data-filter-target="facet"] [data-facet-count]')
+        );
+    }
+
+    public function testCoachPlanIndexOffersOwnerEmptyState(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/plan-template');
+
+        $owner = $crawler->filter('[data-empty-reason="owner"]');
+        self::assertStringContainsString('Tu n\'as pas encore de plan à toi.', $owner->text());
+        self::assertStringContainsString('Ceux de', $owner->filter('[data-filter-target="jump"]')->text());
+    }
+
+    /** Sans athlète, pas de portée « Moi », donc pas d'état vide de propriétaire. */
+    public function testIndexWithoutAthleteHasNoOwnerEmptyState(): void
+    {
+        $user = $this->createUser('solo@example.com');
+        $this->createWorkout($user, 'Footing');
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/workout');
+
+        self::assertCount(0, $crawler->filter('[data-empty-reason="owner"]'));
+        self::assertCount(1, $crawler->filter('[data-empty-reason="search"]'));
+    }
+
     /** Une demande non acceptée n'ouvre aucune portée. */
     public function testPendingRelationDoesNotWidenIndex(): void
     {
@@ -667,7 +988,7 @@ final class CoachControllerTest extends WebTestCase
 
         // Le compositeur s'ouvre (le coach est co-éditeur) mais sans le bloc.
         self::assertResponseIsSuccessful();
-        self::assertCount(0, $crawler->filter('.kd-notes'));
+        self::assertCount(0, $crawler->filter('.kd-notes--owner'));
         self::assertStringNotContainsString('Brouillon perso', $crawler->html());
     }
 
@@ -682,7 +1003,7 @@ final class CoachControllerTest extends WebTestCase
         $this->client->loginUser($athlete);
         $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
 
-        self::assertCount(1, $crawler->filter('.kd-notes'));
+        self::assertCount(1, $crawler->filter('.kd-notes--owner'));
         self::assertStringContainsString('Brouillon perso', $crawler->html());
     }
 
@@ -735,7 +1056,7 @@ final class CoachControllerTest extends WebTestCase
 
         $crawler = $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
         $this->client->request('POST', '/workout/'.$workout->getId().'/meta', [
-            '_token' => $crawler->filter('.kd-notes__text')->attr('data-inline-edit-token-value'),
+            '_token' => $crawler->filter('.kd-notes--owner .kd-notes__text')->attr('data-inline-edit-token-value'),
             'field' => 'notes',
             'value' => "Semaine 1 : en vrac\nSemaine 2 : à voir",
         ]);
@@ -743,7 +1064,7 @@ final class CoachControllerTest extends WebTestCase
 
         $crawler = $this->client->request('GET', '/plan-template/'.$template->getId().'/edit');
         $this->client->request('POST', '/plan-template/'.$template->getId().'/meta', [
-            '_token' => $crawler->filter('.kd-notes__text')->attr('data-inline-edit-token-value'),
+            '_token' => $crawler->filter('.kd-notes--owner .kd-notes__text')->attr('data-inline-edit-token-value'),
             'field' => 'notes',
             'value' => 'Déroulé provisoire',
         ]);
@@ -760,14 +1081,118 @@ final class CoachControllerTest extends WebTestCase
         );
     }
 
+    /**
+     * #65 : le coach écrit ses notes sur l'athlète depuis sa fiche. Elles vivent
+     * sur la relation, pas sur un contenu de l'athlète.
+     */
+    public function testCoachWritesPrivateNotesOnAthleteSheet(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $relation = $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+        self::assertCount(1, $crawler->filter('.kd-notes--coach'));
+
+        $this->client->request('POST', '/coach/athlete/'.$athlete->getId().'/notes', [
+            '_token' => $crawler->filter('.kd-notes--coach .kd-notes__text')->attr('data-inline-edit-token-value'),
+            'field' => 'notes',
+            'value' => '  Surveiller le genou gauche  ',
+        ]);
+        self::assertResponseIsSuccessful();
+        self::assertSame('Surveiller le genou gauche', $this->client->getResponse()->getContent());
+
+        $this->em->clear();
+        self::assertSame('Surveiller le genou gauche', $this->mustFind(Coaching::class, $relation->getId())->getCoachNotes());
+    }
+
+    /**
+     * Les notes du coach se rappellent dans les éditeurs du contenu de l'athlète,
+     * avec la mention « Visible par » sur les champs que l'athlète lit.
+     */
+    public function testCoachSeesOwnNotesAndVisibilityHintsInAthleteEditors(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED)->setCoachNotes('Surveiller le genou gauche');
+        $workout = $this->createWorkout($athlete, 'Séance athlète');
+        $template = $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
+        $this->em->flush();
+
+        $this->client->loginUser($coach);
+
+        foreach (['/workout/'.$workout->getId().'/edit', '/plan-template/'.$template->getId().'/edit'] as $url) {
+            $crawler = $this->client->request('GET', $url);
+            self::assertResponseIsSuccessful();
+            self::assertCount(1, $crawler->filter('.kd-notes--coach'), $url);
+            self::assertStringContainsString('Surveiller le genou gauche', $crawler->filter('.kd-notes--coach')->text());
+            self::assertStringContainsString('Visible par athlete@example.com', $crawler->filter('.kd-visibleto')->text());
+        }
+    }
+
+    /**
+     * L'athlète ne voit jamais les notes de son coach : ni dans ses éditeurs, ni
+     * sur sa page de relations, ni par l'endpoint (il n'est pas son propre coach).
+     */
+    public function testAthleteNeverSeesCoachNotes(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com', ['ROLE_COACH']);
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED)->setCoachNotes('Surveiller le genou gauche');
+        $workout = $this->createWorkout($athlete, 'Séance athlète');
+        $template = $this->createPlanTemplate($athlete, 'Prépa athlète', 4);
+        $this->em->flush();
+
+        $this->client->loginUser($athlete);
+
+        foreach ([
+            '/workout/'.$workout->getId().'/edit',
+            '/workout/'.$workout->getId(),
+            '/plan-template/'.$template->getId().'/edit',
+            '/plan-template/'.$template->getId(),
+            '/coaching',
+        ] as $url) {
+            $crawler = $this->client->request('GET', $url);
+            self::assertResponseIsSuccessful();
+            self::assertCount(0, $crawler->filter('.kd-notes--coach'), $url);
+            self::assertCount(0, $crawler->filter('.kd-visibleto'), $url);
+            self::assertStringNotContainsString('genou', $crawler->html(), $url);
+        }
+
+        $this->client->request('POST', '/coach/athlete/'.$athlete->getId().'/notes', [
+            '_token' => 'peu-importe',
+            'field' => 'notes',
+            'value' => 'Lu en réponse ?',
+        ]);
+        self::assertResponseStatusCodeSame(403);
+    }
+
+    /** Un coach dont la relation n'est plus active n'écrit plus rien. */
+    public function testEndedCoachCannotWriteNotes(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ENDED);
+
+        $this->client->loginUser($coach);
+        $this->client->request('POST', '/coach/athlete/'.$athlete->getId().'/notes', [
+            '_token' => 'peu-importe',
+            'field' => 'notes',
+            'value' => 'Note',
+        ]);
+        self::assertResponseStatusCodeSame(403);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /** @param list<string> $roles */
     // --- KL-45 : la lecture du réalisé par le coach --------------------------
 
     /**
-     * La fiche athlète montre ses séances réalisées, et le lien mène à la séance
-     * datée — que le coach a le droit d'ouvrir (VIEW), pas d'effacer (LOG).
+     * La fiche athlète montre ses séances consignées avec leurs chiffres, et le
+     * lien mène à la séance datée — que le coach a le droit d'ouvrir (VIEW),
+     * pas d'effacer (LOG).
      */
     public function testAthletePageShowsLoggedSessions(): void
     {
@@ -776,15 +1201,7 @@ final class CoachControllerTest extends WebTestCase
         $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
 
         $exercise = $this->createExercise($athlete, 'Squat');
-        $logged = $this->logSession($athlete, $exercise, '2026-03-08', [[SetType::WARMUP, 10, 40.0], [SetType::NORMAL, 5, 100.0], [SetType::NORMAL, 5, 100.0]]);
-        // Une séance simplement cochée « faite » n'a rien à montrer ici.
-        $bare = (new ScheduledWorkout())
-            ->setOwner($athlete)
-            ->setTitle('Sortie longue')
-            ->setScheduledDate(new \DateTimeImmutable('2026-03-09'))
-            ->setStatus(ScheduledStatus::DONE);
-        $this->em->persist($bare);
-        $this->em->flush();
+        $logged = $this->logSession($athlete, $exercise, $this->daysAgo(5), [[SetType::WARMUP, 10, 40.0], [SetType::NORMAL, 5, 100.0], [SetType::NORMAL, 5, 100.0]]);
 
         $this->client->loginUser($coach);
         $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
@@ -792,15 +1209,100 @@ final class CoachControllerTest extends WebTestCase
         self::assertResponseIsSuccessful();
         // Le lien porte le contexte de retour : d'ici, la séance datée revient à
         // la fiche de l'athlète, pas au calendrier du coach.
-        self::assertSelectorExists('a[href="/schedule/'.$logged->getId().'?from=athlete-'.$athlete->getId().'"]');
-        self::assertSelectorNotExists('a[href^="/schedule/'.$bare->getId().'"]');
+        self::assertSelectorExists('#dernieres-seances a[href="/schedule/'.$logged->getId().'?from=athlete-'.$athlete->getId().'"]');
         // Deux séries de travail, 1000 kg : l'échauffement ne compte pas.
-        self::assertSelectorTextContains('body', '2 séries');
-        self::assertSelectorTextContains('body', '1 000 kg');
+        self::assertSelectorTextContains('#dernieres-seances', '2 séries');
+        self::assertSelectorTextContains('#dernieres-seances', '1 000 kg');
     }
 
     /**
-     * Le journal complet : la fiche ne montre que dix séances, il fallait un
+     * #76 (C-10, C-11) : la séance manquée et la séance faite sans détail
+     * apparaissent sur la fiche, chacune avec son statut, et s'ouvrent. Seul le
+     * réalisé consigné y figurait : « 1 manquée » et « 1 faite » se lisaient dans
+     * les compteurs sans qu'on puisse les retrouver.
+     */
+    public function testAthletePageListsPastSessionsDoneOrMissed(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $missed = $this->createScheduled($athlete, 'Fractionné 6 x 400 m', $this->daysAgo(2), ScheduledStatus::MISSED);
+        $bare = $this->createScheduled($athlete, 'Haut du corps', $this->daysAgo(4), ScheduledStatus::DONE);
+        $unchecked = $this->createScheduled($athlete, 'Mobilité', $this->daysAgo(6), ScheduledStatus::PLANNED);
+        // Faite avec une sortie de la montre : il y a quelque chose à lire.
+        $imported = $this->createScheduled($athlete, 'Footing', $this->daysAgo(8), ScheduledStatus::DONE);
+        $day = new \DateTimeImmutable($this->daysAgo(8));
+        $this->em->persist((new ImportedActivity($athlete, ActivitySource::INTERVALS, 'r1', 'Run', $day->setTime(7, 0), $day))
+            ->setActivity(ActivityType::RUNNING)
+            ->setScheduledWorkout($imported));
+        // Hors de la fenêtre de quatre semaines : c'est le journal qui la garde.
+        $old = $this->createScheduled($athlete, 'Vieille séance', $this->daysAgo(40), ScheduledStatus::MISSED);
+        $this->em->flush();
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseIsSuccessful();
+        $from = '?from=athlete-'.$athlete->getId();
+        $line = static fn (ScheduledWorkout $s): string => '#dernieres-seances a[href="/schedule/'.$s->getId().$from.'"]';
+
+        self::assertSelectorTextContains($line($missed), 'Fractionné 6 x 400 m');
+        self::assertSelectorTextContains($line($missed), 'Manquée');
+        self::assertSelectorTextContains($line($bare), 'Faite');
+        self::assertSelectorTextContains($line($bare), 'sans détail');
+        self::assertSelectorTextContains($line($unchecked), 'pas cochée');
+        self::assertStringNotContainsString('sans détail', $crawler->filter($line($imported))->text());
+        self::assertSelectorNotExists('#dernieres-seances a[href^="/schedule/'.$old->getId().'"]');
+
+        // La plus récente d'abord, comme le journal.
+        $titles = $crawler->filter('#dernieres-seances .kd-logline__title')->each(static fn ($n): string => $n->text());
+        self::assertSame(['Fractionné 6 x 400 m', 'Haut du corps', 'Mobilité', 'Footing'], $titles);
+    }
+
+    /**
+     * Une séance d'aujourd'hui passe de l'agenda aux dernières séances dès
+     * qu'elle est cochée : jamais dans les deux listes à la fois.
+     */
+    public function testTodaysSessionMovesToRecentOnceChecked(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $done = $this->createScheduled($athlete, 'Faite ce matin', $this->daysAgo(0), ScheduledStatus::DONE);
+        $this->createScheduled($athlete, 'Prévue ce soir', $this->daysAgo(0), ScheduledStatus::PLANNED);
+        $this->em->flush();
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorExists('#dernieres-seances a[href^="/schedule/'.$done->getId().'"]');
+        $recent = $crawler->filter('#dernieres-seances')->text();
+        self::assertStringContainsString('Faite ce matin', $recent);
+        self::assertStringNotContainsString('Prévue ce soir', $recent);
+        $agenda = $crawler->filter('.kd-coachitem__name')->each(static fn ($n): string => $n->text());
+        self::assertContains('Prévue ce soir', $agenda);
+        self::assertNotContains('Faite ce matin', $agenda);
+    }
+
+    /** Rien d'échu sur la fenêtre : la section le dit au lieu de disparaître. */
+    public function testAthletePageSaysWhenNothingIsRecent(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorTextContains('#dernieres-seances', 'Aucune séance datée sur ses 4 dernières semaines.');
+    }
+
+    /**
+     * Le journal complet : la fiche ne montre que quatre semaines, il fallait un
      * endroit où lire la suite. La fenêtre s'y choisit comme sur les statistiques.
      */
     public function testAthleteLogPageListsTheWholeWindow(): void
@@ -865,6 +1367,270 @@ final class CoachControllerTest extends WebTestCase
         self::assertResponseIsSuccessful();
         self::assertStringNotContainsString('athlete@example.com', $crawler->filter('body')->text());
         self::assertCount(0, $crawler->filter('a[href="/coach/athlete/'.$athlete->getId().'"]'));
+    }
+
+    // ------------------------------------------- bandeau propriétaire (#64)
+
+    /**
+     * Le contenu de l'athlète s'ouvre chez son coach avec la mise en page du
+     * sien : sans bandeau, rien ne disait à qui il était, et le retour par
+     * défaut (« Mes séances », « Mes plans », « Calendrier ») ramenait le coach
+     * sur ses propres pages, vides. Sur les cinq pages, le bandeau nomme
+     * l'athlète par son pseudo et le retour vise sa fiche, sans `?from=`.
+     */
+    public function testAthleteContentNamesItsOwnerAndLeadsBackToTheSheet(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $athlete->setUsername('Trailer38');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $workout = $this->createWorkout($athlete, 'Séance suivie');
+        $plan = $this->createPlanTemplate($athlete, 'Plan suivi', 4);
+        $scheduled = $this->logSession($athlete, $this->createExercise(null, 'Squat'), '2026-03-08', [
+            [SetType::NORMAL, 5, 100.0],
+        ]);
+
+        $sheet = '/coach/athlete/'.$athlete->getId();
+        $pages = [
+            '/workout/'.$workout->getId() => ['Séance', 'a.kd-wk__back'],
+            '/workout/'.$workout->getId().'/edit' => ['Séance', 'a.kd-backlink'],
+            '/plan-template/'.$plan->getId() => ['Plan', 'a.kd-backlink'],
+            '/plan-template/'.$plan->getId().'/edit' => ['Plan', 'a.kd-backlink'],
+            '/schedule/'.$scheduled->getId() => ['Séance', 'a.kd-wk__back'],
+        ];
+
+        $this->client->loginUser($coach);
+
+        foreach ($pages as $url => [$kind, $back]) {
+            $crawler = $this->client->request('GET', $url);
+
+            self::assertResponseIsSuccessful($url);
+            $banner = $crawler->filter('.kd-ownerbar');
+            self::assertCount(1, $banner, $url);
+            self::assertStringContainsString($kind.' de Trailer38', $banner->text(), $url);
+            self::assertStringNotContainsString('athlete@example.com', $banner->text(), $url);
+            self::assertCount(1, $banner->filter('a[href="'.$sheet.'"]'), $url);
+            self::assertCount(1, $crawler->filter($back.'[href="'.$sheet.'"]'), $url);
+        }
+    }
+
+    /** Chez soi, rien ne change : ni bandeau, ni retour détourné. */
+    public function testOwnContentHasNoOwnerBannerAndKeepsItsDefaultBack(): void
+    {
+        $athlete = $this->createUser('athlete@example.com');
+        $workout = $this->createWorkout($athlete, 'Ma séance');
+        $plan = $this->createPlanTemplate($athlete, 'Mon plan', 4);
+
+        $this->client->loginUser($athlete);
+
+        $this->client->request('GET', '/workout/'.$workout->getId().'/edit');
+        self::assertSelectorNotExists('.kd-ownerbar');
+        self::assertSelectorExists('a.kd-backlink[href="/workout"]');
+
+        $this->client->request('GET', '/plan-template/'.$plan->getId());
+        self::assertSelectorNotExists('.kd-ownerbar');
+        self::assertSelectorExists('a.kd-backlink[href="/plan-template"]');
+    }
+
+    /**
+     * Le retour vers la fiche n'est qu'un défaut : un contexte porté garde la
+     * priorité. Une case ouverte depuis le plan de l'athlète repart au plan.
+     */
+    public function testACarriedContextStillWinsOverTheSheet(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $workout = $this->createWorkout($athlete, 'Séance suivie');
+        $plan = $this->createPlanTemplate($athlete, 'Plan suivi', 4);
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/workout/'.$workout->getId().'/edit?from=plan-edit-'.$plan->getId());
+
+        self::assertSelectorExists('a.kd-backlink[href="/plan-template/'.$plan->getId().'/edit"]');
+        self::assertSelectorExists('.kd-ownerbar');
+    }
+
+    /**
+     * Tous les liens qui sortent de la fiche vers un contenu de l'athlète posent
+     * leur ancre, y compris par le détour de l'historique (C-13).
+     */
+    public function testLinksLeavingTheSheetCarryTheAthleteAnchor(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $workout = $this->createWorkout($athlete, 'Séance suivie');
+        $plan = $this->createPlanTemplate($athlete, 'Plan suivi', 4);
+        $scheduled = $this->logSession($athlete, $this->createExercise(null, 'Squat'), (new \DateTimeImmutable('-3 days'))->format('Y-m-d'), [
+            [SetType::NORMAL, 5, 100.0],
+        ]);
+        $from = '?from=athlete-'.$athlete->getId();
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertSelectorExists('a[href="/workout/'.$workout->getId().$from.'"]');
+        self::assertSelectorExists('a[href="/workout/'.$workout->getId().'/edit'.$from.'"]');
+        self::assertSelectorExists('a[href="/plan-template/'.$plan->getId().$from.'"]');
+        self::assertSelectorExists('a[href="/plan-template/'.$plan->getId().'/edit'.$from.'"]');
+
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId().'/history');
+        self::assertSelectorExists('a[href="/schedule/'.$scheduled->getId().$from.'"]');
+
+        // Pour soi, l'historique ne pose aucun jeton : le retour d'origine de la
+        // séance datée (le calendrier) est le bon.
+        $this->client->loginUser($athlete);
+        $this->client->request('GET', '/profile/history');
+        self::assertSelectorExists('a[href="/schedule/'.$scheduled->getId().'"]');
+    }
+
+    // ------------------------------------------------ agenda de l'athlète (#77)
+
+    /**
+     * « Ses 8 prochaines semaines » n'était que du texte (C-14). Le titre ouvre
+     * la séance datée avec le retour vers la fiche, la date ouvre sa semaine
+     * dans l'agenda de l'athlète, et un bouton mène à l'agenda.
+     */
+    public function testUpcomingRowsOpenTheSessionAndItsWeek(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $date = (new \DateTimeImmutable('today'))->modify('+10 days')->format('Y-m-d');
+        $scheduled = $this->createScheduled($athlete, 'Fractionné 6 x 400 m', $date, ScheduledStatus::PLANNED);
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId());
+
+        self::assertSelectorExists('a[href="/schedule/'.$scheduled->getId().'?from=athlete-'.$athlete->getId().'"]');
+        self::assertSelectorExists('a[href="/coach/athlete/'.$athlete->getId().'/calendar/'.$date.'"]');
+        self::assertSelectorExists('a[href="/coach/athlete/'.$athlete->getId().'/calendar"]');
+    }
+
+    /**
+     * L'agenda de l'athlète est la vue semaine du calendrier, au nom de
+     * l'athlète : ses séances et pas celles du coach, les gestes du calendrier
+     * (statut, déplacer, retirer), et rien de ce qui parle du calendrier du
+     * lecteur (ajout depuis sa bibliothèque, export, abonnement). Chaque lien
+     * sortant porte le retour vers cette semaine de cet agenda.
+     */
+    public function testAthleteCalendarShowsHisWeekWithTheCalendarGestures(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $athlete->setUsername('Trailer38');
+        $this->em->flush();
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+
+        $scheduled = $this->createScheduled($athlete, 'Sortie longue', '2026-12-03', ScheduledStatus::PLANNED);
+        $this->createScheduled($coach, 'Séance du coach', '2026-12-03', ScheduledStatus::PLANNED);
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', '/coach/athlete/'.$athlete->getId().'/calendar/2026-12-03');
+
+        self::assertResponseIsSuccessful();
+        $html = $crawler->html();
+        self::assertStringContainsString('Sortie longue', $html);
+        self::assertStringContainsString('Trailer38', $html);
+        self::assertStringNotContainsString('Séance du coach', $html);
+
+        // Le lundi de la semaine, comme le jeton du calendrier de soi.
+        $from = '?from=athlete-cal-'.$athlete->getId().'-2026-11-30';
+        self::assertSelectorExists('a[href="/schedule/'.$scheduled->getId().$from.'"]');
+        self::assertSelectorExists('form[action="/schedule/'.$scheduled->getId().'/move"]');
+        self::assertSelectorExists('form[action="/schedule/'.$scheduled->getId().'/delete"]');
+        self::assertSelectorExists('form[action="/schedule/'.$scheduled->getId().'/quick-status"] input[name="from"][value="athlete-cal-'.$athlete->getId().'-2026-11-30"]');
+
+        // La navigation reste dans son agenda.
+        self::assertSelectorExists('a[href="/coach/athlete/'.$athlete->getId().'/calendar/2026-11-23"]');
+        self::assertSelectorExists('a[href="/coach/athlete/'.$athlete->getId().'/calendar/2026-12-07"]');
+        self::assertSelectorExists('a[href="/coach/athlete/'.$athlete->getId().'/history"]');
+
+        // Ce qui parle du calendrier du lecteur n'y est pas (le menu principal
+        // garde son entrée « Calendrier », hors de la page).
+        self::assertSelectorNotExists('[data-action="caladd#openWorkout"]');
+        self::assertSelectorNotExists('.kd-pagehead a[href^="/calendar"]');
+        self::assertSelectorNotExists('.kd-week a[href^="/calendar"]');
+        self::assertSelectorNotExists('a[href^="/export"]');
+        // Le ressenti se consigne : propriétaire seul.
+        self::assertSelectorNotExists('.kd-modal__rating');
+    }
+
+    /** Comme la fiche : ROLE_COACH ne suffit pas, il faut la relation acceptée. */
+    public function testAthleteCalendarIsDeniedWithoutAcceptedRelation(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::PENDING);
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/coach/athlete/'.$athlete->getId().'/calendar');
+
+        self::assertResponseStatusCodeSame(403);
+    }
+
+    /**
+     * Déplacer ou retirer une séance de l'athlète ramène le coach dans l'agenda
+     * de l'athlète, sur la semaine de la séance — et non sur SON calendrier.
+     */
+    public function testCoachGesturesReturnToTheAthleteCalendar(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $scheduled = $this->createScheduled($athlete, 'Sortie longue', '2026-12-03', ScheduledStatus::PLANNED);
+        $id = (int) $scheduled->getId();
+        $calendar = '/coach/athlete/'.$athlete->getId().'/calendar/';
+
+        $this->client->loginUser($coach);
+        $crawler = $this->client->request('GET', $calendar.'2026-12-03');
+        $form = $crawler->filter('form[action="/schedule/'.$id.'/move"]')->form();
+        $form['scheduledDate'] = '2026-12-10';
+        $this->client->submit($form);
+
+        self::assertResponseRedirects($calendar.'2026-12-10');
+        $this->em->clear();
+        self::assertSame('2026-12-10', $this->mustFind(ScheduledWorkout::class, $id)->getScheduledDate()->format('Y-m-d'));
+
+        $crawler = $this->client->request('GET', $calendar.'2026-12-10');
+        $this->client->submit($crawler->filter('form[action="/schedule/'.$id.'/delete"]')->form());
+
+        self::assertResponseRedirects($calendar.'2026-12-10');
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(ScheduledWorkout::class)->find($id));
+    }
+
+    /**
+     * Le jeton `athlete-cal` ramène à la semaine quittée, nommée par le pseudo de
+     * l'athlète. Même garde que `athlete-<id>` : un tiers qui le recopie sur sa
+     * propre séance n'apprend rien et retombe sur son calendrier.
+     */
+    public function testTheAthleteCalendarBacklinkIsResolvedOnlyForAnAcceptedCoach(): void
+    {
+        $coach = $this->createUser('coach@example.com', ['ROLE_COACH']);
+        $athlete = $this->createUser('athlete@example.com');
+        $this->createCoaching($coach, $athlete, CoachingStatus::ACCEPTED);
+        $scheduled = $this->createScheduled($athlete, 'Sortie longue', '2026-12-03', ScheduledStatus::PLANNED);
+        $token = '?from=athlete-cal-'.$athlete->getId().'-2026-11-30';
+        $target = 'a[href="/coach/athlete/'.$athlete->getId().'/calendar/2026-11-30"]';
+
+        $this->client->loginUser($coach);
+        $this->client->request('GET', '/schedule/'.$scheduled->getId().$token);
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorExists($target);
+
+        $stranger = $this->createUser('curieux@example.com');
+        $own = $this->createScheduled($stranger, 'Ma séance', '2026-12-03', ScheduledStatus::PLANNED);
+
+        $this->client->loginUser($stranger);
+        $crawler = $this->client->request('GET', '/schedule/'.$own->getId().$token);
+
+        self::assertResponseIsSuccessful();
+        self::assertSelectorNotExists($target);
+        self::assertStringNotContainsString('athlete@example.com', $crawler->filter('body')->text());
     }
 
     /** Sans relation acceptée, le journal d'un autre reste fermé. */
@@ -988,7 +1754,8 @@ final class CoachControllerTest extends WebTestCase
         self::assertStringContainsString('1 000', $headline);
         // Le sélecteur de fenêtre reste sur l'athlète.
         self::assertSelectorExists('a[href^="/coach/athlete/'.$athlete->getId().'/stats?range="]');
-        self::assertSelectorNotExists('a[href^="/profile/stats"]');
+        // Dans le contenu : la barre, elle, porte « Progrès » (#71), les stats du coach.
+        self::assertSelectorNotExists('main a[href^="/profile/stats"]');
         // Les rubriques aussi : un onglet ne change pas de sujet en silence.
         self::assertSelectorExists('a.kd-stattab[href="/coach/athlete/'.$athlete->getId().'/stats?range=4w&tab=gym"]');
 
@@ -1068,6 +1835,25 @@ final class CoachControllerTest extends WebTestCase
         $this->em->flush();
 
         return $scheduled;
+    }
+
+    /** Une séance datée sans réalisé, titrée en propre. */
+    private function createScheduled(User $owner, string $title, string $date, ScheduledStatus $status): ScheduledWorkout
+    {
+        $scheduled = (new ScheduledWorkout())
+            ->setOwner($owner)
+            ->setTitle($title)
+            ->setScheduledDate(new \DateTimeImmutable($date))
+            ->setStatus($status);
+        $this->em->persist($scheduled);
+        $this->em->flush();
+
+        return $scheduled;
+    }
+
+    private function daysAgo(int $days): string
+    {
+        return (new \DateTimeImmutable('today'))->modify(sprintf('-%d days', $days))->format('Y-m-d');
     }
 
     /** @param list<string> $roles */

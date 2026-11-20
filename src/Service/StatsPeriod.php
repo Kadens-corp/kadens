@@ -21,8 +21,9 @@ use App\Enum\StatsRange;
  * - **Bornes en jours pleins, jamais en instants.** `ScheduledWorkout` porte
  *   une DATE, pas un datetime : comparer à `maintenant` écarterait les séances
  *   d'aujourd'hui après-midi. `end` est donc toujours une fin de journée.
- * - **Un mois est une fenêtre comme une autre.** MONTH n'a pas de traitement
- *   séparé en aval : il produit un `start`/`end` et un libellé, c'est tout.
+ * - **Un mois, une année sont des fenêtres comme les autres.** MONTH et YEAR
+ *   n'ont pas de traitement séparé en aval : ils produisent un `start`/`end`
+ *   et un libellé, c'est tout.
  *
  * La lecture de la valeur brute d'URL est ici et nulle part ailleurs : une
  * valeur inconnue retombe silencieusement sur la fenêtre par défaut plutôt que
@@ -46,15 +47,16 @@ final readonly class StatsPeriod
         public ?\DateTimeImmutable $start,
         public \DateTimeImmutable $end,
         public string $label,
-        /** Valeur à remettre dans l'URL (`4w`, `6m`, `all` ou `2026-07`). */
+        /** Valeur à remettre dans l'URL (`4w`, `6m`, `ytd`, `all`, `2026-07` ou `2025`). */
         public string $queryValue,
     ) {
     }
 
     /**
-     * Résout la valeur brute de `?range=`. Accepte les trois clés d'enum et un
-     * mois au format `YYYY-MM` ; tout le reste retombe sur la fenêtre par
-     * défaut (4 semaines), y compris `null`.
+     * Résout la valeur brute de `?range=`. Accepte les quatre clés d'enum
+     * cliquables, un mois au format `YYYY-MM` et une année au format `YYYY` ;
+     * tout le reste retombe sur la fenêtre par défaut (4 semaines), y compris
+     * `null`.
      */
     public static function resolve(?string $raw, ?\DateTimeImmutable $now = null): self
     {
@@ -76,8 +78,15 @@ final readonly class StatsPeriod
             return self::fourWeeks($now);
         }
 
+        // Même règle pour l'année : `2025` est la valeur d'URL. Le cas `year`
+        // de l'enum n'est donc jamais lu tel quel, pas plus que `month`.
+        if (1 === preg_match('/^\d{4}$/', $raw)) {
+            return self::year((int) $raw);
+        }
+
         return match (StatsRange::tryFrom($raw)) {
             StatsRange::SIX_MONTHS => self::sixMonths($now),
+            StatsRange::YEAR_TO_DATE => self::yearToDate($now),
             StatsRange::ALL => self::allTime($now),
             default => self::fourWeeks($now),
         };
@@ -109,6 +118,25 @@ final readonly class StatsPeriod
         );
     }
 
+    /**
+     * Du 1er janvier à aujourd'hui inclus. À distinguer de `year()` sur l'année
+     * courante, qui court jusqu'au 31 décembre : ici la borne haute est le jour
+     * même, comme les autres fenêtres glissantes, pour que la moyenne par
+     * semaine ne se dilue pas dans les semaines qui restent.
+     */
+    public static function yearToDate(?\DateTimeImmutable $now = null): self
+    {
+        $end = ($now ?? new \DateTimeImmutable())->setTime(23, 59, 59);
+
+        return new self(
+            StatsRange::YEAR_TO_DATE,
+            $end->modify('first day of january this year')->setTime(0, 0),
+            $end,
+            StatsRange::YEAR_TO_DATE->getLabel(),
+            StatsRange::YEAR_TO_DATE->value,
+        );
+    }
+
     public static function allTime(?\DateTimeImmutable $now = null): self
     {
         $end = ($now ?? new \DateTimeImmutable())->setTime(23, 59, 59);
@@ -130,12 +158,37 @@ final readonly class StatsPeriod
     }
 
     /**
-     * Le mois affiché, ou null hors fenêtre mensuelle. Sert au `<select>` à
-     * savoir quelle option marquer.
+     * Une année civile entière, du 1er janvier au 31 décembre.
+     */
+    public static function year(int $year): self
+    {
+        $first = (new \DateTimeImmutable(sprintf('%04d-01-01', $year)))->setTime(0, 0);
+
+        return new self(
+            StatsRange::YEAR,
+            $first,
+            $first->modify('last day of december this year')->setTime(23, 59, 59),
+            'Année '.$year,
+            (string) $year,
+        );
+    }
+
+    /**
+     * Le mois affiché, ou null hors fenêtre mensuelle.
      */
     public function monthKey(): ?string
     {
         return StatsRange::MONTH === $this->range ? $this->queryValue : null;
+    }
+
+    /**
+     * Le mois ou l'année affiché, ou null hors fenêtre choisie dans la liste.
+     * Sert au `<select>` à savoir quelle option marquer : une seule liste porte
+     * les deux, une seule valeur peut y être sélectionnée.
+     */
+    public function pickedKey(): ?string
+    {
+        return StatsRange::MONTH === $this->range || StatsRange::YEAR === $this->range ? $this->queryValue : null;
     }
 
     /**

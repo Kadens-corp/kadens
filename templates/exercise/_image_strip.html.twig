@@ -1,0 +1,73 @@
+{# La bande d'images d'un exercice (#38) : l'animation en petit quand il y en a
+   plusieurs, chaque image en vignette dans l'ordre où elle se joue (plus tôt,
+   plus tard, retirer), puis la case d'ajout.
+
+   Unité de remplacement des Turbo Streams (`#exercise-images-{id}`) : un geste
+   ne touche qu'elle. Elle vit dans un `data-controller="exercise-images"`
+   (planche ou éditeur), qui porte la préparation et l'envoi d'une image ; la
+   modale de préparation est commune à la page (`exercise/_image_dialog`).
+
+   Paramètres : exercise, from ('board' | 'edit', le retour sans JS). #}
+{% set images = exercise.images %}
+{% set token = csrf_token('exercise-images' ~ exercise.id) %}
+{% set canAdd = exercise.acceptsImages and images|length < constant('App\\Entity\\Exercise::MAX_IMAGES') %}
+{% set name = exercise_name(exercise) %}
+
+<div class="kd-imgstrip" id="exercise-images-{{ exercise.id }}">
+    {% if images|length > 1 %}
+        {{ include('components/_exercise_frames.html.twig', {exercise: exercise, variant: 'mini'}, with_context = false) }}
+    {% endif %}
+
+    <ol class="kd-imgstrip__list" aria-label="Images de {{ name }}">
+        {% for file in images %}
+            <li class="kd-imgstrip__item">
+                <img src="{{ path('app_exercise_image', {id: exercise.id, file: file}) }}"
+                     alt="Image {{ loop.index }} de {{ name }}"
+                     width="72" height="72" loading="lazy" decoding="async" class="kd-imgstrip__thumb">
+                <span class="kd-imgstrip__rank" aria-hidden="true">{{ loop.index }}</span>
+                <div class="kd-imgstrip__tools">
+                    {% if not loop.first %}
+                        <form method="post" action="{{ path('app_exercise_image_move', {id: exercise.id, file: file}) }}">
+                            <input type="hidden" name="_token" value="{{ token }}">
+                            <input type="hidden" name="from" value="{{ from }}">
+                            <input type="hidden" name="direction" value="up">
+                            <button type="submit" class="kd-imgstrip__tool" title="Plus tôt" aria-label="Jouer l'image {{ loop.index }} plus tôt">
+                                {{ ux_icon('lucide:arrow-left') }}
+                            </button>
+                        </form>
+                    {% endif %}
+                    {% if not loop.last %}
+                        <form method="post" action="{{ path('app_exercise_image_move', {id: exercise.id, file: file}) }}">
+                            <input type="hidden" name="_token" value="{{ token }}">
+                            <input type="hidden" name="from" value="{{ from }}">
+                            <input type="hidden" name="direction" value="down">
+                            <button type="submit" class="kd-imgstrip__tool" title="Plus tard" aria-label="Jouer l'image {{ loop.index }} plus tard">
+                                {{ ux_icon('lucide:arrow-right') }}
+                            </button>
+                        </form>
+                    {% endif %}
+                    <form method="post" action="{{ path('app_exercise_image_delete', {id: exercise.id, file: file}) }}">
+                        <input type="hidden" name="_token" value="{{ token }}">
+                        <input type="hidden" name="from" value="{{ from }}">
+                        <button type="submit" class="kd-imgstrip__tool kd-imgstrip__tool--danger" title="Retirer" aria-label="Retirer l'image {{ loop.index }}">
+                            {{ ux_icon('lucide:x') }}
+                        </button>
+                    </form>
+                </div>
+            </li>
+        {% endfor %}
+        {% if canAdd %}
+            <li class="kd-imgstrip__item">
+                <button type="button" class="kd-imgstrip__add"
+                        aria-label="Ajouter une image à {{ name }}"
+                        data-action="exercise-images#pick"
+                        data-exercise-images-url-param="{{ path('app_exercise_image_add', {id: exercise.id}) }}"
+                        data-exercise-images-token-param="{{ token }}"
+                        data-exercise-images-name-param="{{ name }}">
+                    {{ ux_icon('lucide:plus') }}
+                    <span>{{ images is empty ? 'Image' : 'Ajouter' }}</span>
+                </button>
+            </li>
+        {% endif %}
+    </ol>
+</div>

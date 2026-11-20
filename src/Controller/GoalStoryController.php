@@ -127,6 +127,7 @@ final class GoalStoryController extends AbstractController
         $goal->appendBlock($block);
         $this->entityManager->persist($block);
         $this->entityManager->flush();
+        $this->confirmOn($block, 'Ajouté au récit.');
 
         return $this->backToBlock($goal, $block);
     }
@@ -141,12 +142,12 @@ final class GoalStoryController extends AbstractController
 
         $body = $this->body($request);
         if (GoalBlockType::TEXT === $block->getType() && null === $body) {
-            return $this->fail($goal, 'Un bloc de texte ne peut pas être vide : supprime-le plutôt.');
+            return $this->fail($goal, 'Un paragraphe ne peut pas être vide : supprime-le plutôt.');
         }
 
         $block->setBody($body);
         $this->entityManager->flush();
-        $this->addFlash('success', 'Bloc enregistré.');
+        $this->confirmOn($block, 'Enregistré.');
 
         return $this->backToBlock($goal, $block);
     }
@@ -175,7 +176,7 @@ final class GoalStoryController extends AbstractController
         $goal->removeBlock($block);
         $this->entityManager->remove($block);
         $this->entityManager->flush();
-        $this->addFlash('success', 'Bloc supprimé.');
+        $this->addFlash('success', 'Retiré du récit.');
 
         return $this->redirectToRoute('app_goal_story', ['id' => $goal->getId()]);
     }
@@ -264,6 +265,17 @@ final class GoalStoryController extends AbstractController
         $this->addFlash('error', $message);
 
         return $this->redirectToRoute('app_goal_story', ['id' => $goal->getId()]);
+    }
+
+    /**
+     * La confirmation se pose DANS l'élément touché, pas en tête de page : le
+     * retour est ancré sur lui, un message en haut tombait hors de l'écran, et le
+     * seul bouton visible (« Enregistrer ») faisait douter que l'ajout ait eu lieu
+     * (#105).
+     */
+    private function confirmOn(GoalBlock $block, string $message): void
+    {
+        $this->addFlash('story_block', ['id' => $block->getId(), 'message' => $message]);
     }
 
     private function backToBlock(Goal $goal, GoalBlock $block): Response

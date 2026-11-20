@@ -13,10 +13,13 @@ use App\Enum\BlockRole;
 use App\Enum\CoachingStatus;
 use App\Enum\PrescriptionType;
 use App\Enum\TargetArea;
+use App\Service\ExerciseImageStorage;
 use App\Service\SharedWorkoutCopier;
+use App\Tests\BuildsJpeg;
 use App\Tests\PurgesDatabase;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 /**
  * La copie d'une séance chez quelqu'un d'autre (#58).
@@ -29,6 +32,7 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
  */
 final class SharedWorkoutCopierTest extends KernelTestCase
 {
+    use BuildsJpeg;
     use PurgesDatabase;
 
     private EntityManagerInterface $em;
@@ -124,6 +128,32 @@ final class SharedWorkoutCopierTest extends KernelTestCase
         self::assertSame(1, $result->copiedExercises);
     }
 
+    /**
+     * #38 : les images suivent la copie, en fichiers neufs. Partagé, un fichier
+     * partirait du disque avec le premier des deux exercices supprimé.
+     */
+    public function testTheImagesOfACopiedExerciseAreNewFiles(): void
+    {
+        $storage = static::getContainer()->get(ExerciseImageStorage::class);
+        $original = $this->storedImage($storage);
+        $foreign = $this->exercise($this->author, 'Tirage serré')->setImages([$original]);
+        $source = $this->workout($this->author, 'Dos', [$foreign]);
+
+        $copied = $this->prescribedExercises($this->copier->copyFor($source, $this->reader)->workout)[0];
+        $this->em->flush();
+
+        self::assertCount(1, $copied->getImages());
+        [$copy] = $copied->getImages();
+        self::assertNotSame($original, $copy);
+        self::assertFileEquals($storage->path($original), $storage->path($copy));
+
+        // Le destinataire retire l'image de sa copie : l'original ne bouge pas.
+        $copied->setImages([]);
+        $this->em->flush();
+        self::assertFileDoesNotExist($storage->path($copy));
+        self::assertFileExists($storage->path($original));
+    }
+
     public function testAnExerciseUsedTwiceIsCopiedOnce(): void
     {
         $foreign = $this->exercise($this->author, 'Tirage serré');
@@ -207,6 +237,14 @@ final class SharedWorkoutCopierTest extends KernelTestCase
         self::assertSame(1, $first->copiedExercises);
         self::assertSame(0, $second->copiedExercises);
         self::assertSame($this->prescribedExercises($first->workout)[0], $this->prescribedExercises($second->workout)[0]);
+    }
+
+    private function storedImage(ExerciseImageStorage $storage): string
+    {
+        $path = (string) tempnam(sys_get_temp_dir(), 'kd-upload');
+        file_put_contents($path, self::jpeg(ExerciseImageStorage::SIZE, ExerciseImageStorage::SIZE));
+
+        return $storage->store(new UploadedFile($path, 'frame.jpg', null, null, true));
     }
 
     private function user(string $email): User

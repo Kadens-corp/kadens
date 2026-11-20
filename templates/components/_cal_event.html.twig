@@ -2,12 +2,12 @@
    Pastille de séance datée + modale d'édition — partagée par la vue mois
    (`calendar/index`) et la vue semaine (`calendar/week`).
 
-   Trois zones cliquables : la séance datée, le cycle rapide du statut (prévu →
-   fait → manqué) et un œil vers la même page.
+   Trois zones cliquables : la séance datée, le menu du statut (prévue, faite,
+   manquée, au choix) et un œil vers la même page.
 
    **Couleur** : une séance qui a une activité prend en aplat la couleur de sa
    dominante, la deuxième en bande (`activity.surface()`, piste 1b) ; le statut
-   passe alors par l'icône du bouton de cycle, la manquée se hachure. Sans
+   passe alors par l'icône du bouton de statut, la manquée se hachure. Sans
    activité (séance vide, libre), la pastille reste neutre et son filet gauche
    code le statut.
 
@@ -25,8 +25,17 @@
    c'est le chemin vers la séance entière, y compris sur ordinateur. Le lien reste
    le comportement de base : sans JS, tout mène à la page.
 
+   **Pas de glisser-déposer** entre deux jours (#108) : changer de jour passe par
+   le champ « Déplacer » de la modale. Les deux liens portent donc
+   `draggable="false"` : sinon le navigateur laisse saisir la pastille et en
+   traîne un fantôme, ce qui promet un geste que rien ne reçoit au lâcher.
+
    Aperçu du contenu au survol via le composant `_plan_preview` (Popover API),
-   souris uniquement (cf. preview_controller).
+   souris uniquement, refermé au clic qui ouvre la modale (cf.
+   `assets/hover_preview.js`).
+
+   Pastille « Coach » sous le titre quand la séance vient du coach de
+   l'athlète (#80, `ScheduledWorkout::getContributor()`).
 
    Attend :
      - scheduled : ScheduledWorkout
@@ -35,6 +44,9 @@
                    séance de bibliothèque supprimée) : il n'y a alors ni aperçu ni
                    méta, le titre retombe sur le snapshot `displayTitle` et la
                    pastille porte la marque « Libre »
+     - instruction : string|null (optionnel) — consigne de la case du plan
+                   d'où vient la séance (`PlanFlattener::planInstruction`, #95),
+                   montrée dans la modale
      - statuses  : ScheduledStatus::cases()
      - detailed  : bool (optionnel) — carte haute de la vue semaine (méta + note)
      - rating    : SessionRating|null (optionnel) — ressenti effectif, affiché
@@ -51,6 +63,7 @@
 {% import 'components/_activity.html.twig' as activity %}
 {% import 'components/_rating.html.twig' as ratings %}
 {% set fw = fw|default(null) %}
+{% set instruction = instruction|default(null) %}
 {% set rating = rating|default(null) %}
 {% set backFrom = backFrom|default(null) %}
 {% set back = backFrom ? {from: backFrom} : {} %}
@@ -61,18 +74,33 @@
 {% set freeform = workout is null %}
 {% set title = scheduled.displayTitle %}
 {% set st = scheduled.status.value %}
-{% set nextStatus = scheduled.status.next %}
+{# Une icône par statut, la même au bouton, au menu et dans la modale. #}
+{% set statusIcons = {planned: 'lucide:circle-dot', done: 'lucide:check', missed: 'lucide:x'} %}
 {% set detailed = detailed|default(false) %}
 {% set overdue = overdue|default(false) %}
 {% set colored = fw and fw.activities|length > 0 %}
+{# Marquer faite une séance à venir (#109) : c'est l'avoir faite en avance, et le
+   serveur la ramène à aujourd'hui. Le geste le demande avant, au menu comme
+   dans la modale ; une séance déjà faite ne redemande rien. #}
+{% set future = scheduled.scheduledDate|date('Y-m-d') > 'today'|date('Y-m-d') and st != 'done' %}
+{% set futureConfirm = 'Cette séance est prévue le ' ~ scheduled.scheduledDate|date('d/m') ~ ', elle n\'a pas encore eu lieu. La marquer faite la ramène à aujourd\'hui. Continuer ?' %}
 
 <div id="cal-event-{{ scheduled.id }}" class="kd-calevent kd-calevent--{{ st }}{{ colored ? ' kd-calevent--act ' ~ activity.surface(fw.activities) }}{{ detailed ? ' kd-calevent--detailed' }}{{ overdue ? ' is-overdue' }}"
      data-controller="dialog preview"
      data-action="mouseenter->preview#show mouseleave->preview#hide">
     {# La séance datée. Modale au pointeur fin, navigation au doigt. #}
     <a href="{{ path('app_scheduled_workout_show', {id: scheduled.id}|merge(back)) }}"
-       class="kd-calevent__open" data-action="dialog#openFine" title="{{ title }}">
-        <span class="kd-calevent__title">{{ title }}</span>
+       class="kd-calevent__open" data-action="dialog#openFine" title="{{ title }}" draggable="false">
+        {# Faite : une coche devant le titre, plus un titre barré, qui se lisait
+           « annulé » (#89). Le nom accessible le dit en toutes lettres. #}
+        <span class="kd-calevent__title">
+            {%- if st == 'done' -%}
+                <span class="kd-calevent__check">{{ ux_icon('lucide:check', {'aria-hidden': 'true'}) }}<span class="kd-sr-only">Faite : </span></span>
+            {%- endif -%}
+            {{ title }}
+        </span>
+        {# Ce qui vient du coach (#80) : posé par lui, ou écrit par lui. #}
+        {{ include('components/_added_by.html.twig', {by: scheduled.contributor, short: true}, with_context = false) }}
         {% if freeform %}
             <span class="kd-calevent__meta">
                 {{ include('components/_freeform_mark.html.twig') }}
@@ -99,31 +127,58 @@
         {% endif %}
     </a>
 
-    {# Rangée d'actions. Cycle rapide du statut (prévue → faite → manquée), puis
-       l'œil : voir la séance en entier. L'œil n'est jamais intercepté — c'est le
-       seul chemin vers le programme complet depuis le calendrier. #}
-    <form method="post" action="{{ path('app_scheduled_workout_cycle_status', {id: scheduled.id}) }}" class="kd-calevent__statusform">
-        <input type="hidden" name="_token" value="{{ csrf_token('cycle' ~ scheduled.id) }}">
-        {# Vue courante : permet au flux Turbo de re-rendre la pastille à l'identique.
-           `from` suit la même route que `detailed` — sans lui, changer un statut
-           re-rendrait une pastille dont les liens ont perdu leur contexte. #}
-        <input type="hidden" name="detailed" value="{{ detailed ? 1 : 0 }}">
-        {% if backFrom %}<input type="hidden" name="from" value="{{ backFrom }}">{% endif %}
-        <button type="submit" class="kd-calevent__toggle"
-                aria-label="Statut : {{ scheduled.status.label }}. Marquer « {{ nextStatus.label }} »"
-                title="{{ scheduled.status.label }} · cliquer pour marquer « {{ nextStatus.label }} »">
-            {% if st == 'done' %}{{ ux_icon('lucide:check') }}
-            {% elseif st == 'missed' %}{{ ux_icon('lucide:x') }}
-            {% else %}{{ ux_icon('lucide:circle-dot') }}{% endif %}
+    {# Rangée d'actions. Le statut, puis l'œil : voir la séance en entier. L'œil
+       n'est jamais intercepté — c'est le seul chemin vers le programme complet
+       depuis le calendrier.
+
+       Le statut se **choisit** dans un petit menu (#89) : trois boutons nommés,
+       le statut courant marqué. L'ancien bouton faisait défiler prévue → faite →
+       manquée sans rien dire, et un clic de trop changeait le statut sans qu'on
+       le voie. Le menu est un `popover` natif : promu en top-layer, il échappe à
+       l'`overflow: hidden` de la pastille, se referme au clic extérieur et à
+       Échap, et s'ouvre sans JS. `status-menu` ne fait que le poser contre son
+       bouton (sans lui, le navigateur le centre à l'écran, ce qui reste utilisable). #}
+    <div class="kd-calevent__status" data-controller="status-menu">
+        <button type="button" class="kd-calevent__toggle"
+                popovertarget="cal-status-{{ scheduled.id }}"
+                data-status-menu-target="trigger"
+                aria-label="Statut : {{ scheduled.status.label }}. Changer le statut"
+                title="Statut : {{ scheduled.status.label }} · changer">
+            {{ ux_icon(statusIcons[st]) }}
+            <span class="kd-calevent__statuslbl">{{ scheduled.status.label }}</span>
         </button>
-    </form>
+        <form id="cal-status-{{ scheduled.id }}" popover
+              method="post" action="{{ path('app_scheduled_workout_quick_status', {id: scheduled.id}) }}"
+              class="kd-statusmenu" data-status-menu-target="menu"
+              data-action="toggle->status-menu#place">
+            <input type="hidden" name="_token" value="{{ csrf_token('quick-status' ~ scheduled.id) }}">
+            {# Vue courante : permet au flux Turbo de re-rendre la pastille à l'identique.
+               `from` suit la même route que `detailed` — sans lui, changer un statut
+               re-rendrait une pastille dont les liens ont perdu leur contexte. #}
+            <input type="hidden" name="detailed" value="{{ detailed ? 1 : 0 }}">
+            {% if backFrom %}<input type="hidden" name="from" value="{{ backFrom }}">{% endif %}
+            <p class="kd-statusmenu__title">Statut de la séance</p>
+            {% for status in statuses %}
+                {% set current = status == scheduled.status %}
+                <button type="submit" name="status" value="{{ status.value }}"
+                        class="kd-statusmenu__item kd-statusmenu__item--{{ status.value }}{{ current ? ' is-active' }}"
+                        aria-pressed="{{ current ? 'true' : 'false' }}"
+                        {%- if future and status.value == 'done' %} onclick="return confirm({{ futureConfirm|json_encode(constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES'))|e('html_attr') }});"{% endif %}>
+                    {{ ux_icon(statusIcons[status.value]) }}
+                    {{ status.label }}
+                </button>
+            {% endfor %}
+        </form>
+    </div>
 
     <a href="{{ path('app_scheduled_workout_show', {id: scheduled.id}|merge(back)) }}"
-       class="kd-calevent__eye" aria-label="Voir « {{ title }} » en entier">
+       class="kd-calevent__eye" aria-label="Voir « {{ title }} » en entier"
+       title="Voir la séance en entier" draggable="false">
         {{ ux_icon('lucide:eye') }}
     </a>
 
-    <dialog class="kd-modal" data-dialog-target="dialog" data-action="click->dialog#backdrop">
+    <dialog class="kd-modal" data-dialog-target="dialog"
+            data-action="click->dialog#backdrop cancel->dialog#cancel close->dialog#closed">
         <div class="kd-modal__card">
             <div class="kd-modal__head">
                 <div>
@@ -135,31 +190,89 @@
                 </button>
             </div>
 
+            {# Fermer avec une saisie non enregistrée (#90) : la modale reste
+               ouverte et pose la question ici, jamais par `window.confirm`.
+               Caché tant que le contrôleur `dialog` ne l'affiche pas, donc
+               absent sans JS, où rien ne se perd en silence : il n'y a pas de
+               modale, seulement la page. « Enregistrer » soumet le formulaire de
+               la modale par son id, sans passer par le JS. #}
+            <div class="kd-modal__unsaved" role="alert" hidden data-dialog-target="unsaved">
+                <p class="kd-modal__unsaved-msg">{{ ux_icon('lucide:circle-alert', {'aria-hidden': 'true'}) }} Tes modifications ne sont pas enregistrées.</p>
+                <div class="kd-modal__unsaved-actions">
+                    <button type="submit" form="cal-save-{{ scheduled.id }}" class="kd-btn kd-btn--primary kd-btn--sm">
+                        {{ ux_icon('lucide:save') }} Enregistrer
+                    </button>
+                    <button type="button" class="kd-btn kd-btn--ghost kd-btn--sm" data-action="dialog#discard">
+                        Ne pas enregistrer
+                    </button>
+                </div>
+            </div>
+
             <div class="kd-modal__meta">
                 <span class="kd-badge kd-badge--{{ st }}"><span class="kd-badge__dot"></span>{{ scheduled.status.label }}</span>
-                {% if workout %}
-                    <a class="kd-btn kd-btn--ghost kd-btn--sm" href="{{ path('app_workout_show', {id: workout.id}|merge(back)) }}">
-                        {{ ux_icon('lucide:external-link') }} Voir la séance
-                    </a>
-                {% else %}
-                    {# Sans source, il n'y a aucune séance de bibliothèque à ouvrir :
-                       la marque prend la place du lien plutôt que de le laisser vide. #}
+                {# La séance datée, pas la séance type (#91) : la même page que
+                   l'œil, avec son statut, son commentaire et son ressenti. Elle
+                   mène elle-même à la séance type. Avant, ce lien ouvrait la
+                   bibliothèque, et deux « voir » menaient à deux pages. #}
+                <a class="kd-btn kd-btn--ghost kd-btn--sm" href="{{ path('app_scheduled_workout_show', {id: scheduled.id}|merge(back)) }}">
+                    {{ ux_icon('lucide:external-link') }} Voir la séance
+                </a>
+                {% if freeform %}
                     {{ include('components/_freeform_mark.html.twig') }}
                 {% endif %}
             </div>
 
-            {# Prévu vs réalisé : marquer fait/manqué en un clic + noter un écart léger. #}
+            {# La consigne de la case du plan (#95), avant le formulaire : on la
+               lit avant de dire ce qui a été fait. #}
+            {{ include('components/_plan_instruction.html.twig', {instruction: instruction, compact: true}, with_context = false) }}
+
+            {# Prévu vs réalisé : statut, commentaire et ressenti, enregistrés
+               ensemble par un bouton « Enregistrer » explicite (#90).
+
+               Les trois statuts sont des **radios**, plus des boutons d'envoi :
+               c'était le clic sur « Faite » qui enregistrait le texte, et rien ne
+               le disait — on fermait la modale sans avoir sauvé, ou on cherchait
+               à sauver avec « Déplacer », seul bouton plein de la modale. Le
+               statut en un clic reste le geste du menu de la pastille (#89).
+               Radios natives : la case retenue se dessine par `:has(:checked)`,
+               sans JS, et au clavier les flèches passent d'un statut à l'autre. #}
             <div class="kd-modal__section">
-                <p class="kd-modal__section-title">Statut</p>
-                <form method="post" action="{{ path('app_scheduled_workout_status', {id: scheduled.id}) }}" class="kd-modal__form">
+                <form id="cal-save-{{ scheduled.id }}" method="post" action="{{ path('app_scheduled_workout_status', {id: scheduled.id}) }}"
+                      class="kd-modal__form" data-dialog-target="guarded"
+                      {%- if future %} onsubmit="return this.elements.status.value !== 'done' || confirm({{ futureConfirm|json_encode(constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES'))|e('html_attr') }});"{% endif %}>
                     <input type="hidden" name="_token" value="{{ csrf_token('status' ~ scheduled.id) }}">
                     <input type="hidden" name="detailed" value="{{ detailed ? 1 : 0 }}">
                     {% if backFrom %}<input type="hidden" name="from" value="{{ backFrom }}">{% endif %}
-                    <div class="kd-field">
-                        <textarea name="completionNotes" rows="2" class="kd-input kd-input--area" placeholder="Écart / ressenti (optionnel)">{{ scheduled.completionNotes }}</textarea>
+                    <div>
+                        <p class="kd-modal__section-title" id="cal-status-lbl-{{ scheduled.id }}">Statut</p>
+                        <div class="kd-segmented" role="radiogroup" aria-labelledby="cal-status-lbl-{{ scheduled.id }}">
+                            {% for status in statuses %}
+                                <label class="kd-segbtn kd-segbtn--{{ status.value }}">
+                                    <input type="radio" name="status" value="{{ status.value }}"{{ status == scheduled.status ? ' checked' }}>
+                                    {{ ux_icon(statusIcons[status.value], {'aria-hidden': 'true'}) }}
+                                    {{ status.label }}
+                                </label>
+                            {% endfor %}
+                        </div>
                     </div>
+                    <div class="kd-field">
+                        <label class="kd-label" for="cal-notes-{{ scheduled.id }}">Commentaire (optionnel)</label>
+                        <textarea id="cal-notes-{{ scheduled.id }}" name="completionNotes" rows="2"
+                                  class="kd-input kd-input--area"
+                                  placeholder="Charge revue à la baisse, dos raide…">{{ scheduled.completionNotes }}</textarea>
+                    </div>
+                    {# Séance de force : le texte libre n'est pas l'endroit des
+                       charges, et la modale doit dire lequel (#63). « De force »
+                       se lit sur `fw.activities`, la même définition que
+                       `TrackableSchedule` (un exercice gym suffit) et sans requête.
+                       Pas de « Pas de détail » ici : savoir s'il y a du réalisé
+                       coûterait une requête par pastille du mois. #}
+                    {% if fw and fw.activities|filter(a => a.value == 'gym') is not empty %}
+                        {{ include('components/_log_in_app.html.twig', {}, with_context = false) }}
+                    {% endif %}
                     {# Le ressenti se consigne (LOG) : propriétaire seul. Il part
-                       avec le statut, et ne compte que si la séance est faite. #}
+                       avec le reste du formulaire, et ne compte que si la séance
+                       est faite. #}
                     {% if is_granted('SCHEDULED_WORKOUT_LOG', scheduled) %}
                         <details class="kd-modal__rating"{{ scheduled.feeling or scheduled.sessionRpe ? ' open' }}>
                             <summary class="kd-label">Ressenti</summary>
@@ -167,35 +280,40 @@
                             {{ ratings.picker('sessionRpe', scheduled.sessionRpe, 'cal-' ~ scheduled.id) }}
                         </details>
                     {% endif %}
-                    <div class="kd-segmented" role="group" aria-label="Marquer le statut">
-                        {% for status in statuses %}
-                            <button type="submit" name="status" value="{{ status.value }}"
-                                    class="kd-segbtn kd-segbtn--{{ status.value }}{{ status == scheduled.status ? ' is-active' }}">
-                                {% if status.value == 'done' %}{{ ux_icon('lucide:check') }}
-                                {% elseif status.value == 'missed' %}{{ ux_icon('lucide:x') }}
-                                {% else %}{{ ux_icon('lucide:circle-dot') }}{% endif %}
-                                {{ status.label }}
-                            </button>
-                        {% endfor %}
-                    </div>
+                    {# Le seul bouton plein de la modale : c'est lui qu'on cherche
+                       après avoir écrit. #}
+                    <button type="submit" class="kd-btn kd-btn--primary kd-btn--block">
+                        {{ ux_icon('lucide:save') }} Enregistrer
+                    </button>
                 </form>
             </div>
 
+            {# Gestes secondaires, en retrait : « Déplacer » restait le seul bouton
+               cerné de noir, et se lisait comme l'enregistrement (#90). #}
             <div class="kd-modal__section">
                 <p class="kd-modal__section-title">Déplacer</p>
-                <form method="post" action="{{ path('app_scheduled_workout_move', {id: scheduled.id}) }}" class="kd-modal__inline">
+                {# Déplacer referme la modale : une saisie en cours partirait avec.
+                   Vers un jour de la vue (lue sur `from`), la vue reste et se
+                   morphe ; ailleurs, on va voir le jour visé
+                   (ScheduledWorkoutController::staysOnCalendar). #}
+                <form method="post" action="{{ path('app_scheduled_workout_move', {id: scheduled.id}) }}" class="kd-modal__inline"
+                      data-action="submit->dialog#guardSubmit">
                     <input type="hidden" name="_token" value="{{ csrf_token('move' ~ scheduled.id) }}">
+                    <input type="hidden" name="return" value="calendar">
+                    {% if backFrom %}<input type="hidden" name="from" value="{{ backFrom }}">{% endif %}
                     <div class="kd-field">
-                        <input type="date" name="scheduledDate" value="{{ scheduled.scheduledDate|date('Y-m-d') }}" class="kd-input" required>
+                        <input type="date" name="scheduledDate" value="{{ scheduled.scheduledDate|date('Y-m-d') }}" class="kd-input" required aria-label="Nouvelle date">
                     </div>
-                    <button type="submit" class="kd-btn kd-btn--secondary">{{ ux_icon('lucide:calendar-clock') }} Déplacer</button>
+                    <button type="submit" class="kd-btn kd-btn--ghost">{{ ux_icon('lucide:calendar-clock') }} Déplacer</button>
                 </form>
             </div>
 
             <div class="kd-modal__section">
-                <form method="post" action="{{ path('app_scheduled_workout_delete', {id: scheduled.id}) }}" onsubmit="return confirm('Retirer cette séance du planning ?');">
+                <form method="post" action="{{ path('app_scheduled_workout_delete', {id: scheduled.id}) }}" onsubmit="return confirm('Retirer cette séance de l\'agenda ?');">
                     <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ scheduled.id) }}">
-                    <button type="submit" class="kd-btn kd-btn--danger">{{ ux_icon('lucide:trash-2') }} Retirer du planning</button>
+                    {# Reste sur la vue, sans rechargement (ScheduledWorkoutController::staysOnCalendar). #}
+                    <input type="hidden" name="return" value="calendar">
+                    <button type="submit" class="kd-btn kd-btn--ghost kd-btn--danger">{{ ux_icon('lucide:trash-2') }} Retirer de l'agenda</button>
                 </form>
             </div>
         </div>

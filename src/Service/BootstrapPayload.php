@@ -71,7 +71,7 @@ use App\Repository\ScheduledWorkoutRepository;
  * @phpstan-import-type ApiExerciseSetup from ExerciseSetupPayload
  *
  * @phpstan-type ApiCustomMessage array{id: int, body: string, mediaUrl: string|null, startsOn: string, endsOn: string}
- * @phpstan-type ApiExercise array{id: int|null, name: string|null, nameEn: string|null, description: string|null, activity: string|null, targetAreas: list<string>, mediaUrl: string|null, global: bool, updatedAt: string|null}
+ * @phpstan-type ApiExercise array{id: int|null, name: string|null, nameEn: string|null, description: string|null, activity: string|null, targetAreas: list<string>, mediaUrl: string|null, images: list<string>, global: bool, updatedAt: string|null}
  * @phpstan-type ApiBootstrap array{serverTime: string, since: string|null, exerciseLanguage: string, window: array{from: string, to: string}, exercises: list<ApiExercise>, schedule: list<ApiScheduledWorkout>, history: list<ApiHistoryEntry>, setups: list<ApiExerciseSetup>, messages: list<ApiCustomMessage>, deleted: array{exercises: list<int>, schedule: list<string>}}
  */
 final class BootstrapPayload
@@ -90,6 +90,7 @@ final class BootstrapPayload
         private readonly ScheduledWorkoutPayload $scheduledWorkouts,
         private readonly TrackableSchedule $trackable,
         private readonly CustomMessageInbox $inbox,
+        private readonly ExerciseImageUrls $imageUrls,
     ) {
     }
 
@@ -242,6 +243,10 @@ final class BootstrapPayload
             'activity' => $exercise->getActivity()?->value,
             'targetAreas' => $areas,
             'mediaUrl' => $exercise->getMediaUrl(),
+            // Les images du mouvement (#38), dans l'ordre où elles se jouent :
+            // absolues, signées, sans expiration (cf. ExerciseImageUrls). `[]`
+            // sans image. Additif : un client qui ne le connaît pas l'ignore.
+            'images' => $this->imageUrls->signed($exercise),
             // Le téléphone ne modifie rien de la bibliothèque, mais il distingue
             // « exercice de l'app » de « mon exercice » à l'affichage.
             'global' => null === $exercise->getOwner(),

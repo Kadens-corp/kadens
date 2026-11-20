@@ -23,7 +23,7 @@ use App\Enum\ActivityType;
  * @phpstan-import-type RegionShare from RegionBreakdown
  *
  * @phpstan-type GymVolume array{setsByArea: array<string, int>, tonnageKg: float, totalSets: int, unmappedSets: int}
- * @phpstan-type EnduranceVolume array{meters: int, seconds: int, derivedMeters: int, derivedSeconds: int, efforts: int, withoutDistance: int, withoutDuration: int}
+ * @phpstan-type EnduranceVolume array{meters: int, seconds: int, derivedMeters: int, derivedSeconds: int, estimatedSeconds: int, efforts: int, withoutDistance: int, withoutDuration: int}
  * @phpstan-type WorkoutVolume array{gym: GymVolume, running: EnduranceVolume, cycling: EnduranceVolume, swimming: EnduranceVolume}
  * @phpstan-type TopLift array{exercise: string, weightKg: float, sets: int}
  * @phpstan-type WorkoutSummary array{tonnageKg: float, workingSets: int, exerciseCount: int, blockCount: int, supersets: int, circuits: int, averageRpe: float|null, topLift: TopLift|null, regions: list<RegionShare>}
@@ -208,6 +208,16 @@ final class WorkoutMetrics
      *   `derivedSeconds` est son symétrique : la durée déduite d'une distance et
      *   d'une allure, quand la durée n'est pas saisie.
      *
+     * Deux durées, deux questions (#122). `seconds + derivedSeconds` est le temps
+     * **en mouvement** : ce qui se rapporte à une distance pour faire une allure,
+     * et ce qui se compare au temps de déplacement de la montre.
+     * `estimatedSeconds` est le temps **passé** sur l'activité, récupérations
+     * comprises, écrit par `WorkoutEstimator::effortSeconds()` : c'est lui qui
+     * répond à « combien de temps de course cette semaine », et la somme des
+     * activités d'une séance d'endurance retombe sur la durée de la séance. Les
+     * vues de volume (bandeau de séance, semaine de trame, rampe du plan) lisent
+     * celui-là, jamais un total refait à la main.
+     *
      * Et trois compteurs d'efforts (une ligne prescrite, pas une répétition) pour
      * qui doit savoir si un total est COMPLET : `efforts` au total, et parmi eux
      * ceux qui ne se chiffrent ni en distance (`withoutDistance`) ni en durée
@@ -222,83 +232,91 @@ final class WorkoutMetrics
         $gymTonnage = 0.0;
         $gymTotalSets = 0;
         $gymUnmappedSets = 0;
-        $empty = ['meters' => 0, 'seconds' => 0, 'derivedMeters' => 0, 'derivedSeconds' => 0, 'efforts' => 0, 'withoutDistance' => 0, 'withoutDuration' => 0];
+        $empty = ['meters' => 0, 'seconds' => 0, 'derivedMeters' => 0, 'derivedSeconds' => 0, 'estimatedSeconds' => 0, 'efforts' => 0, 'withoutDistance' => 0, 'withoutDuration' => 0];
         $endurance = ['running' => $empty, 'cycling' => $empty, 'swimming' => $empty];
 
         foreach ($workout->getBlocks() as $block) {
             $rounds = max(1, $block->getRounds());
 
-            foreach ($block->getPrescribedExercises() as $pe) {
-                $exercise = $pe->getExercise();
-                $activity = $exercise?->getActivity();
-                if (null === $activity) {
-                    continue;
-                }
-
-                if (ActivityType::GYM === $activity) {
-                    // Séries de travail (hors échauffement) et tonnage sont dérivés
-                    // par PrescribedExercise : identiques au compteur scalaire en
-                    // mode simple, ventilés par ligne en mode « séries détaillées ».
-                    $sets = $pe->getWorkingSetCount() * $rounds;
-                    if ($sets > 0) {
-                        $gymTotalSets += $sets;
-                        $areas = $exercise->getTargetAreas() ?? [];
-
-                        if ([] === $areas) {
-                            $gymUnmappedSets += $sets;
-                        }
-
-                        foreach ($areas as $area) {
-                            $gymSetsByArea[$area->value] = ($gymSetsByArea[$area->value] ?? 0) + $sets;
-                        }
+            // Parcours par segments, comme l'estimateur : un membre de superset
+            // suivi d'un autre s'enchaîne sans repos, et sa durée doit le savoir.
+            foreach ($this->supersets->segments($block) as $segment) {
+                $last = \count($segment['exercises']) - 1;
+                foreach ($segment['exercises'] as $index => $pe) {
+                    $exercise = $pe->getExercise();
+                    $activity = $exercise?->getActivity();
+                    if (null === $activity) {
+                        continue;
                     }
 
-                    $gymTonnage += $pe->getTonnageKg() * $rounds;
+                    if (ActivityType::GYM === $activity) {
+                        // Séries de travail (hors échauffement) et tonnage sont dérivés
+                        // par PrescribedExercise : identiques au compteur scalaire en
+                        // mode simple, ventilés par ligne en mode « séries détaillées ».
+                        $sets = $pe->getWorkingSetCount() * $rounds;
+                        if ($sets > 0) {
+                            $gymTotalSets += $sets;
+                            $areas = $exercise->getTargetAreas() ?? [];
 
-                    continue;
-                }
+                            if ([] === $areas) {
+                                $gymUnmappedSets += $sets;
+                            }
 
-                $key = match ($activity) {
-                    ActivityType::RUNNING => 'running',
-                    ActivityType::CYCLING => 'cycling',
-                    ActivityType::SWIMMING => 'swimming',
-                    default => null,
-                };
-                if (null === $key) {
-                    continue;
-                }
+                            foreach ($areas as $area) {
+                                $gymSetsByArea[$area->value] = ($gymSetsByArea[$area->value] ?? 0) + $sets;
+                            }
+                        }
 
-                $distance = $pe->getDistanceMeters();
-                $seconds = $pe->getDurationSeconds();
-                $pace = $pe->getPaceSecondsPerKm();
+                        $gymTonnage += $pe->getTonnageKg() * $rounds;
 
-                // Le multiplicateur d'endurance est DOUBLE : les répétitions de
-                // l'effort lui-même (« 4 × 1 km » vaut 4 km — le fractionné se
-                // prescrit en séries, en course comme en vélo ou en nage) et les
-                // tours du bloc, qui rejouent la section entière.
-                $repeats = $pe->getEnduranceRepeats() * $rounds;
+                        continue;
+                    }
 
-                $endurance[$key]['meters'] += ($distance ?? 0) * $repeats;
-                $endurance[$key]['seconds'] += ($seconds ?? 0) * $repeats;
+                    $key = match ($activity) {
+                        ActivityType::RUNNING => 'running',
+                        ActivityType::CYCLING => 'cycling',
+                        ActivityType::SWIMMING => 'swimming',
+                        default => null,
+                    };
+                    if (null === $key) {
+                        continue;
+                    }
 
-                // Distance déduite : « 45 min à 5:00/km » décrit bien 9 km, mais
-                // seulement quand la distance n'a PAS été posée — une consigne
-                // saisie fait toujours autorité sur un produit de deux autres
-                // champs, et les additionner compterait la sortie deux fois.
-                $hasPace = null !== $pace && $pace > 0;
-                if (null === $distance && null !== $seconds && $hasPace) {
-                    $endurance[$key]['derivedMeters'] += (int) round($seconds / $pace * 1000) * $repeats;
-                }
-                if (null === $seconds && null !== $distance && $hasPace) {
-                    $endurance[$key]['derivedSeconds'] += (int) round($distance / 1000 * $pace) * $repeats;
-                }
+                    $distance = $pe->getDistanceMeters();
+                    $seconds = $pe->getDurationSeconds();
+                    $pace = $pe->getPaceSecondsPerKm();
 
-                ++$endurance[$key]['efforts'];
-                if (null === $distance && (null === $seconds || !$hasPace)) {
-                    ++$endurance[$key]['withoutDistance'];
-                }
-                if (null === $seconds && (null === $distance || !$hasPace)) {
-                    ++$endurance[$key]['withoutDuration'];
+                    // Le multiplicateur d'endurance est DOUBLE : les répétitions de
+                    // l'effort lui-même (« 4 × 1 km » vaut 4 km — le fractionné se
+                    // prescrit en séries, en course comme en vélo ou en nage) et les
+                    // tours du bloc, qui rejouent la section entière.
+                    $repeats = $pe->getEnduranceRepeats() * $rounds;
+
+                    $endurance[$key]['meters'] += ($distance ?? 0) * $repeats;
+                    $endurance[$key]['seconds'] += ($seconds ?? 0) * $repeats;
+                    // Le temps passé : l'estimateur compte déjà les répétitions de
+                    // l'effort, il ne reste que les tours du bloc.
+                    $endurance[$key]['estimatedSeconds'] += $this->estimator->effortSeconds($pe, $index < $last) * $rounds;
+
+                    // Distance déduite : « 45 min à 5:00/km » décrit bien 9 km, mais
+                    // seulement quand la distance n'a PAS été posée — une consigne
+                    // saisie fait toujours autorité sur un produit de deux autres
+                    // champs, et les additionner compterait la sortie deux fois.
+                    $hasPace = null !== $pace && $pace > 0;
+                    if (null === $distance && null !== $seconds && $hasPace) {
+                        $endurance[$key]['derivedMeters'] += (int) round($seconds / $pace * 1000) * $repeats;
+                    }
+                    if (null === $seconds && null !== $distance && $hasPace) {
+                        $endurance[$key]['derivedSeconds'] += (int) round($distance / 1000 * $pace) * $repeats;
+                    }
+
+                    ++$endurance[$key]['efforts'];
+                    if (null === $distance && (null === $seconds || !$hasPace)) {
+                        ++$endurance[$key]['withoutDistance'];
+                    }
+                    if (null === $seconds && (null === $distance || !$hasPace)) {
+                        ++$endurance[$key]['withoutDuration'];
+                    }
                 }
             }
         }

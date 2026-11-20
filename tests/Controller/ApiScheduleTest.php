@@ -9,6 +9,7 @@ use App\Entity\DeletedEntity;
 use App\Entity\Exercise;
 use App\Entity\LoggedExercise;
 use App\Entity\LoggedSet;
+use App\Entity\PlanItem;
 use App\Entity\PlanTemplate;
 use App\Entity\PrescribedExercise;
 use App\Entity\ScheduledWorkout;
@@ -111,6 +112,40 @@ final class ApiScheduleTest extends WebTestCase
         self::assertSame($fromBootstrap, $alone);
         self::assertSame('Haut du corps', $alone['title']);
         self::assertCount(2, $alone['log'][0]['sets']);
+    }
+
+    /**
+     * La consigne de case (#128) se lit à l'identique sur les deux endpoints, et
+     * se tait quand la case quitte le plan : la FK est en SET NULL, la séance
+     * datée survit sans case, donc sans consigne. `null`, pas une chaîne vide.
+     */
+    public function testThePlanInstructionFollowsTheCase(): void
+    {
+        $user = $this->createUser('athlete@example.com');
+        [$scheduled] = $this->createSession($user, new \DateTimeImmutable('+1 day'));
+
+        $plan = (new PlanTemplate())->setOwner($user)->setTitle('Force')->setSlug('force-'.bin2hex(random_bytes(4)))->setDurationWeeks(4);
+        $this->em->persist($plan);
+        $item = (new PlanItem())->setWorkout($scheduled->getWorkout())->setWeekNumber(1)->setDayOfWeek(2)->setNotes('Descente lente en 3 s sur squat et fentes.');
+        $plan->addPlanItem($item);
+        $this->em->persist($item);
+        $scheduled->setSourcePlanTemplate($plan)->setSourcePlanItem($item);
+        $this->em->flush();
+
+        $secret = $this->issueToken($user);
+        $uri = '/api/schedule/'.$scheduled->getUuid();
+
+        $alone = $this->get($uri, $secret);
+        self::assertSame('Descente lente en 3 s sur squat et fentes.', $alone['planInstruction']);
+        self::assertSame($this->get('/api/bootstrap', $secret)['schedule'][0], $this->get($uri, $secret));
+
+        $item = $this->em->find(PlanItem::class, $item->getId());
+        self::assertNotNull($item);
+        $this->em->remove($item);
+        $this->em->flush();
+        $this->em->clear();
+
+        self::assertNull($this->get($uri, $secret)['planInstruction']);
     }
 
     /** Sans source, un programme vide — pas une erreur (`SET NULL`, KL-02). */

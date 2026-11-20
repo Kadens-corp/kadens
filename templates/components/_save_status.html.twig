@@ -1,0 +1,30 @@
+{# Indicateur d'enregistrement automatique (#86), piloté par le contrôleur
+   `save-status` que porte un ANCÊTRE de ce fragment (<body>, ou la modale
+   d'édition rapide). Un libellé par état ; le contrôleur ne pose que `data-state`.
+
+   Paramètres :
+     inline  vrai dans un en-tête (modale) : la pastille reste en place et dit au
+             repos que tout s'enregistre seul. Faux : pastille fixe en bas de
+             l'écran, invisible au repos.
+     idle    libellé du repos (inline seulement).
+
+   `role="status"` : un lecteur d'écran annonce chaque changement d'état sans
+   déplacer le focus — c'est le même besoin que l'œil, savoir que c'est pris. #}
+{% set inline = inline|default(false) %}
+<div class="kd-savestatus{{ inline ? ' kd-savestatus--inline' : '' }}"
+     data-save-status-target="output" data-state="idle" role="status" aria-live="polite">
+    {% if inline %}
+        <span class="kd-savestatus__state kd-savestatus__state--idle">{{ ux_icon('lucide:check') }} {{ idle|default('Enregistrement automatique') }}</span>
+    {% endif %}
+    <span class="kd-savestatus__state kd-savestatus__state--pending">{{ ux_icon('lucide:loader-circle') }} Enregistrement…</span>
+    <span class="kd-savestatus__state kd-savestatus__state--saved">{{ ux_icon('lucide:check') }} Enregistré</span>
+    <span class="kd-savestatus__state kd-savestatus__state--error">
+        {{ ux_icon('lucide:circle-alert') }} Échec de l'enregistrement
+        <button type="button" class="kd-savestatus__retry" data-action="save-status#retry">
+            {{ ux_icon('lucide:rotate-ccw') }} Réessayer
+        </button>
+    </span>
+    <span class="kd-savestatus__state kd-savestatus__state--refused">
+        {{ ux_icon('lucide:circle-alert') }} <span data-save-status-target="message">Non enregistré</span>
+    </span>
+</div>

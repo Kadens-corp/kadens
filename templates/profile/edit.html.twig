@@ -3,6 +3,7 @@
 {% block title %}Modifier ma fiche — Kadens{% endblock %}
 
 {% block body %}
+    {% import 'components/_term.html.twig' as terms %}
     <a href="{{ path('app_profile') }}" class="kd-backlink">
         {{ ux_icon('lucide:arrow-left') }} Mon profil
     </a>
@@ -11,7 +12,7 @@
         <div>
             <p class="kd-eyebrow kd-eyebrow--accent">Profil</p>
             <h1 class="kd-title">Fiche athlète</h1>
-            <p class="kd-lead">Tout est facultatif, la fiche se remplit à ton rythme. Poids et charges en kg, temps en <code>mm:ss</code> ou <code>h:mm:ss</code>.</p>
+            <p class="kd-lead">Tout est facultatif, la fiche se remplit à ton rythme. Poids et charges en kg, temps en <code>mm:ss</code> ou <code>h:mm:ss</code>. Ton email, ton mot de passe, l'affichage et tes appareils sont dans <a href="{{ path('app_profile_settings') }}">tes paramètres</a>.</p>
         </div>
     </div>
 
@@ -42,11 +43,11 @@
                 <span class="kd-formsection__icon kd-formsection__icon--act kd-act--gym">{{ ux_icon('lucide:dumbbell') }}</span>
                 <div>
                     <h2 class="kd-formsection__title">Records de force</h2>
-                    <p class="kd-formsection__hint">Charge maximale sur une répétition, maximum de répétitions au poids du corps, temps tenu en suspension. Ces valeurs sont un plancher : une série loguée qui les atteint met le record à jour toute seule. Le total SBD et le score DOTS en découlent.</p>
+                    <p class="kd-formsection__hint">Charge maximale sur une répétition, maximum de répétitions au poids du corps, temps tenu en suspension. Ces valeurs sont un plancher : une série saisie qui les atteint met le record à jour toute seule. Le total {{ terms.abbr('SBD') }} et le score {{ terms.abbr('DOTS') }} en découlent.</p>
                 </div>
             </header>
             <div class="kd-formgrid">
-                {{ form_row(form.squat1rmKg) }}
+                {{ form_row(form.squat1rmKg, { term: '1RM' }) }}
                 {{ form_row(form.bench1rmKg) }}
                 {{ form_row(form.deadlift1rmKg) }}
                 {{ form_row(form.ohp1rmKg) }}
@@ -71,7 +72,7 @@
                 {{ form_row(form.run10kSeconds) }}
                 {{ form_row(form.halfMarathonSeconds) }}
                 {{ form_row(form.marathonSeconds) }}
-                {{ form_row(form.cyclingFtpWatts) }}
+                {{ form_row(form.cyclingFtpWatts, { term: 'FTP' }) }}
                 {{ form_row(form.swim100mSeconds) }}
             </div>
         </section>
@@ -81,7 +82,7 @@
                 <span class="kd-formsection__icon kd-formsection__icon--act kd-act--run">{{ ux_icon('lucide:heart-pulse') }}</span>
                 <div>
                     <h2 class="kd-formsection__title">Cardio & zones d'intensité</h2>
-                    <p class="kd-formsection__hint">FC max et repos suffisent : les zones Z1–Z5 se calculent (Karvonen). Les bornes ci-dessous ne servent qu'à surcharger une zone (laisse « auto » sinon).</p>
+                    <p class="kd-formsection__hint">{{ terms.abbr('FC max') }} et repos suffisent : les zones Z1–Z5 se calculent (méthode {{ terms.abbr('Karvonen') }}). Les bornes ci-dessous ne servent qu'à remplacer le calcul pour une zone (laisse « auto » sinon).</p>
                 </div>
             </header>
             <div class="kd-formgrid">

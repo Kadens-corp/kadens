@@ -8,7 +8,6 @@ use App\Entity\Exercise;
 use App\Entity\User;
 use App\Enum\ActivityType;
 use App\Enum\Feeling;
-use App\Enum\StatsRange;
 use App\Repository\ExerciseRepository;
 use App\Repository\ImportedActivityRepository;
 use App\Repository\LoggedSetRepository;
@@ -50,6 +49,10 @@ use App\Repository\ScheduledWorkoutRepository;
  * (`EnduranceStats`). C'est ce qui rend « depuis le début » aussi tenable que
  * « quatre semaines » ; l'ancienne page remontait deux fois tout l'historique.
  *
+ * La **répartition par activité** ajoute trois projections scalaires, une ligne
+ * par (séance, activité) : la nature de chaque séance (`SessionNature`), lue
+ * comme sur `/profile/history`.
+ *
  * Le **ressenti** (forme, difficulté) ajoute une lecture scalaire, une ligne par
  * séance faite : sa valeur effective (Kadens, sinon la montre) se résout en SQL,
  * et ce sont ses moyennes, ses seaux et sa répartition qui se calculent ici.
@@ -57,6 +60,7 @@ use App\Repository\ScheduledWorkoutRepository;
  * @phpstan-import-type RegionShare from RegionBreakdown
  * @phpstan-import-type EnduranceRow from ImportedActivityRepository
  * @phpstan-import-type EndurancePair from EnduranceStats
+ * @phpstan-import-type ActivityTally from SessionNature
  *
  * @phpstan-type Adherence array{done: int, missed: int, planned: int, total: int, adherence: float|null}
  * @phpstan-type EnduranceVolume array{meters: int, seconds: int, sessions: int, derivedMeters: int, derivedSeconds: int, distanceLabel: string|null, durationLabel: string|null}
@@ -92,6 +96,7 @@ final class TrainingStats
         private readonly ExerciseNaming $naming,
         private readonly ImportedActivityRepository $importedActivities,
         private readonly EnduranceStats $enduranceStats,
+        private readonly SessionNature $sessionNature,
     ) {
     }
 
@@ -143,18 +148,26 @@ final class TrainingStats
                 $prescribed['coverage'] + ['unattached' => $this->importedActivities->countUnattachedEnduranceForOwnerIn($user, $period->start, $period->end)],
             ) + ['progression' => $this->enduranceProgression($prescribed['byDate'], $period)],
             'feeling' => $this->feeling($this->scheduled->doneRatingsForOwner($user, $period->start, $period->end), $period),
+            // Les séances de force faites sans réalisé : elles comptent en
+            // assiduité et pas en volume, et la vue d'ensemble doit le dire là où
+            // le tonnage s'affiche à zéro (#63). Un compte, jamais un comblement
+            // par le prescrit (CLAUDE.md §3).
+            'unloggedStrength' => $this->scheduled->countDoneStrengthWithoutLogForOwner($user, $period->start, $period->end),
             'bounds' => $bounds,
         ];
     }
 
     /**
-     * Les mois qui ont au moins un jour d'historique, le plus récent d'abord :
+     * Les mois de l'historique jusqu'au mois courant, le plus récent d'abord :
      * les options du sélecteur mensuel.
      *
      * Tous les mois de l'intervalle sont listés, y compris ceux sans séance —
      * un mois vide est une réponse (« je n'ai rien fait en août »), pas une
-     * option à masquer. La borne haute inclut le mois courant même s'il est
-     * encore vide, sinon la page n'aurait pas d'entrée pour « ce mois-ci ».
+     * option à masquer. La borne haute est **le mois courant, ni plus ni
+     * moins** (#119) : il est listé même vide, sinon la page n'aurait pas
+     * d'entrée pour « ce mois-ci », et rien au-delà, même si des séances y
+     * sont déjà posées. Un mois à venir n'a rien de fait à montrer, et le
+     * laisser en tête de liste en faisait l'option affichée par défaut.
      *
      * @return list<array{value: string, label: string}>
      */
@@ -163,8 +176,9 @@ final class TrainingStats
         $now = ($now ?? new \DateTimeImmutable())->setTime(0, 0);
         $bounds = $this->scheduled->dateBoundsForOwner($user);
 
-        $first = ($bounds['first'] ?? $now)->modify('first day of this month')->setTime(0, 0);
-        $last = max($bounds['last'] ?? $now, $now)->modify('first day of this month')->setTime(0, 0);
+        $last = $now->modify('first day of this month')->setTime(0, 0);
+        // Un historique qui ne contient que du futur commence au mois courant.
+        $first = min(($bounds['first'] ?? $now)->modify('first day of this month')->setTime(0, 0), $last);
 
         $months = [];
         for ($cursor = $last; $cursor >= $first; $cursor = $cursor->modify('-1 month')) {
@@ -172,6 +186,34 @@ final class TrainingStats
         }
 
         return $months;
+    }
+
+    /**
+     * Les années **révolues** de l'historique, la plus récente d'abord : les
+     * options annuelles du sélecteur.
+     *
+     * L'année en cours n'y figure pas : elle a sa fenêtre cliquable, « Cette
+     * année » (du 1er janvier à aujourd'hui). La lister ici aussi donnerait
+     * deux entrées presque identiques, l'une s'arrêtant aujourd'hui, l'autre au
+     * 31 décembre. Comme pour les mois, une année vide entre deux années
+     * actives reste listée : c'est une réponse.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    public function availableYears(User $user, ?\DateTimeImmutable $now = null): array
+    {
+        $bounds = $this->scheduled->dateBoundsForOwner($user);
+        if (null === $bounds) {
+            return [];
+        }
+
+        $current = (int) ($now ?? new \DateTimeImmutable())->format('Y');
+        $years = [];
+        for ($year = $current - 1; $year >= (int) $bounds['first']->format('Y'); --$year) {
+            $years[] = ['value' => (string) $year, 'label' => (string) $year];
+        }
+
+        return $years;
     }
 
     /**
@@ -422,11 +464,13 @@ final class TrainingStats
 
     /**
      * L'UNIQUE passe hydratante : le prescrit des séances faites, dont on tire
-     * le volume d'endurance et la répartition par activité — corrigés par le
-     * réel importé quand il existe, et complétés par le réalisé logué pour les
-     * séances sans prescrit. Les deux sortent du
-     * même parcours — les calculer séparément voulait dire charger deux fois le
-     * même historique, ce que faisait l'ancienne page.
+     * le volume d'endurance, corrigé par le réel importé quand il existe.
+     *
+     * La répartition par activité sort du même parcours, mais pas du prescrit
+     * hydraté : chaque séance faite s'y range sous sa NATURE (`SessionNature`,
+     * trois projections scalaires), une activité et une seule. C'est la règle
+     * de `/profile/history`, et la somme vaut le nombre de séances faites. Le
+     * parcours ne sert qu'à n'oublier aucune séance faite, vide comprise.
      *
      * Le prescrit d'une sortie se décrit en distance OU en durée : sans activité
      * importée, la grandeur absente se déduit de l'autre et de l'allure quand il
@@ -441,13 +485,18 @@ final class TrainingStats
      * couverture (combien de séances d'endurance faites, combien lues sur la
      * montre).
      *
-     * @return array{endurance: array<string, EnduranceRaw>, activities: list<array{activity: ActivityType, sessions: int}>, rows: list<EnduranceRow>, pairs: list<EndurancePair>, byDate: list<array{date: \DateTimeImmutable, activity: ActivityType, meters: int, seconds: int}>, coverage: array{sessions: int, withActivity: int}}
+     * @return array{endurance: array<string, EnduranceRaw>, activities: list<ActivityTally>, rows: list<EnduranceRow>, pairs: list<EndurancePair>, byDate: list<array{date: \DateTimeImmutable, activity: ActivityType, meters: int, seconds: int}>, coverage: array{sessions: int, withActivity: int}}
      */
     private function prescribedPass(User $user, StatsPeriod $period): array
     {
         $empty = ['meters' => 0, 'seconds' => 0, 'sessions' => 0, 'derivedMeters' => 0, 'derivedSeconds' => 0];
         $endurance = ['running' => $empty, 'cycling' => $empty, 'swimming' => $empty];
-        $activityCounts = [];
+        // La nature de chaque séance faite : UNE activité par séance, la même
+        // que celle de son aplat de couleur et de l'historique. Compter une
+        // séance dans chacune de ses activités faisait d'une séance de salle
+        // avec un échauffement au rameur deux séances faites (#62).
+        $natures = $this->sessionNature->dominantByScheduled($user, $period->start, $period->end);
+        $doneNatures = [];
 
         // Le réel importé : une seule lecture scalaire, repliée ici par séance
         // puis par activité. Les mêmes lignes nourrissent EnduranceStats.
@@ -464,35 +513,15 @@ final class TrainingStats
         $byDate = [];
         $coverage = ['sessions' => 0, 'withActivity' => 0];
 
-        // Les activités du réalisé logué, par séance : un second agrégat. Elles ne
-        // servent qu'aux séances sans prescrit — tout l'historique importé
-        // (`TrainingHistoryImporter`, `workout = null`) et les séances dont la
-        // source a été supprimée. Sans elles, ces séances de salle ne comptaient
-        // nulle part. Même règle que `TrainingHistory::dominantActivities()` :
-        // le réalisé complète le prescrit, il ne le corrige jamais.
-        $logged = [];
-        foreach ($this->scheduled->doneLoggedActivityCountsForOwner($user, $period->start, $period->end) as $row) {
-            $logged[$row['scheduledId']][$row['activity']->value] = true;
-        }
-
         foreach ($this->scheduled->findDoneWithContentForOwner($user, $period->start, $period->end) as $sw) {
             $workout = $sw->getWorkout();
             $id = (int) $sw->getId();
             $actual = $imported[$id] ?? [];
 
-            $activities = [];
-            foreach (null === $workout ? [] : $this->metrics->distinctActivities($workout) as $activity) {
-                $activities[$activity->value] = true;
-            }
-            if ([] === $activities) {
-                $activities = $logged[$id] ?? [];
-            }
-            foreach (array_keys($actual) as $key) {
-                $activities[$key] = true;
-            }
-            foreach (array_keys($activities) as $value) {
-                $activityCounts[$value] = ($activityCounts[$value] ?? 0) + 1;
-            }
+            // Toute séance faite a une entrée, même vide (`null`) : la somme de
+            // la répartition vaut alors le nombre de séances faites, celui de
+            // l'observance affichée à côté.
+            $doneNatures[] = $natures[$id] ?? null;
 
             // Séance libre ou source supprimée, sans activité rattachée : pas de
             // volume d'endurance à lire. Avec une activité, la séance libre
@@ -551,15 +580,9 @@ final class TrainingStats
             }
         }
 
-        arsort($activityCounts);
-        $activities = [];
-        foreach ($activityCounts as $value => $sessions) {
-            $activities[] = ['activity' => ActivityType::from((string) $value), 'sessions' => $sessions];
-        }
-
         return [
             'endurance' => $endurance,
-            'activities' => $activities,
+            'activities' => SessionNature::tally($doneNatures),
             'rows' => $rows,
             'pairs' => $pairs,
             'byDate' => $byDate,
@@ -735,7 +758,7 @@ final class TrainingStats
      */
     private function progression(array $byDate, StatsPeriod $period): array
     {
-        $weekly = \in_array($period->range, [StatsRange::FOUR_WEEKS, StatsRange::MONTH], true);
+        $weekly = $period->range->isWeekly();
 
         $totals = [];
         foreach ($byDate as $row) {
@@ -802,7 +825,7 @@ final class TrainingStats
      */
     private function feeling(array $rows, StatsPeriod $period): array
     {
-        $weekly = \in_array($period->range, [StatsRange::FOUR_WEEKS, StatsRange::MONTH], true);
+        $weekly = $period->range->isWeekly();
         $total = ['feeling' => [0, 0], 'rpe' => [0, 0]];
         $levels = array_fill(Feeling::VERY_WEAK->value, 5, 0);
         $buckets = [];
@@ -940,7 +963,7 @@ final class TrainingStats
      */
     private function enduranceProgression(array $byDate, StatsPeriod $period): array
     {
-        $weekly = \in_array($period->range, [StatsRange::FOUR_WEEKS, StatsRange::MONTH], true);
+        $weekly = $period->range->isWeekly();
 
         $first = null;
         $totals = [];

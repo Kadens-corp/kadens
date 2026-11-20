@@ -4,19 +4,21 @@
 
 {% block body %}
     {# Page publique d'un plan en lecture seule : réutilise le composant de rendu en
-       mode `public` (séances cliquables vers leur page publique), éventuellement
-       filtré sur une plage de semaines (`weeks`). Aucune action d'édition.
+       mode `public` (chaque case ouvre sa séance sous le jeton du plan, elle n'a
+       pas de lien à elle), éventuellement filtré sur une plage de semaines
+       (`weeks`). Aucune action d'édition.
 
        La barre ne porte que des gestes de VISITEUR (#58), comme la page publique
-       d'une séance : repartager ce lien (la plage comprise, d'où l'URL courante),
+       d'une séance : renvoyer ce lien (la plage comprise, d'où l'URL courante),
        et copier le plan chez soi — en entier, même depuis une plage. #}
     {% set shared = flat.template %}
     {# Comparaison par `id` : `owner` peut être un proxy Doctrine. #}
     {% set isOwner = app.user and shared.owner and app.user.id == shared.owner.id %}
 
+    {{ include('components/_public_banner.html.twig', {isOwner: isOwner}, with_context = false) }}
+
     <div class="kd-actionbar" data-controller="clipboard"
-         data-clipboard-url-value="{{ app.request.uri }}"
-         data-clipboard-title-value="{{ shared.title }}">
+         data-clipboard-url-value="{{ app.request.uri }}">
         <div class="kd-actionbar__end">
             {% if isOwner %}
                 <a href="{{ path('app_plan_template_show', {id: shared.id}) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
@@ -24,8 +26,8 @@
                 </a>
             {% elseif app.user %}
                 <form id="plan-copy-shared" method="post" hidden
-                      action="{{ path('app_plan_template_copy_shared', {slug: shared.slug}) }}">
-                    <input type="hidden" name="_token" value="{{ csrf_token('copy_shared_plan' ~ shared.slug) }}">
+                      action="{{ path('app_plan_template_copy_shared', {token: shared.shareToken}) }}">
+                    <input type="hidden" name="_token" value="{{ csrf_token('copy_shared_plan' ~ shared.shareToken) }}">
                 </form>
                 <button type="submit" form="plan-copy-shared" class="kd-btn kd-btn--secondary kd-btn--sm">
                     {{ ux_icon('lucide:copy') }} Copier dans mes plans
@@ -33,13 +35,13 @@
             {% else %}
                 {# Anonyme : route protégée en GET, qui le ramène ici une fois
                    connecté (cf. PlanTemplateController::copySharedEntry). #}
-                <a href="{{ path('app_plan_template_copy_shared_entry', {slug: shared.slug}) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
+                <a href="{{ path('app_plan_template_copy_shared_entry', {token: shared.shareToken}) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
                     {{ ux_icon('lucide:log-in') }} Se connecter pour le copier
                 </a>
             {% endif %}
 
-            <button type="button" class="kd-btn kd-btn--ghost kd-btn--sm" data-action="clipboard#share">
-                {{ ux_icon('lucide:share-2') }} Partager
+            <button type="button" class="kd-btn kd-btn--ghost kd-btn--sm" data-action="clipboard#copy">
+                {{ ux_icon('lucide:link-2') }} Copier le lien à envoyer
             </button>
             <span class="kd-actionbar__feedback" data-clipboard-target="feedback" role="status" aria-live="polite"></span>
         </div>

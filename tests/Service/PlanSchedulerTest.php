@@ -42,6 +42,26 @@ final class PlanSchedulerTest extends TestCase
         return new PlanScheduler($em, $repository);
     }
 
+    /**
+     * L'aperçu (#68) donne les décalages depuis le lundi de la semaine 1, triés :
+     * mercredi S1 = 2, lundi S2 = 7. Ajoutés au lundi du 2026-01-07, ils
+     * redonnent exactement les dates qu'`instantiate` pose (07/01 et 12/01).
+     */
+    public function testPlacementPreviewMatchesTheDatesInstantiateWouldPose(): void
+    {
+        $template = $this->makeTemplate();
+        $previews = $this->makeScheduler()->placementPreviews([$template], new User());
+
+        // Plan non persisté : id null, donc clé 0.
+        self::assertSame([0 => ['offsets' => [2, 7], 'placed' => false]], $previews);
+
+        $monday = new \DateTimeImmutable('2026-01-05');
+        $created = $this->makeScheduler()->instantiate($template, new User(), new \DateTimeImmutable('2026-01-07'));
+        foreach ($created as $i => $scheduled) {
+            self::assertEquals($monday->modify(sprintf('+%d days', $previews[0]['offsets'][$i])), $scheduled->getScheduledDate());
+        }
+    }
+
     public function testMapsWeekAndDayToRealDatesFromMidWeekStart(): void
     {
         // 2026-01-07 est un mercredi : l'ancre est le lundi de sa semaine ISO

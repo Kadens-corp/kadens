@@ -1,0 +1,212 @@
+{% extends 'base.html.twig' %}
+
+{#
+    Page Amis (#126) : demandes, amis, recherche, partage.
+
+    Ce qu'un ami voit est dit deux fois, parce que c'est ce qu'on accepte en
+    acceptant : dans l'accroche, et dans l'encart Partage (« Partagé » / « Jamais
+    partagé »). Si le périmètre du flux bouge (`ScheduledWorkoutRepository::
+    feedQuery()`), ces deux textes bougent avec lui.
+
+    Attend : received, sent (list<Friendship>), friendships (list<Friendship>
+    acceptées), latest (dernière séance partagée par id d'ami), hiddenCount,
+    query, found (User|null), foundRelation (Friendship|null).
+#}
+
+{% macro avatar(user) %}
+    <span class="kd-friend__avatar" aria-hidden="true">{{ user ? user.displayName|first|upper : '?' }}</span>
+{% endmacro %}
+
+{% block title %}Amis — Kadens{% endblock %}
+
+{% block body %}
+    {% import _self as ui %}
+    {% set me = app.user %}
+
+    <div class="kd-pagehead">
+        <div>
+            <p class="kd-eyebrow kd-eyebrow--accent">Amis</p>
+            <h1 class="kd-title">Tes amis</h1>
+            <p class="kd-lead">Un ami voit tes séances de salle faites dans son flux, et toi les siennes. Rien d'autre : ni ton profil, ni tes plans, ni tes objectifs.</p>
+        </div>
+        <a href="{{ path('app_friend_feed') }}" class="kd-btn kd-btn--secondary kd-btn--sm">
+            {{ ux_icon('lucide:rss') }} Ouvrir le flux
+        </a>
+    </div>
+
+    <div class="kd-friends">
+        <div class="kd-friends__main">
+            {% if received is not empty or sent is not empty %}
+                <section class="kd-friends__section" aria-labelledby="friends-requests">
+                    <h2 class="kd-friends__heading" id="friends-requests">Demandes</h2>
+                    <div class="kd-friends__stack">
+                        {% for request in received %}
+                            {% set other = request.otherParty(me) %}
+                            <article class="kd-friend kd-friend--card">
+                                {{ ui.avatar(other) }}
+                                <div class="kd-friend__body">
+                                    <h3 class="kd-friend__name">{{ other.displayName }}</h3>
+                                    <p class="kd-friend__meta">Reçue le {{ request.createdAt|date('d/m/Y') }}</p>
+                                </div>
+                                <div class="kd-friend__actions">
+                                    <form method="post" action="{{ path('app_friend_respond', {id: request.id}) }}">
+                                        <input type="hidden" name="_token" value="{{ csrf_token('friend_respond' ~ request.id) }}">
+                                        <input type="hidden" name="decision" value="accept">
+                                        <button type="submit" class="kd-btn kd-btn--primary kd-btn--sm">{{ ux_icon('lucide:user-check') }} Accepter</button>
+                                    </form>
+                                    <form method="post" action="{{ path('app_friend_respond', {id: request.id}) }}">
+                                        <input type="hidden" name="_token" value="{{ csrf_token('friend_respond' ~ request.id) }}">
+                                        <input type="hidden" name="decision" value="decline">
+                                        <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm">{{ ux_icon('lucide:user-x') }} Refuser</button>
+                                    </form>
+                                </div>
+                            </article>
+                        {% endfor %}
+
+                        {% for request in sent %}
+                            {% set other = request.otherParty(me) %}
+                            <article class="kd-friend kd-friend--card is-muted">
+                                {{ ui.avatar(other) }}
+                                <div class="kd-friend__body">
+                                    <div class="kd-friend__top">
+                                        <h3 class="kd-friend__name">{{ other.displayName }}</h3>
+                                        <span class="kd-friend__tag">{{ ux_icon('lucide:send') }} Envoyée</span>
+                                    </div>
+                                    <p class="kd-friend__meta">Envoyée le {{ request.createdAt|date('d/m/Y') }} · en attente de sa réponse</p>
+                                </div>
+                                <form method="post" action="{{ path('app_friend_remove', {id: request.id}) }}" class="kd-friend__actions">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('friend_remove' ~ request.id) }}">
+                                    <button type="submit" class="kd-btn kd-btn--ghost kd-btn--sm">Annuler</button>
+                                </form>
+                            </article>
+                        {% endfor %}
+                    </div>
+                </section>
+            {% endif %}
+
+            <section class="kd-friends__section" aria-labelledby="friends-list">
+                <h2 class="kd-friends__heading" id="friends-list">
+                    {{ friendships is empty ? 'Aucun ami' : friendships|length ~ ' ami' ~ (friendships|length > 1 ? 's') }}
+                </h2>
+
+                {% if friendships is empty %}
+                    <div class="kd-card">
+                        <div class="kd-empty">
+                            {{ ux_icon('lucide:users') }}
+                            <div>Personne pour l'instant. Cherche quelqu'un par son pseudo ou son email exact : quand il accepte, vos séances de salle faites arrivent dans vos flux.</div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="kd-friends__list">
+                        {% for friendship in friendships %}
+                            {% set friend = friendship.otherParty(me) %}
+                            {% set last = latest[friend.id] ?? null %}
+                            <article class="kd-friend">
+                                {{ ui.avatar(friend) }}
+                                <div class="kd-friend__body">
+                                    <h3 class="kd-friend__name">{{ friend.displayName }}</h3>
+                                    <p class="kd-friend__meta kd-friend__meta--text">
+                                        {% if last %}
+                                            {% set days = date('today').diff(date(last.date|date('Y-m-d'))).days %}
+                                            Dernière séance : <strong>{{ last.title }}</strong> ·
+                                            {{ days == 0 ? 'aujourd\'hui' : (days == 1 ? 'hier' : 'le ' ~ last.date|date('d/m/Y')) }}
+                                        {% else %}
+                                            Aucune séance partagée
+                                        {% endif %}
+                                    </p>
+                                </div>
+                                {% if last %}
+                                    <a href="{{ path('app_friend_feed', {ami: friend.id}) }}" class="kd-friend__link">
+                                        Ses séances {{ ux_icon('lucide:arrow-right') }}
+                                    </a>
+                                {% endif %}
+                                <form method="post" action="{{ path('app_friend_remove', {id: friendship.id}) }}"
+                                      onsubmit="return confirm({{ ('Retirer ' ~ friend.displayName ~ ' de tes amis ? Vous ne verrez plus vos séances.')|json_encode|e('html_attr') }});">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('friend_remove' ~ friendship.id) }}">
+                                    <button type="submit" class="kd-friend__remove" aria-label="Retirer {{ friend.displayName }}" title="Retirer">
+                                        {{ ux_icon('lucide:x') }}
+                                    </button>
+                                </form>
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+
+        <aside class="kd-friends__side">
+            <section class="kd-friends__panel" id="ajouter" aria-labelledby="friends-add">
+                <h3 class="kd-friends__paneltitle" id="friends-add">{{ ux_icon('lucide:user-plus') }} Ajouter un ami</h3>
+                <p class="kd-friends__hint">Pseudo ou email exact. La personne doit accepter.</p>
+
+                {# GET : chercher ne change rien. Recherche exacte, un compte au
+                   plus : pas d'annuaire parcourable (FriendController::index). #}
+                <form method="get" action="{{ path('app_friend_index') }}#ajouter" class="kd-friends__search" role="search">
+                    <label class="kd-sr-only" for="friend-search">Pseudo ou email</label>
+                    <div class="kd-inputgroup">
+                        {{ ux_icon('lucide:search') }}
+                        <input class="kd-input" type="search" id="friend-search" name="q" value="{{ query }}"
+                               autocomplete="off" autocapitalize="none" spellcheck="false"
+                               placeholder="Pseudo ou email">
+                    </div>
+                    <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">Chercher</button>
+                </form>
+
+                {% if query is not empty %}
+                    <div class="kd-friends__result" role="status">
+                        {% if found is null %}
+                            <p class="kd-friends__none">Aucun compte avec ce pseudo ou cet email. Il faut le pseudo exact, ou l'email du compte.</p>
+                        {% else %}
+                            <span class="kd-friends__found">{{ found.displayName }}</span>
+                            {% if foundRelation and foundRelation.accepted %}
+                                <span class="kd-friends__state">Déjà ami</span>
+                            {% elseif foundRelation and foundRelation.isRequester(me) %}
+                                <span class="kd-friends__state">Demande envoyée</span>
+                            {% else %}
+                                <form method="post" action="{{ path('app_friend_request') }}">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('friend_request') }}">
+                                    <input type="hidden" name="q" value="{{ query }}">
+                                    <button type="submit" class="kd-btn kd-btn--primary kd-btn--sm">
+                                        {{ ux_icon(foundRelation ? 'lucide:user-check' : 'lucide:send') }}
+                                        {{ foundRelation ? 'Accepter sa demande' : 'Demander' }}
+                                    </button>
+                                </form>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </section>
+
+            <section class="kd-friends__panel" id="partage" aria-labelledby="friends-share">
+                <h3 class="kd-friends__paneltitle" id="friends-share">{{ ux_icon('lucide:eye') }} Partage</h3>
+                <form method="post" action="{{ path('app_friend_sharing') }}">
+                    <input type="hidden" name="_token" value="{{ csrf_token('friend_sharing') }}">
+                    <input type="hidden" name="share" value="{{ me.shareWithFriends ? '0' : '1' }}">
+                    <button type="submit" class="kd-friends__switch" role="switch"
+                            aria-checked="{{ me.shareWithFriends ? 'true' : 'false' }}">
+                        <span class="kd-friends__switchlabel">Partager mes séances avec mes amis</span>
+                        <span class="kd-switch{{ me.shareWithFriends ? ' is-on' }}" aria-hidden="true"><span class="kd-switch__knob"></span></span>
+                    </button>
+                </form>
+                <p class="kd-friends__status">
+                    {{ me.shareWithFriends
+                        ? 'Activé'
+                        : 'Coupé · tes amis ne voient plus rien de toi, ni le nouveau ni l\'ancien' }}
+                </p>
+                <dl class="kd-friends__scope">
+                    <dt>Partagé</dt>
+                    <dd>Séances de salle faites, liste des exercices (perso compris), ressenti s'il est écrit.</dd>
+                    <dt>Jamais partagé</dt>
+                    <dd>Profil, plans, objectifs, séances prévues, cardio.</dd>
+                </dl>
+                {% if hiddenCount > 0 %}
+                    <p class="kd-friends__hidden">
+                        {{ ux_icon('lucide:lock') }}
+                        {{ hiddenCount }} séance{{ hiddenCount > 1 ? 's' }} masquée{{ hiddenCount > 1 ? 's' }} ·
+                        <a href="{{ path('app_friend_feed', {ami: 'moi'}) }}">Gérer</a>
+                    </p>
+                {% endif %}
+            </section>
+        </aside>
+    </div>
+{% endblock %}

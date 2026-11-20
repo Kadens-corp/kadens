@@ -8,7 +8,6 @@ use App\Enum\TrainingGoal;
 use Symfony\Component\Form\Extension\Core\Type\DateType;
 use Symfony\Component\Form\Extension\Core\Type\EnumType;
 use Symfony\Component\Form\Extension\Core\Type\IntegerType;
-use Symfony\Component\Form\Extension\Core\Type\NumberType;
 use Symfony\Component\Form\Extension\Core\Type\TextareaType;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\FormBuilderInterface;
@@ -16,7 +15,7 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 
 /**
  * Fiche athlète éditable. Tous les champs sont facultatifs (la fiche se remplit
- * progressivement). Unités normalisées : force en kg (NumberType), temps en
+ * progressivement). Unités normalisées : force en kg (WeightType), temps en
  * secondes via DurationType (saisie mm:ss / h:mm:ss).
  *
  * Les records de force saisis ici sont un **plancher**, pas la valeur affichée :
@@ -30,12 +29,12 @@ class ProfileType extends AbstractType
 {
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
+        // Charges au format français (« 74 », « 82,5 ») par WeightType (#97) :
+        // NumberType les rendait « 74.00 », selon la locale anglaise de l'app.
         $kg = static fn (string $label, string $placeholder): array => [
             'label' => $label,
             'required' => false,
-            'scale' => 2,
-            'html5' => true,
-            'attr' => ['inputmode' => 'decimal', 'step' => '0.5', 'min' => 0, 'placeholder' => $placeholder],
+            'attr' => ['inputmode' => 'decimal', 'placeholder' => $placeholder],
         ];
 
         $time = static fn (string $label, string $placeholder): array => [
@@ -76,7 +75,7 @@ class ProfileType extends AbstractType
                 'required' => false,
                 'attr' => ['inputmode' => 'numeric', 'min' => 0, 'placeholder' => 'ex. 178'],
             ])
-            ->add('weightKg', NumberType::class, $kg('Poids (kg)', 'ex. 74'))
+            ->add('weightKg', WeightType::class, $kg('Poids (kg)', 'ex. 74'))
             ->add('trainingYears', IntegerType::class, [
                 'label' => "Années d'entraînement",
                 'required' => false,
@@ -95,11 +94,11 @@ class ProfileType extends AbstractType
                 'attr' => ['rows' => 3, 'placeholder' => 'Quelques mots sur ta pratique…'],
             ])
             // --- Records de force (1RM, kg) ---
-            ->add('squat1rmKg', NumberType::class, $kg('Squat (1RM)', 'ex. 140'))
-            ->add('bench1rmKg', NumberType::class, $kg('Développé couché (1RM)', 'ex. 100'))
-            ->add('deadlift1rmKg', NumberType::class, $kg('Soulevé de terre (1RM)', 'ex. 180'))
-            ->add('ohp1rmKg', NumberType::class, $kg('Développé militaire (1RM)', 'ex. 60'))
-            ->add('weightedPullupKg', NumberType::class, $kg('Traction lestée (poids ajouté)', 'ex. 30'))
+            ->add('squat1rmKg', WeightType::class, $kg('Squat (1RM)', 'ex. 140'))
+            ->add('bench1rmKg', WeightType::class, $kg('Développé couché (1RM)', 'ex. 100'))
+            ->add('deadlift1rmKg', WeightType::class, $kg('Soulevé de terre (1RM)', 'ex. 180'))
+            ->add('ohp1rmKg', WeightType::class, $kg('Développé militaire (1RM)', 'ex. 60'))
+            ->add('weightedPullupKg', WeightType::class, $kg('Traction lestée (poids ajouté)', 'ex. 30'))
             // Des répétitions au milieu des kilos : au poids du corps, le record
             // est un compte, pas une charge. Une série lestée ne l'alimente pas.
             ->add('maxPullups', IntegerType::class, $reps('Tractions (max)', 'ex. 14'))

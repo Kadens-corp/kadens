@@ -38,14 +38,15 @@ use App\Entity\Workout;
  *   du propriétaire seul (`CLAUDE.md` §3) ; l'API est une vue de consultation de
  *   plus, elle tombe sous la même garde que l'export Excel, le flux ICS et la page
  *   publique. Ce qui sort, ce sont les notes *adressées à un lecteur* : la
- *   consigne d'un exercice prescrit, la note d'écart de la séance datée.
+ *   consigne d'un exercice prescrit, la consigne de la case du plan (#128), la
+ *   note d'écart de la séance datée.
  *
  * @phpstan-type ApiSetLine array{index: int, type: string, reps: int|null, weightKg: float|null, durationSeconds: int|null}
  * @phpstan-type ApiPrescribed array{prescribedId: int|null, exerciseId: int|null, name: string|null, type: string|null, summary: string, groupLabel: string|null, restSeconds: int|null, rpe: int|null, notes: string|null, sets: list<ApiSetLine>|null}
  * @phpstan-type ApiBlock array{id: int|null, label: string|null, role: string|null, rounds: int|null, exercises: list<ApiPrescribed>}
  * @phpstan-type ApiLoggedSet array{uuid: string, position: int|null, type: string, reps: int|null, weightKg: float|null, durationSeconds: int|null, rpe: int|null, completedAt: string|null}
  * @phpstan-type ApiLoggedExercise array{exerciseId: int|null, name: string|null, sourcePrescribedId: int|null, position: int|null, skipped: bool, notes: string|null, sets: list<ApiLoggedSet>}
- * @phpstan-type ApiScheduledWorkout array{uuid: string, date: string|null, status: string|null, title: string, freeform: bool, startedAt: string|null, endedAt: string|null, completionNotes: string|null, feeling: int|null, sessionRpe: int|null, plan: array{id: int|null, title: string|null}|null, blocks: list<ApiBlock>, log: list<ApiLoggedExercise>|null}
+ * @phpstan-type ApiScheduledWorkout array{uuid: string, date: string|null, status: string|null, title: string, freeform: bool, startedAt: string|null, endedAt: string|null, completionNotes: string|null, feeling: int|null, sessionRpe: int|null, plan: array{id: int|null, title: string|null}|null, planInstruction: string|null, blocks: list<ApiBlock>, log: list<ApiLoggedExercise>|null}
  */
 final class ScheduledWorkoutPayload
 {
@@ -84,6 +85,12 @@ final class ScheduledWorkoutPayload
             'feeling' => $scheduled->getFeeling(),
             'sessionRpe' => $scheduled->getSessionRpe(),
             'plan' => null === $plan ? null : ['id' => $plan->getId(), 'title' => $plan->getTitle()],
+            // La consigne de la case S3 · mardi (#95, #128), lue là où le web la
+            // lit : `PlanFlattener` décide seul de ce qui sort d'un plan, et
+            // rend null hors plan, case retirée ou note vide. Rien à recalculer
+            // ici. Pas de souci de fraîcheur : la fenêtre part en entier à chaque
+            // bootstrap, une consigne retouchée sur le web arrive au pull suivant.
+            'planInstruction' => $this->flattener->planInstruction($scheduled),
             // Une séance libre n'a pas de programme, pas un programme vide à
             // deviner : la liste est simplement sans bloc.
             'blocks' => null === $workout ? [] : $this->blocks($workout),

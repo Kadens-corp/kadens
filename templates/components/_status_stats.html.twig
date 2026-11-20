@@ -3,23 +3,29 @@
      - stats = {done, missed, planned, total, adherence}
        adherence = done / (done + missed), ou null si rien d'échu.
      - hero (bool, défaut false) : grand format pour le bloc du mois.
+     - pastOnly (bool, défaut false) : la fenêtre s'arrête à aujourd'hui
+       (« depuis le début »). Ses séances `planned` ne sont alors pas « à venir »
+       mais passées sans statut : elles se disent « à cocher », sinon on lit
+       « 0 prévue » à côté d'un mois qui en annonce six (#78).
    Couleur = statut (fait/prévu/manqué), seul cas où elle ne code pas l'activité. #}
 {% set settled = stats.done + stats.missed %}
+{% set pastOnly = pastOnly|default(false) %}
+{% set plannedLabel = pastOnly ? 'à cocher' : 'prévue' ~ (stats.planned > 1 ? 's') %}
 
 {% if stats.total == 0 %}
-    <p class="kd-observance__empty">{{ ux_icon('lucide:calendar-off') }} Aucune séance planifiée.</p>
+    <p class="kd-observance__empty">{{ ux_icon('lucide:calendar-off') }} {{ pastOnly ? "Aucune séance jusqu'à aujourd'hui." : 'Aucune séance planifiée.' }}</p>
 {% else %}
     <div class="kd-observance{{ hero|default(false) ? ' kd-observance--hero' }}">
         <div class="kd-observance__figure">
             <span class="kd-observance__pct">{{ stats.adherence is null ? '—' : (stats.adherence * 100)|round ~ '%' }}</span>
             <span class="kd-observance__cap">
-                Observance
-                <span class="kd-observance__sub">{{ stats.done }}/{{ settled }} séance{{ settled > 1 ? 's' : '' }} échue{{ settled > 1 ? 's' : '' }}</span>
+                Assiduité
+                <span class="kd-observance__sub">{{ stats.done }} faite{{ stats.done > 1 ? 's' }} sur {{ settled }} passée{{ settled > 1 ? 's' }}</span>
             </span>
         </div>
 
         {# Barre proportionnelle faite / manquée / prévue. #}
-        <div class="kd-obar" role="img" aria-label="{{ stats.done }} faites, {{ stats.missed }} manquées, {{ stats.planned }} prévues">
+        <div class="kd-obar" role="img" aria-label="{{ stats.done }} faites, {{ stats.missed }} manquées, {{ stats.planned }} {{ pastOnly ? 'à cocher' : 'prévues' }}">
             {% for key, count in {'done': stats.done, 'missed': stats.missed, 'planned': stats.planned} %}
                 {% if count > 0 %}
                     <span class="kd-obar__seg kd-obar__seg--{{ key }}" style="flex:{{ count }}"></span>
@@ -30,7 +36,7 @@
         <ul class="kd-olegend">
             <li class="kd-olegend__item kd-olegend__item--done"><span class="kd-olegend__dot"></span>{{ stats.done }} faite{{ stats.done > 1 ? 's' : '' }}</li>
             <li class="kd-olegend__item kd-olegend__item--missed"><span class="kd-olegend__dot"></span>{{ stats.missed }} manquée{{ stats.missed > 1 ? 's' : '' }}</li>
-            <li class="kd-olegend__item kd-olegend__item--planned"><span class="kd-olegend__dot"></span>{{ stats.planned }} prévue{{ stats.planned > 1 ? 's' : '' }}</li>
+            <li class="kd-olegend__item kd-olegend__item--planned"><span class="kd-olegend__dot"></span>{{ stats.planned }} {{ plannedLabel }}</li>
         </ul>
     </div>
 {% endif %}

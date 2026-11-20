@@ -2,6 +2,7 @@
 
 namespace App\Tests\Controller;
 
+use App\Http\NoLongerCoachException;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\ErrorHandler\Exception\FlattenException;
 use Symfony\Component\HttpFoundation\Request;
@@ -70,6 +71,34 @@ final class ErrorPageTest extends KernelTestCase
         ]);
 
         self::assertStringContainsString('/workout/999999', $html);
+    }
+
+    /**
+     * #81 : l'ancien coach qui rouvre la fiche d'un athlète lit pourquoi elle
+     * est fermée, pas « ce contenu ne t'appartient pas ». Le template reconnaît
+     * l'exception à sa classe : renommer la classe sans le template casse ici.
+     */
+    public function testForbiddenPageExplainsAnEndedCoaching(): void
+    {
+        self::bootKernel();
+        $container = static::getContainer();
+        $container->get(RequestStack::class)->push(Request::create('/coach/athlete/12'));
+        $twig = $container->get(Environment::class);
+
+        $render = static fn (\Throwable $error): string => $twig->render('@Twig/Exception/error403.html.twig', [
+            'exception' => FlattenException::createFromThrowable($error),
+            'status_code' => 403,
+            'status_text' => 'Forbidden',
+        ]);
+
+        $ended = $render(new NoLongerCoachException());
+        self::assertStringContainsString('Tu ne suis plus cet athlète', $ended);
+        self::assertStringContainsString('Anciens athlètes', $ended);
+        self::assertStringNotContainsString('ne t&#039;appartient pas', $ended);
+
+        $generic = $render(new HttpException(403));
+        self::assertStringContainsString('Accès refusé', $generic);
+        self::assertStringNotContainsString('Tu ne suis plus cet athlète', $generic);
     }
 
     /**

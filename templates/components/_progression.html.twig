@@ -80,7 +80,7 @@
                    posé une fois n'a rien à choisir. Formulaire GET, pas de JS. #}
                 {% if anchors|length > 1 %}
                     <form method="get" action="{{ path('app_plan_template_show', {id: planId}) }}" class="kd-prog__runpick">
-                        <label class="kd-prog__runlabel" for="prog-run">Instanciation</label>
+                        <label class="kd-prog__runlabel" for="prog-run">Mise en agenda</label>
                         <select class="kd-planweek__select" id="prog-run" name="run">
                             {% for a in anchors %}
                                 <option value="{{ a ? a|date('Y-m-d') : '' }}"{{ a == anchor ? ' selected' }}>
@@ -97,11 +97,11 @@
                 <span class="kd-prog__key"><span class="kd-prog__keybar"></span> Prévu</span>
                 <span class="kd-prog__key"><span class="kd-prog__keybar kd-prog__keybar--real"></span> Réalisé</span>
                 {% if adherence.logged == 0 and adherence.imported == 0 %}
-                    <span class="kd-prog__hint">Rien de remonté sur cette instanciation : ni série loguée, ni activité importée.</span>
+                    <span class="kd-prog__hint">Rien de remonté sur cette mise en agenda : ni série saisie, ni sortie importée.</span>
                 {% endif %}
             </p>
         {% else %}
-            <p class="kd-prog__lead">Ce que le plan prescrit, semaine par semaine. Aucune donnée de réalisé.</p>
+            <p class="kd-prog__lead">Ce que le plan prescrit, semaine par semaine. Aucun détail saisi.</p>
         {% endif %}
 
         {% if volume is not empty %}
@@ -166,7 +166,7 @@
                         {% if t.lowerIsBetter %}
                             <p class="kd-prog__hint">Barre haute = allure plus rapide.</p>
                         {% elseif adherence and not t.hasRealized %}
-                            <p class="kd-prog__hint">Rien de logué sur cet exercice pour cette instanciation.</p>
+                            <p class="kd-prog__hint">Rien de saisi sur cet exercice pour cette mise en agenda.</p>
                         {% endif %}
                     </figure>
                 {% endfor %}

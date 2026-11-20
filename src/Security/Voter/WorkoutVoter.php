@@ -20,8 +20,8 @@ use Symfony\Component\Security\Core\Authorization\Voter\Voter;
  *   qui permet au coach de travailler dans le compositeur normal, sans éditeur
  *   dédié, sur du contenu qui reste possédé par l'athlète.
  *
- * Le partage public en lecture (Phase 4) passera par une route slug dédiée,
- * pas par ce voter.
+ * Le partage public en lecture passe par le jeton de partage (#61,
+ * `PublicShareController`), pas par ce voter.
  *
  * @extends Voter<string, Workout>
  */

@@ -20,6 +20,7 @@
            l'historique doit suivre la langue choisie, et le snapshot ne peut pas
            porter les deux. Il reprend la main dès que l'exercice est supprimé. #}
         <span class="kd-exrow__name">{{ exercise_name(entry.exercise, entry.name) }}</span>
+        {{ include('components/_exercise_eye.html.twig', {exercise: entry.exercise}, with_context = false) }}
         {{ dev.chip(entry.status) }}
     </div>
 

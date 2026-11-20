@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus';
+import { ensureSaved, trackSave } from 'save-status';
 
 /*
  * Édition en ligne « semi-invisible » d'un champ texte.
@@ -12,6 +13,12 @@ import { Controller } from '@hotwired/stimulus';
  *
  * Générique : titre/description du plan (endpoint meta) et note de case (endpoint
  * item/note) l'utilisent avec des URLs différentes.
+ *
+ * Rien ne se voit à l'enregistrement : l'indicateur `save-status` le dit (#86).
+ * En cas d'échec, le texte affiché revient à la dernière valeur enregistrée (on
+ * n'affiche pas comme acquis ce qui ne l'est pas), et « Réessayer » renvoie la
+ * valeur saisie. Un refus du serveur (titre vide) n'est pas rejouable : il se lit
+ * dans la pastille.
  */
 export default class extends Controller {
     static targets = ['display'];
@@ -75,20 +82,33 @@ export default class extends Controller {
             return;
         }
 
-        try {
-            const body = new FormData();
-            body.append('_token', this.tokenValue);
-            body.append('field', this.fieldValue);
-            body.append('value', value);
-            const response = await fetch(this.urlValue, { method: 'POST', body, credentials: 'same-origin' });
-            if (!response.ok) {
-                this.finish(this.original); // refus serveur (ex. titre vide) : on restaure
-                return;
+        // On rend la main tout de suite, avec la valeur saisie : le champ n'attend
+        // plus le serveur pour se refermer. `latest` dit quelle saisie est la plus
+        // récente, pour qu'une réponse en retard n'écrase jamais la suivante.
+        const saved = this.original;
+        this.finish(value);
+        trackSave(this.element, async () => {
+            this.latest = value;
+            try {
+                const kept = await this.post(value);
+                if (!this.editing && this.latest === value) this.finish(kept);
+            } catch (error) {
+                // Pas acquis : on réaffiche la dernière valeur enregistrée.
+                if (!this.editing && this.latest === value) this.finish(saved);
+                throw error;
             }
-            this.finish(await response.text());
-        } catch (error) {
-            this.finish(this.original);
-        }
+        });
+    }
+
+    /** Poste la valeur ; rend celle que le serveur a retenue (nettoyée). */
+    async post(value) {
+        const body = new FormData();
+        body.append('_token', this.tokenValue);
+        body.append('field', this.fieldValue);
+        body.append('value', value);
+        const response = await fetch(this.urlValue, { method: 'POST', body, credentials: 'same-origin' });
+
+        return (await ensureSaved(response)).text();
     }
 
     cancel() {

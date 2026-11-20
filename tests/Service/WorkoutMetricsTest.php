@@ -25,7 +25,7 @@ final class WorkoutMetricsTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->metrics = new WorkoutMetrics(new WorkoutEstimator(), new SupersetGrouper(), new RegionBreakdown());
+        $this->metrics = new WorkoutMetrics(new WorkoutEstimator(new SupersetGrouper()), new SupersetGrouper(), new RegionBreakdown());
     }
 
     public function testDistinctActivitiesPutTheDominantFirst(): void
@@ -353,9 +353,29 @@ final class WorkoutMetricsTest extends TestCase
         );
         // La durée déléguée à l'estimateur doit retomber sur son total.
         self::assertSame(
-            (new WorkoutEstimator())->estimateSeconds($workout),
+            (new WorkoutEstimator(new SupersetGrouper()))->estimateSeconds($workout),
             $blocks[0]['seconds'] + $blocks[1]['seconds'],
         );
+    }
+
+    public function testOnlyTheLastSupersetMemberRestsInTheEstimate(): void
+    {
+        $bench = $this->prescribed(ActivityType::GYM, PrescriptionType::SETS_REPS, [TargetArea::CHEST]);
+        $bench->setSets(4)->setReps(10)->setRestSeconds(90);
+        $row = $this->prescribed(ActivityType::GYM, PrescriptionType::SETS_REPS, [TargetArea::BACK]);
+        $row->setSets(4)->setReps(10)->setRestSeconds(120);
+
+        $estimator = new WorkoutEstimator(new SupersetGrouper());
+        $workout = $this->workout([$this->block(BlockRole::MAIN, 1, [$bench, $row])]);
+
+        // Isolés : chacun repose. 4 × (60 + 90) + 4 × (60 + 120).
+        self::assertSame(1320, $estimator->estimateSeconds($workout));
+
+        // En superset : A1 enchaîne sur A2 sans repos, seul le repos de A2 compte,
+        // même si A1 garde le sien en base. 4 × 60 + 4 × (60 + 120).
+        $bench->setSupersetGroup(1);
+        $row->setSupersetGroup(1);
+        self::assertSame(960, $estimator->estimateSeconds($workout));
     }
 
     /**

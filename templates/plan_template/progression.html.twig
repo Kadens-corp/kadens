@@ -1,0 +1,193 @@
+{% extends 'base.html.twig' %}
+
+{# Outil de progression d'un plan (#110). Deux temps, sans JS :
+   1. le formulaire se renvoie sur lui-même en GET : choisir l'exercice, la valeur,
+      les semaines et le pas, et voir l'aperçu case par case ;
+   2. « Appliquer » renvoie EXACTEMENT ces valeurs en POST (champs cachés), puis
+      ramène à l'éditeur. Ce qu'on applique est ce qu'on a vu.
+   Contexte : template, targets (PlanProgression::targets), values (saisie brute),
+   preview (PlanProgression::preview ou null), error, fields. #}
+
+{% block title %}Faire progresser — {{ template.title }}{% endblock %}
+
+{% set dayFull = {1: 'lundi', 2: 'mardi', 3: 'mercredi', 4: 'jeudi', 5: 'vendredi', 6: 'samedi', 7: 'dimanche'} %}
+
+{% macro value(v, field) -%}
+    {%- if v is null -%}—{%- elseif field == 'weight' -%}{{ v|weight }}{%- else -%}{{ v|round }}{%- endif -%}
+{%- endmacro %}
+
+{% macro values(list, field) -%}
+    {%- import _self as m -%}
+    {%- for v in list %}{{ m.value(v, field) }}{{ not loop.last ? ' · ' }}{% endfor -%}
+    {%- if field == 'reps' and list is not empty %} rép.{% endif -%}
+{%- endmacro %}
+
+{% block body %}
+    {% import _self as m %}
+
+    <div class="kd-actionbar">
+        {{ include('components/_backlink.html.twig', {
+            fallback: 'app_plan_template_edit', params: {id: template.id}, kicker: 'Éditeur de plan'
+        }) }}
+    </div>
+
+    <div class="kd-pagehead">
+        <div>
+            <p class="kd-eyebrow">{{ template.title }}</p>
+            <h1 class="kd-title">Faire progresser un exercice</h1>
+            <p class="kd-lead">
+                Une charge ou un nombre de répétitions qui monte chaque semaine, dans toutes les cases
+                d'une même séance du plan, en une fois.
+            </p>
+        </div>
+    </div>
+
+    {% if targets is empty %}
+        <p class="kd-editsection__hint">
+            Aucun exercice de musculation dans ce plan pour l'instant. Ajoute une séance avec un exercice
+            en séries × répétitions ou en séries × durée, puis reviens ici.
+        </p>
+    {% else %}
+        {% set field = values.field ?? 'weight' %}
+        <section class="kd-editsection">
+            <form method="get" action="{{ path('app_plan_template_progression', {id: template.id}) }}" class="kd-form kd-progtool">
+                {% for name, token in back_carry() %}<input type="hidden" name="{{ name }}" value="{{ token }}">{% endfor %}
+
+                <div class="kd-field">
+                    <label class="kd-label" for="prog-target">Exercice</label>
+                    <select class="kd-input" id="prog-target" name="target">
+                        {% for lineage in targets %}
+                            <optgroup label="{{ lineage.root.title }}">
+                                {% for entry in lineage.exercises %}
+                                    <option value="{{ entry.key }}"{{ entry.key == (values.target ?? '') ? ' selected' }}>
+                                        {{ exercise_name(entry.exercise) }}
+                                    </option>
+                                {% endfor %}
+                            </optgroup>
+                        {% endfor %}
+                    </select>
+                    <p class="kd-progtool__hint">
+                        Groupés par séance : le même exercice dans une autre séance garde sa propre progression.
+                    </p>
+                </div>
+
+                <div class="kd-progtool__row">
+                    <div class="kd-field">
+                        <label class="kd-label" for="prog-field">Ce qui progresse</label>
+                        <select class="kd-input" id="prog-field" name="field">
+                            {% for f in fields %}
+                                <option value="{{ f.value }}"{{ f.value == field ? ' selected' }}>{{ f.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="kd-field">
+                        <label class="kd-label" for="prog-step">Par semaine</label>
+                        <input class="kd-input" id="prog-step" name="step" type="text" inputmode="decimal"
+                               value="{{ values.step ?? '' }}" placeholder="ex. 2,5" required>
+                    </div>
+                    <div class="kd-field">
+                        <label class="kd-label" for="prog-start">Départ</label>
+                        <input class="kd-input" id="prog-start" name="start" type="text" inputmode="decimal"
+                               value="{{ values.start ?? '' }}"
+                               placeholder="{{ preview ? 'actuel : ' ~ m.value(preview.start, field) : 'valeur actuelle' }}">
+                    </div>
+                </div>
+
+                <div class="kd-progtool__row">
+                    <div class="kd-field">
+                        <label class="kd-label" for="prog-from">De la semaine</label>
+                        <select class="kd-input" id="prog-from" name="from">
+                            {% for w in 1..template.durationWeeks %}
+                                <option value="{{ w }}"{{ w == (values.from ?? 1) ? ' selected' }}>Semaine {{ w }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="kd-field">
+                        <label class="kd-label" for="prog-to">À la semaine</label>
+                        <select class="kd-input" id="prog-to" name="to">
+                            {% for w in 1..template.durationWeeks %}
+                                <option value="{{ w }}"{{ w == (values.to ?? template.durationWeeks) ? ' selected' }}>Semaine {{ w }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <p class="kd-progtool__hint">
+                    Départ vide : la valeur que prescrit déjà la première semaine. Chaque semaine suivante
+                    ajoute le pas une fois : S1 à 60 kg, S2 à 62,5 kg, S3 à 65 kg. Un pas négatif fait descendre.
+                    L'échauffement et le nombre de séries ne changent pas.
+                </p>
+
+                <div>
+                    <button type="submit" class="kd-btn kd-btn--secondary">
+                        {{ ux_icon('lucide:eye') }} Voir l'aperçu
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        {% if error %}
+            <p class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ error }}</p>
+        {% endif %}
+
+        {% if preview %}
+            <section class="kd-editsection" aria-labelledby="prog-preview-title">
+                <p class="kd-editsection__title" id="prog-preview-title">
+                    Aperçu · {{ exercise_name(preview.exercise) }} · {{ preview.root.title }}
+                </p>
+
+                <div class="kd-settable__wrap">
+                    <table class="kd-settable kd-progtable">
+                        <thead>
+                            <tr>
+                                <th scope="col">Case</th>
+                                <th scope="col">Aujourd'hui</th>
+                                <th scope="col">Après</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in preview.rows %}
+                                <tr class="kd-progtable__row kd-progtable__row--{{ row.status }}">
+                                    <th scope="row">S{{ row.week }} · {{ dayFull[row.day] }}</th>
+                                    {% if row.status == 'absent' %}
+                                        <td colspan="2" class="kd-progtable__note">Pas cet exercice dans cette case.</td>
+                                    {% else %}
+                                        <td>{{ m.values(row.before, field) }}</td>
+                                        <td>
+                                            {% if row.status == 'change' %}
+                                                <strong>{{ m.values(row.after, field) }}</strong>
+                                            {% elseif row.status == 'done' %}
+                                                <span class="kd-progtable__note">
+                                                    Déjà faite le {{ row.doneOn|date('d/m') }} : elle garde ce qui était prévu.
+                                                </span>
+                                            {% else %}
+                                                <span class="kd-progtable__note">Inchangée</span>
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if preview.changes > 0 %}
+                    <form method="post" action="{{ path('app_plan_template_progression', {id: template.id}) }}" class="kd-progtool__apply">
+                        <input type="hidden" name="_token" value="{{ csrf_token('plan_progression' ~ template.id) }}">
+                        {% for name in ['target', 'field', 'from', 'to', 'step', 'start'] %}
+                            <input type="hidden" name="{{ name }}" value="{{ values[name] ?? '' }}">
+                        {% endfor %}
+                        <button type="submit" class="kd-btn kd-btn--primary">
+                            {{ ux_icon('lucide:check') }} Appliquer à {{ preview.changes }} case{{ preview.changes > 1 ? 's' }}
+                        </button>
+                        <span class="kd-progtool__hint">
+                            Le calendrier suit : les séances prévues issues de ces cases prennent les nouvelles valeurs.
+                        </span>
+                    </form>
+                {% else %}
+                    <p class="kd-editsection__hint">Rien à changer : le plan prescrit déjà ces valeurs.</p>
+                {% endif %}
+            </section>
+        {% endif %}
+    {% endif %}
+{% endblock %}

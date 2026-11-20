@@ -3,23 +3,22 @@
 {% block title %}Éditer — {{ template.title }}{% endblock %}
 
 {% block body %}
-    {% for message in app.flashes('success') %}
-        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-    {% for message in app.flashes('error') %}
-        <p class="kd-flash kd-flash--error" role="alert">{{ ux_icon('lucide:x') }} {{ message }}</p>
-    {% endfor %}
-
     <div class="kd-actionbar">
-        <a href="{{ path('app_plan_template_index') }}" class="kd-backlink">
-            {{ ux_icon('lucide:arrow-left') }} Mes plans
-        </a>
+        {{ include('components/_backlink.html.twig', {
+            fallback: 'app_plan_template_index', kicker: 'Mes plans', owner: template.owner
+        }) }}
         <div class="kd-actionbar__end">
-            <a href="{{ path('app_plan_template_show', {id: template.id}) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
+            <a href="{{ path('app_plan_template_show', {id: template.id}|merge(back_carry())) }}" class="kd-btn kd-btn--secondary kd-btn--sm">
                 {{ ux_icon('lucide:arrow-right') }} Voir le plan
             </a>
+            {{ include('components/_help.html.twig', {topic: 'plan', title: 'Comment marche un plan'}, with_context = false) }}
         </div>
     </div>
+
+    {# Plan d'un athlète édité par son coach : à qui il est (#64). #}
+    {{ include('components/_owner_banner.html.twig', {owner: template.owner, kind: 'Plan'}, with_context = false) }}
+    {# Et dans l'autre sens, ce qui vient du coach, chez l'athlète (#80). #}
+    {{ include('components/_added_by.html.twig', {by: template.addedBy, banner: true, on: template.createdAt}, with_context = false) }}
 
     {# En-tête à édition en ligne : cliquer le titre ou la description pour les
        modifier (contrôleur `inline-edit`, champs semi-invisibles). C'est le seul
@@ -51,14 +50,17 @@
                data-value="{{ template.description }}"
                data-action="click->inline-edit#start"
                title="Cliquer pour modifier">{{ template.description ?: '+ Ajouter une description' }}</p>
+            {# Le coach écrit ici pour l'athlète, pas pour lui (#65). #}
+            {{ include('components/_visible_to.html.twig', {owner: template.owner}, with_context = false) }}
 
-            {# Coach sur le plan d'un athlète : à qui il est, et ce que fait la pose
-               d'une de ses propres séances (#58). #}
+            {# Coach sur le plan d'un athlète : ce que fait la pose d'une de ses
+               propres séances (#58), et pourquoi elle quitte ensuite « Moi »
+               (#112). À qui est le plan, le bandeau propriétaire le dit déjà (#64). #}
             {% if composingFor %}
                 <p class="kd-editsection__hint">
-                    {{ include('components/_owner_badge.html.twig', {owner: composingFor}) }}
-                    Ses séances et les tiennes sont dans la palette. Une des tiennes, posée ici,
-                    est d'abord copiée dans sa bibliothèque.
+                    La liste des séances réunit les siennes et les tiennes. Ajouter une des
+                    tiennes la copie d'abord dans ses séances. Ensuite, seule la copie reste
+                    dans la liste, marquée « Copie de la tienne ».
                 </p>
             {% endif %}
         </div>
@@ -66,7 +68,8 @@
 
     {# « Donner ce plan à » (#58) : le propriétaire le donne à un de ses athlètes,
        sans passer par la fiche coach. Il change de propriétaire, le coach reste
-       co-éditeur. Refusé pour un plan déjà posé au calendrier (cf. assign).
+       co-éditeur tant que la relation dure (#81) : la fin de relation lui retire
+       le plan comme le reste. Refusé pour un plan déjà posé au calendrier (cf. assign).
 
        Formulé comme une ACTION, jamais comme un état : aucun athlète n'est
        présélectionné (« Choisir un athlète… »), sinon le bandeau se lisait
@@ -75,14 +78,14 @@
     {% if assignableAthletes is not empty %}
         {% if onCalendar %}
             <p class="kd-editsection__hint">
-                Ce plan est déjà sur ton calendrier : il ne peut plus être donné à un athlète.
+                Ce plan est déjà sur ton calendrier : il ne peut plus être transféré à un athlète.
                 Pour qu'il en ait un, donne-lui une copie depuis sa fiche.
             </p>
         {% else %}
             <form method="post" action="{{ path('app_plan_template_assign', {id: template.id}) }}" class="kd-sharerange"
-                  onsubmit="return confirm('Donner ce plan à ' + this.athlete.selectedOptions[0].text + ' ? Il deviendra le sien, tu resteras co-éditeur. Tes notes privées sur le plan seront effacées.');">
+                  onsubmit="return confirm('Transférer ce plan à ' + this.athlete.selectedOptions[0].text + ' ? Il deviendra le sien, tu resteras co-éditeur tant que tu l\'entraînes. Tes notes privées sur le plan seront effacées.');">
                 <input type="hidden" name="_token" value="{{ csrf_token('plan_assign' ~ template.id) }}">
-                <label class="kd-sharerange__label" for="plan_assign_athlete">Donner ce plan à&nbsp;:</label>
+                <label class="kd-sharerange__label" for="plan_assign_athlete">Transférer ce plan à&nbsp;:</label>
                 <select class="kd-planweek__select" id="plan_assign_athlete" name="athlete" required>
                     <option value="" selected disabled>Choisir un athlète…</option>
                     {% for athlete in assignableAthletes %}
@@ -90,7 +93,7 @@
                     {% endfor %}
                 </select>
                 <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">
-                    {{ ux_icon('lucide:user-plus') }} Donner
+                    {{ ux_icon('lucide:user-plus') }} Transférer
                 </button>
             </form>
         {% endif %}
@@ -105,6 +108,9 @@
         token: csrf_token('plan_meta' ~ template.id),
     }, with_context = false) }}
 
+    {# Le pendant côté coach : ses notes privées sur l'athlète (#65). #}
+    {{ include('components/_coach_notes.html.twig', {coaching: coachRelation}, with_context = false) }}
+
     {# À quoi sert ce plan. Conteneur cible d'un Turbo Stream : les mutations de
        rattachement ne touchent que son CONTENU (action="update"), l'id survit. #}
     <div id="plan-goals">
@@ -117,14 +123,28 @@
        #plan-grid (action="update"), la modale et le contrôleur survivent. #}
     <section class="kd-editsection" data-controller="plangrid"
              data-plangrid-grid-url-value="{{ path('app_plan_template_grid', {id: template.id}) }}">
-        <p class="kd-editsection__title">Trame</p>
-        <p class="kd-editsection__hint">
-            Le « + » d'un jour ouvre la palette sur cette case : taper une séance la
-            pose. À la souris, on peut aussi armer une séance puis tamponner les cases,
-            ou la glisser directement. Une séance posée s'ouvre en édition rapide (sa
-            progression est propre à cette case, les autres ne bougent pas), et son
-            menu porte le reste : déplacer, retirer.
+        <p class="kd-editsection__title">Grille du plan</p>
+        {# Aide en trois gestes (#67) : le vocabulaire de l'interface (armer,
+           tamponner, palette) n'a pas sa place à l'écran. #}
+        <ol class="kd-editsection__hint kd-planhelp">
+            <li>Choisis une séance dans la liste des séances.</li>
+            <li>Clique sur les jours où tu veux la faire. Le « + » d'un jour y ajoute une séance directement.</li>
+            <li>Clique sur une case pour l'ajuster. Ça ne change que cette case. Son menu permet de la déplacer, la copier ou la retirer.</li>
+        </ol>
+        {# La progression d'un exercice sur toutes ses semaines en un geste (#110),
+           au lieu d'une édition par case. Lien toujours là : la trame se remplit
+           par streams sans recharger cette partie de la page, la page de l'outil
+           dit elle-même quand il n'y a rien à faire progresser. #}
+        <p class="kd-planprog">
+            <a href="{{ path('app_plan_template_progression', {id: template.id}|merge(back_to('plan-edit', template.id))) }}"
+               class="kd-btn kd-btn--secondary kd-btn--sm">
+                {{ ux_icon('lucide:trending-up') }} Faire progresser un exercice
+            </a>
+            <span class="kd-editsection__hint">« +2,5 kg par semaine », sur toutes les cases d'une séance.</span>
         </p>
+        {# Coach sur le plan de son athlète : la note d'une case est une consigne
+           qu'il lira, pas un pense-bête (#65). #}
+        {{ include('components/_visible_to.html.twig', {owner: template.owner, what: 'Les consignes de case'}, with_context = false) }}
         {# `kd-libsheet` : sous 900px la palette n'est plus un volet empilé au-dessus
            de la trame mais une feuille qui monte du bas, ouverte sur une case précise
            (même mécanique que la bibliothèque du compositeur, cf. components.css). #}
@@ -144,21 +164,46 @@
         </div>
 
         {# Mini-modale d'édition rapide : le panneau des exercices de la copie locale
-           est chargé en fetch dans #quick-panel, puis re-rendu par Turbo Stream à
-           chaque enregistrement. data-turbo="false" : Turbo n'intercepte aucun
-           formulaire de la modale, le contrôleur applique lui-même les streams. #}
+           est chargé en fetch dans #quick-panel ; chaque champ s'y enregistre seul,
+           comme au compositeur (#86). data-turbo="false" : Turbo n'intercepte aucun
+           formulaire de la modale, le contrôleur applique lui-même les streams.
+           `save-status` : la modale a son propre indicateur d'enregistrement,
+           celui de la page est sous le voile. Il reste affiché après « Enregistré »
+           (`hide-after` à 0) : c'est lui qu'on regarde avant de fermer.
+           Le titre dit QUELLE case on édite (« S2 · mardi · Fractionné 6 x 400 m »,
+           #94) : sans lui, rien ne distingue la semaine 2 de la semaine 3 d'une même
+           séance. Posé par `plangrid#edit` dès l'ouverture, avant le chargement. #}
         <dialog class="kd-modal kd-modal--quick" data-plangrid-target="dialog" data-turbo="false"
-                data-action="click->plangrid#backdrop">
+                data-controller="save-status" data-save-status-hide-after-value="0"
+                data-action="click->plangrid#backdrop" aria-labelledby="quick-modal-title">
             <div class="kd-modal__card kd-modal__card--quick">
                 <header class="kd-modal__head">
-                    <span class="kd-modal__title">{{ ux_icon('lucide:sliders-horizontal') }} Édition rapide</span>
+                    {# La case (« S2 · mardi », condensé capitales) puis le titre de la
+                       séance, en casse normale : c'est du contenu saisi. Seul sur sa
+                       ligne avec la croix, il ne se fait plus écraser par les actions.
+                       Le titre se renomme ici même (#93) : un clic l'ouvre en saisie,
+                       `plangrid#edit` y pose l'adresse et le jeton de la case. #}
+                    <h2 class="kd-modal__title kd-quickhead" id="quick-modal-title">
+                        {{ ux_icon('lucide:sliders-horizontal') }}
+                        <span class="kd-quickhead__cell" data-plangrid-target="heading">Édition rapide</span>
+                        <span class="kd-quickhead__sep" aria-hidden="true">·</span>
+                        <span class="kd-quickhead__title kd-inlineedit"
+                              data-plangrid-target="headingTitle"
+                              data-controller="inline-edit"
+                              data-inline-edit-field-value="title"
+                              data-inline-edit-target="display"
+                              data-action="click->inline-edit#start keydown.enter->inline-edit#start"
+                              role="button" tabindex="0"
+                              title="Cliquer pour renommer cette case"></span>
+                    </h2>
+                    <button type="button" class="kd-modal__close" data-action="plangrid#close" aria-label="Fermer">
+                        {{ ux_icon('lucide:x') }}
+                    </button>
                     <div class="kd-modal__headactions">
+                        {{ include('components/_save_status.html.twig', {inline: true}, with_context = false) }}
                         <a data-plangrid-target="fullLink" href="#" class="kd-btn kd-btn--secondary kd-btn--sm">
-                            {{ ux_icon('lucide:square-pen') }} Édition complète
+                            {{ ux_icon('lucide:square-pen') }} Ouvrir dans l'éditeur de séance
                         </a>
-                        <button type="button" class="kd-modal__close" data-action="plangrid#close" aria-label="Fermer">
-                            {{ ux_icon('lucide:x') }}
-                        </button>
                     </div>
                 </header>
                 <div id="quick-panel" class="kd-quickedit" data-plangrid-target="panel"></div>

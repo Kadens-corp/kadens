@@ -4,11 +4,15 @@ namespace App\Controller;
 
 use App\Entity\Goal;
 use App\Entity\GoalBlock;
+use App\Entity\PlanItem;
 use App\Entity\PlanTemplate;
 use App\Entity\Workout;
+use App\Repository\PlanTemplateRepository;
+use App\Repository\WorkoutRepository;
 use App\Service\GoalPhotoStorage;
 use App\Service\GoalStory;
 use App\Service\PlanFlattener;
+use App\Service\ShareLink;
 use App\Service\WorkoutMetrics;
 use Symfony\Bridge\Doctrine\Attribute\MapEntity;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -16,42 +20,43 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Partage lecture publique (Phase 4). Sert une vue lecture seule d'une séance OU
- * d'un plan via son slug, sans authentification et sans aucune action d'édition.
+ * Pages publiques : une vue lecture seule, sans authentification et sans aucune
+ * action d'édition. Tout reste sous le préfixe `/s` (hors access_control).
  *
- * L'accès n'est pas régi par les voters : le lien slug vaut autorisation de
- * lecture. L'édition reste réservée au propriétaire par ailleurs. Tout reste sous
- * le préfixe `/s` (hors access_control), donc anonyme-accessible.
+ * **Privé par défaut, partout.** Une séance ou un plan n'a de page publique que
+ * si son propriétaire a ouvert le partage par lien (#61, `ShareLink`) : l'adresse
+ * porte alors un jeton aléatoire, qui vaut à lui seul autorisation de lecture. Un
+ * jeton inconnu et un partage arrêté rendent la même réponse (le jeton effacé
+ * n'existe simplement plus) : rien ne confirme qu'un contenu a existé. Les voters
+ * n'interviennent pas, l'édition reste au propriétaire par ailleurs.
  *
- * **Le récit d'objectif est l'exception opt-in** (#42) : un objectif est privé,
- * son slug n'existe qu'après une première publication, et il ne vaut lecture que
- * tant que `publishedAt` est posé. Dépublié, la page et ses photos rendent 404 —
- * le même code qu'un slug inconnu, pour ne rien confirmer.
+ * Une case de plan (copie `planLocal`) n'a jamais de lien à elle : elle se lit
+ * sous le jeton de son plan, et seulement lui.
+ *
+ * Le récit d'objectif suit la même règle opt-in depuis #42, avec son slug : un
+ * objectif est privé, son slug n'existe qu'après une première publication, et il
+ * ne vaut lecture que tant que `publishedAt` est posé.
  */
 final class PublicShareController extends AbstractController
 {
-    #[Route('/s/{slug}', name: 'app_public_share', methods: ['GET'])]
-    public function workout(
-        #[MapEntity(mapping: ['slug' => 'slug'])] Workout $workout,
-        PlanFlattener $planFlattener,
-        WorkoutMetrics $metrics,
-    ): Response {
-        // Mêmes repères qu'en interne : la synthèse est dérivée du contenu déjà
-        // publié, elle n'expose rien de plus que la séance elle-même.
-        return $this->render('public_share/workout.html.twig', [
-            'flat' => $planFlattener->flattenWorkout($workout),
-            'summary' => $metrics->summary($workout),
-            'blockStats' => $metrics->blockBreakdown($workout),
-        ]);
+    public function __construct(
+        private readonly WorkoutRepository $workoutRepository,
+        private readonly PlanTemplateRepository $planTemplateRepository,
+        private readonly PlanFlattener $planFlattener,
+    ) {
     }
 
-    #[Route('/s/plan/{slug}', name: 'app_public_share_plan', methods: ['GET'])]
-    public function plan(
-        #[MapEntity(mapping: ['slug' => 'slug'])] PlanTemplate $template,
-        PlanFlattener $planFlattener,
-    ): Response {
+    #[Route('/s/{token}', name: 'app_public_share', methods: ['GET'], requirements: ['token' => ShareLink::TOKEN])]
+    public function workout(string $token, WorkoutMetrics $metrics): Response
+    {
+        return $this->renderWorkout($this->sharedWorkout($token), $metrics);
+    }
+
+    #[Route('/s/plan/{token}', name: 'app_public_share_plan', methods: ['GET'], requirements: ['token' => ShareLink::TOKEN])]
+    public function plan(string $token): Response
+    {
         return $this->render('public_share/plan.html.twig', [
-            'flat' => $planFlattener->flattenPlanTemplate($template),
+            'flat' => $this->planFlattener->flattenPlanTemplate($this->sharedPlan($token)),
             'weeks' => null,
         ]);
     }
@@ -59,14 +64,14 @@ final class PublicShareController extends AbstractController
     /**
      * Partage d'une plage de semaines : `{range}` = `2-4` ou `3`. Filtre la grille
      * sur ces semaines (bornées à la durée du plan). Stateless : la plage vit dans
-     * l'URL, aucun stockage. 404 si la plage est vide/hors trame.
+     * l'URL, aucun stockage. C'est un filtre, pas une autorisation : le lien reste
+     * celui du plan entier. 404 si la plage est vide/hors trame.
      */
-    #[Route('/s/plan/{slug}/semaines/{range}', name: 'app_public_share_plan_weeks', methods: ['GET'], requirements: ['range' => '\d+(?:-\d+)?'])]
-    public function planWeeks(
-        #[MapEntity(mapping: ['slug' => 'slug'])] PlanTemplate $template,
-        string $range,
-        PlanFlattener $planFlattener,
-    ): Response {
+    #[Route('/s/plan/{token}/semaines/{range}', name: 'app_public_share_plan_weeks', methods: ['GET'], requirements: ['token' => ShareLink::TOKEN, 'range' => '\d+(?:-\d+)?'])]
+    public function planWeeks(string $token, string $range): Response
+    {
+        $template = $this->sharedPlan($token);
+
         $durationWeeks = (int) $template->getDurationWeeks();
         [$fromRaw, $toRaw] = str_contains($range, '-')
             ? array_map('intval', explode('-', $range, 2))
@@ -79,9 +84,28 @@ final class PublicShareController extends AbstractController
         }
 
         return $this->render('public_share/plan.html.twig', [
-            'flat' => $planFlattener->flattenPlanTemplate($template),
+            'flat' => $this->planFlattener->flattenPlanTemplate($template),
             'weeks' => range($from, $to),
         ]);
+    }
+
+    /**
+     * Une case d'un plan partagé, lue sous le jeton du plan. C'est la seule
+     * porte vers une copie `planLocal` : le lien du plan l'ouvre, elle n'en a pas.
+     * Une case d'un autre plan rend 404, comme un jeton inconnu.
+     */
+    #[Route('/s/plan/{token}/seance/{item}', name: 'app_public_share_plan_item', methods: ['GET'], requirements: ['token' => ShareLink::TOKEN, 'item' => '\d+'])]
+    public function planItem(string $token, int $item, WorkoutMetrics $metrics): Response
+    {
+        $template = $this->sharedPlan($token);
+
+        $planItem = $template->getPlanItems()->findFirst(static fn (int $key, PlanItem $candidate): bool => $candidate->getId() === $item);
+        $workout = $planItem?->getWorkout();
+        if (null === $planItem || null === $workout) {
+            throw $this->createNotFoundException();
+        }
+
+        return $this->renderWorkout($workout, $metrics, $template);
     }
 
     /**
@@ -123,5 +147,36 @@ final class PublicShareController extends AbstractController
         $response->setMaxAge(3600);
 
         return $response;
+    }
+
+    /**
+     * Mêmes repères qu'en interne : la synthèse est dérivée du contenu déjà
+     * publié, elle n'expose rien de plus que la séance elle-même.
+     */
+    private function renderWorkout(Workout $workout, WorkoutMetrics $metrics, ?PlanTemplate $plan = null): Response
+    {
+        return $this->render('public_share/workout.html.twig', [
+            'flat' => $this->planFlattener->flattenWorkout($workout),
+            'summary' => $metrics->summary($workout),
+            'blockStats' => $metrics->blockBreakdown($workout),
+            'plan' => $plan,
+        ]);
+    }
+
+    /**
+     * Une seule réponse pour « jamais partagée », « partage arrêté » et « jeton
+     * inventé » : c'est la même recherche qui échoue. `planLocal` en garde-fou,
+     * une case ne devant jamais porter de jeton (`ShareLink::open` le refuse).
+     */
+    private function sharedWorkout(string $token): Workout
+    {
+        return $this->workoutRepository->findOneBy(['shareToken' => $token, 'planLocal' => false])
+            ?? throw $this->createNotFoundException();
+    }
+
+    private function sharedPlan(string $token): PlanTemplate
+    {
+        return $this->planTemplateRepository->findOneBy(['shareToken' => $token])
+            ?? throw $this->createNotFoundException();
     }
 }

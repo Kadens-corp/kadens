@@ -35,6 +35,9 @@
     {% set subject = subject|default(null) %}
     {% set historyPath = subject ? path('app_coach_athlete_history', {id: subject.id}) : path('app_profile_history') %}
     {% set logPath = subject ? path('app_coach_athlete_log', {id: subject.id}) : path('app_profile_log') %}
+    {# Même règle que l'historique : depuis les stats d'un athlète, le retour
+       d'une séance ou d'un plan vise sa fiche (#64). #}
+    {% set back = subject ? back_to('athlete', subject.id) : {} %}
     {% set backPath = subject ? path('app_coach_athlete', {id: subject.id}) : path('app_profile') %}
     {% set vol = stats.volume %}
     {% set reg = stats.regularity %}
@@ -53,6 +56,11 @@
                 {%- if subject %}{{ subject.displayName }} · {% endif -%}
                 {{ period.label }}
             </p>
+            {# Ce que la page compte et d'où vient chaque chiffre (#73) : une
+               séance faite sans détail compte ici, pas au journal. #}
+            <p class="kd-pagehead__scope">
+                Les chiffres des séances faites sur la période choisie. Une séance marquée faite compte ici même sans détail. Les charges et le tonnage, eux, ne viennent que du détail saisi dans <a href="{{ path('app_install') }}">l'app Kadens</a>.
+            </p>
         </div>
         <div class="kd-actionbar__end">
             {# L'historique n'a pas de fenêtre : il n'hérite donc pas du `?range=`
@@ -70,7 +78,7 @@
     </div>
 
     {{ include('profile/_stats_tabs.html.twig', {tab: tab, tabs: tabs, period: period, subject: subject}) }}
-    {{ include('profile/_stats_range.html.twig', {period: period, ranges: ranges, months: months, subject: subject, tab: tab}) }}
+    {{ include('profile/_stats_range.html.twig', {period: period, ranges: ranges, months: months, years: years, subject: subject, tab: tab}) }}
 
     {% if tab.value == 'overview' %}
         {# ============================== BANDEAU DE TÊTE ========================= #}
@@ -80,7 +88,7 @@
         <div class="kd-grid kd-grid--4 kd-section__block">
             {% set headline = [
                 {icon: 'lucide:calendar-check', value: reg.sessions, label: 'séance' ~ (reg.sessions > 1 ? 's') ~ ' faite' ~ (reg.sessions > 1 ? 's')},
-                {icon: 'lucide:target', value: stats.adherence.adherence is null ? '—' : (stats.adherence.adherence * 100)|round ~ ' %', label: 'observance'},
+                {icon: 'lucide:target', value: stats.adherence.adherence is null ? '—' : (stats.adherence.adherence * 100)|round ~ ' %', label: 'assiduité'},
                 {icon: 'lucide:dumbbell', value: vol.gym.tonnageLabel, label: 'tonnage soulevé'},
                 {icon: 'lucide:layers', value: vol.gym.workingSets, label: 'série' ~ (vol.gym.workingSets > 1 ? 's') ~ ' de travail'},
             ] %}
@@ -94,6 +102,20 @@
                 </div>
             {% endfor %}
         </div>
+
+        {# Sous les quatre repères, parce que c'est là que « 1 séance faite » côtoie
+           « 0 kg » : la seule place où l'écart se lit, donc la seule où l'expliquer
+           sert. L'explication vivait dans l'onglet Salle, qu'on n'ouvre pas quand
+           on croit à un bug (#63). #}
+        {% if stats.unloggedStrength > 0 %}
+            {{ include('components/_log_in_app.html.twig', {
+                count: stats.unloggedStrength,
+                third: subject is not null,
+                note: stats.unloggedStrength > 1
+                    ? 'Elles comptent en assiduité, pas en volume.'
+                    : 'Elle compte en assiduité, pas en volume.'
+            }, with_context = false) }}
+        {% endif %}
 
         {# Le ressenti en une ligne, et le chemin vers son onglet. Absent tant que
            rien n'est noté : la vue d'ensemble n'annonce pas un vide facultatif. #}
@@ -121,7 +143,7 @@
 
             <div class="kd-grid kd-grid--2 kd-section__block">
                 <section class="kd-card">
-                    <h3 class="kd-card__title kd-profile__grouphead">{{ ux_icon('lucide:target') }} Observance</h3>
+                    <h3 class="kd-card__title kd-profile__grouphead">{{ ux_icon('lucide:target') }} Assiduité</h3>
                     {{ include('components/_status_stats.html.twig', {stats: stats.adherence, hero: true}) }}
                 </section>
 
@@ -142,18 +164,19 @@
                             {% endif %}
                             <dt>Jours actifs</dt>
                             <dd>{{ reg.activeDays }} jour{{ reg.activeDays > 1 ? 's' }}</dd>
-                            {# Deux séries, deux choses différentes : le record de la
-                               période, et celle qui court encore. #}
-                            <dt>Série en cours</dt>
+                            {# Deux suites de semaines, deux choses différentes : le
+                               record de la période, et celle qui court encore. Le
+                               mot « série » reste aux séries d'exercice (#84). #}
+                            <dt>Semaines d'affilée</dt>
                             <dd>
                                 {% if reg.currentStreak > 0 %}
-                                    <strong>{{ reg.currentStreak }}</strong> semaine{{ reg.currentStreak > 1 ? 's' }} d'affilée
+                                    <strong>{{ reg.currentStreak }}</strong> en cours
                                 {% else %}
-                                    Interrompue
+                                    Aucune en cours
                                 {% endif %}
                             </dd>
-                            <dt>Meilleure série</dt>
-                            <dd>{{ reg.bestStreak }} semaine{{ reg.bestStreak > 1 ? 's' }} d'affilée</dd>
+                            <dt>Record d'affilée</dt>
+                            <dd>{{ reg.bestStreak }} semaine{{ reg.bestStreak > 1 ? 's' }}</dd>
                             {% if reg.bestWeek %}
                                 <dt>Meilleure semaine</dt>
                                 <dd>{{ reg.bestWeek.sessions }} séance{{ reg.bestWeek.sessions > 1 ? 's' }} <span class="kd-deflist__note">({{ reg.bestWeek.label }})</span></dd>
@@ -217,7 +240,7 @@
                                 <li class="kd-planbar">
                                     <div class="kd-planbar__head">
                                         {% if plan.planId %}
-                                            <a class="kd-planbar__name" href="{{ path('app_plan_template_show', {id: plan.planId}) }}">{{ plan.planTitle }}</a>
+                                            <a class="kd-planbar__name" href="{{ path('app_plan_template_show', {id: plan.planId}|merge(back)) }}">{{ plan.planTitle }}</a>
                                         {% else %}
                                             <span class="kd-planbar__name kd-planbar__name--loose">{{ plan.planTitle }}</span>
                                         {% endif %}
@@ -253,14 +276,23 @@
                 </div>
             </div>
 
+            {# Même compte que la vue d'ensemble : le volume ci-dessous ne porte
+               pas ces séances-là, et il faut le dire même quand il n'est pas nul. #}
+            {% if stats.unloggedStrength > 0 %}
+                {{ include('components/_log_in_app.html.twig', {
+                    count: stats.unloggedStrength,
+                    third: subject is not null
+                }, with_context = false) }}
+            {% endif %}
+
             <div class="kd-grid kd-grid--1 kd-section__block">
                 <section class="kd-card">
                     <h3 class="kd-card__title kd-profile__grouphead">{{ ux_icon('lucide:dumbbell') }} Salle</h3>
                     {% if vol.gym.sessions == 0 %}
                         <div class="kd-empty">
                             {{ ux_icon('lucide:dumbbell') }}
-                            <div>Aucune série loguée sur cette période.</div>
-                            <p class="kd-empty__hint">Le tonnage se lit sur le réalisé : une séance cochée « faite » sans séries loguées compte en assiduité, pas en volume.</p>
+                            <div>Aucune série saisie sur cette période.</div>
+                            <p class="kd-empty__hint">Le tonnage se lit sur les séries saisies : une séance cochée « faite » sans détail saisi compte en assiduité, pas en volume.</p>
                         </div>
                     {% else %}
                         <div class="kd-profile__tiles">
@@ -272,7 +304,7 @@
                             <div class="kd-profile__tile">
                                 <span class="kd-profile__tileicon">{{ ux_icon('lucide:repeat') }}</span>
                                 <div class="kd-stat__value">{{ vol.gym.sessions }}</div>
-                                <div class="kd-stat__label">Séance{{ vol.gym.sessions > 1 ? 's' }} loguée{{ vol.gym.sessions > 1 ? 's' }}</div>
+                                <div class="kd-stat__label">Séance{{ vol.gym.sessions > 1 ? 's' }} détaillée{{ vol.gym.sessions > 1 ? 's' }}</div>
                             </div>
                             {% if vol.gym.perSessionSets is not null %}
                                 <div class="kd-profile__tile">
@@ -336,7 +368,7 @@
                     {% if not prog.hasVolume %}
                         <div class="kd-empty">
                             {{ ux_icon('lucide:trending-up') }}
-                            <div>Rien à tracer : aucune série loguée sur cette période.</div>
+                            <div>Rien à tracer : aucune série saisie sur cette période.</div>
                         </div>
                     {% else %}
                         <p class="kd-card__note">
@@ -459,7 +491,7 @@
             {% if cov.sessions > 0 or cov.unattached > 0 %}
                 <p class="kd-card__note kd-endu__coverage">
                     {% if cov.sessions > 0 %}
-                        <strong>{{ cov.withActivity }}</strong> sortie{{ cov.withActivity > 1 ? 's' }} sur {{ cov.sessions }} lue{{ cov.withActivity > 1 ? 's' }} sur la montre, le reste sur le prescrit.
+                        <strong>{{ cov.withActivity }}</strong> sortie{{ cov.withActivity > 1 ? 's' }} sur {{ cov.sessions }} lue{{ cov.withActivity > 1 ? 's' }} sur la montre, le reste sur ce qui était prévu.
                     {% endif %}
                     {% if cov.unattached > 0 %}
                         {{ cov.unattached }} activité{{ cov.unattached > 1 ? 's' }} importée{{ cov.unattached > 1 ? 's' }} sans séance, donc hors des chiffres{% if not subject %} : rattache-l{{ cov.unattached > 1 ? 'es' : 'a' }} depuis la page de la séance du même jour{% endif %}.
@@ -502,9 +534,9 @@
                             {% endfor %}
                         </div>
                         <p class="kd-card__note">
-                            Lu sur l'activité importée quand elle est rattachée à la séance faite, sur son prescrit sinon.
+                            Lu sur la sortie importée quand elle est reliée à la séance faite, sur ce qui était prévu sinon.
                             {% if present|filter(e => vol[e.key].derivedMeters > 0 or vol[e.key].derivedSeconds > 0) is not empty %}
-                                ≈ : en partie déduit de l'allure prescrite.
+                                ≈ : en partie déduit de l'allure prévue.
                             {% endif %}
                         </p>
                     {% endif %}
@@ -592,7 +624,7 @@
             <div class="kd-pagehead kd-pagehead--sub">
                 <div>
                     <p class="kd-eyebrow kd-eyebrow--accent">Intensité</p>
-                    <h2 class="kd-title kd-title--sm">À quelle allure cardiaque</h2>
+                    <h2 class="kd-title kd-title--sm">À quelle fréquence cardiaque</h2>
                 </div>
             </div>
 
@@ -636,7 +668,7 @@
                             {% for r in endu.records %}
                                 <li class="kd-ranklist__row">
                                     <span class="kd-ranklist__rank">{{ activity.badge(r.activity, false) }}</span>
-                                    <a class="kd-ranklist__name" href="{{ path('app_scheduled_workout_show', {id: r.scheduledId}) }}">{{ r.label }}</a>
+                                    <a class="kd-ranklist__name" href="{{ path('app_scheduled_workout_show', {id: r.scheduledId}|merge(back)) }}">{{ r.label }}</a>
                                     <span class="kd-ranklist__val">{{ r.value }}</span>
                                     <span class="kd-ranklist__note">{{ r.date|date('d/m/Y') }}{{ r.note ? ' · ' ~ r.note }}</span>
                                 </li>
@@ -651,10 +683,10 @@
                     {% if endu.comparison is empty %}
                         <div class="kd-empty">
                             {{ ux_icon('lucide:git-compare') }}
-                            <div>Aucune séance prescrite avec une activité rattachée sur cette période.</div>
+                            <div>Aucune séance prévue reliée à une sortie sur cette période.</div>
                         </div>
                     {% else %}
-                        <p class="kd-card__note">Sur les seules séances qui portent un prescrit chiffré et une activité rattachée. La distance se compare là où elle était prescrite, la durée de même.</p>
+                        <p class="kd-card__note">Sur les seules séances prévues avec des chiffres et reliées à une sortie. La distance se compare là où elle était prévue, la durée de même.</p>
                         {% for c in endu.comparison %}
                             <h4 class="kd-endu__sport">{{ activity.badge(c.activity) }} <span class="kd-deflist__note">{{ c.sessions }} séance{{ c.sessions > 1 ? 's' }}</span></h4>
                             <dl class="kd-deflist">

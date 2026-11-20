@@ -1,0 +1,41 @@
+{# ================== LES CHARGES SE SAISISSENT DANS L'APP (#63) ==================
+   Une phrase, toujours la même, partout où un chiffre de salle manque faute de
+   réalisé : modale et page de la séance datée, vue d'ensemble et onglet Salle
+   des statistiques, journal, fiche coach.
+
+   Le réalisé de muscu se logue sur le téléphone (CLAUDE.md §3), c'est voulu.
+   Mais le web ne le disait nulle part où on en avait besoin, et une séance
+   faite à « 0 kg » se lisait comme un bug. Ce composant dit pourquoi, et mène à
+   la page de l'app. Il n'invente aucun chiffre : combler le vide avec le
+   prescrit ferait passer une intention pour un fait.
+
+   Attend (tout est optionnel) :
+     - count   : int  — nombre de séances de force faites sans détail. La phrase
+                        commence alors par ce compte.
+     - missing : bool — une séance précise, faite, sans détail : « Pas de
+                        détail : … ». Ignoré si `count` est donné.
+     - third   : bool — le lecteur n'est pas celui qui consigne (un coach) :
+                        « ses charges » au lieu de « les charges ».
+     - note    : string|null — une seconde ligne (ex. « compte en assiduité,
+                        pas en volume »).
+   ================================================================================ #}
+{% set count = count|default(0) %}
+{% set missing = missing|default(false) %}
+{% set third = third|default(false) %}
+{% set note = note|default(null) %}
+
+{% if count > 0 %}
+    {% set lead = count ~ ' séance' ~ (count > 1 ? 's') ~ ' de force faite' ~ (count > 1 ? 's') ~ ' sans détail : ' ~ (third ? 'ses' : 'les') %}
+{% elseif missing %}
+    {% set lead = 'Pas de détail : ' ~ (third ? 'ses' : 'les') %}
+{% else %}
+    {% set lead = third ? 'Ses' : 'Les' %}
+{% endif %}
+
+<p class="kd-applog">
+    {{ ux_icon('lucide:smartphone') }}
+    <span class="kd-applog__body">
+        <span class="kd-applog__text">{{ lead }} charges se saisissent dans <a href="{{ path('app_install') }}" class="kd-applog__link">l'app Kadens</a>.</span>
+        {% if note %}<span class="kd-applog__note">{{ note }}</span>{% endif %}
+    </span>
+</p>

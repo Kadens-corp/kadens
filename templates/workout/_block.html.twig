@@ -18,19 +18,21 @@
             } }) }}
             {{ form_widget(blockForm.label, { attr: {
                 class: 'kd-cblock__label',
-                placeholder: 'intitulé libre',
+                placeholder: 'Nom (facultatif)',
+                'aria-label': 'Nom du bloc (facultatif)',
                 'data-action': 'change->composer#submitForm',
             } }) }}
-            <div class="kd-cblock__rounds">
-                <button type="button" class="kd-cblock__step" data-action="composer#roundsDec" aria-label="Moins de tours">−</button>
+            <div class="kd-cblock__rounds" title="Répéter le bloc">
+                <span class="kd-cblock__roundslabel">Répéter</span>
+                <button type="button" class="kd-cblock__step" data-action="composer#roundsDec" aria-label="Répéter une fois de moins">−</button>
                 {{ ux_icon('lucide:repeat') }}
                 {{ form_widget(blockForm.rounds, { attr: {
                     class: 'kd-cblock__roundsval',
                     'data-action': 'change->composer#submitForm',
-                    'aria-label': 'Nombre de tours',
+                    'aria-label': 'Répéter le bloc : nombre de fois',
                 } }) }}
-                <span class="kd-cblock__roundslabel">tours</span>
-                <button type="button" class="kd-cblock__step" data-action="composer#roundsInc" aria-label="Plus de tours">+</button>
+                <span class="kd-cblock__roundslabel">fois</span>
+                <button type="button" class="kd-cblock__step" data-action="composer#roundsInc" aria-label="Répéter une fois de plus">+</button>
             </div>
         {{ form_end(blockForm) }}
 
@@ -76,13 +78,39 @@
         {% for segment in segments[block.id]|default([]) %}
             {% set segLoop = loop %}
             {% for prescribed in segment.exercises %}
+                {# Trois faits de position, dérivés une fois :
+                   - canLink : un voisin existe au-dessus dans le bloc ;
+                   - linkedUp : ce voisin est déjà dans le même groupe ;
+                   - chained : un membre du groupe suit, on enchaîne sans repos. #}
+                {% set canLink = not (segLoop.first and loop.first) %}
+                {% set linkedUp = segment.label and not loop.first %}
+                {% set chained = segment.label and not loop.last %}
+                {% set seam = canLink and not linkedUp %}
                 <div class="kd-cexo
                             {{- segment.label ? ' kd-cexo--linked' }}
                             {{- segment.label and loop.first ? ' kd-cexo--linkstart' }}
-                            {{- segment.label and loop.last ? ' kd-cexo--linkend' }}"
+                            {{- segment.label and loop.last ? ' kd-cexo--linkend' }}
+                            {{- chained ? ' kd-cexo--chained' }}
+                            {{- seam ? ' kd-cexo--seam' }}"
                      data-composer-target="exo"
                      data-prescribed-id="{{ prescribed.id }}"
                      data-block-id="{{ block.id }}">
+                    {% if seam %}
+                        {# L'action « Enchaîner » posée ENTRE les deux exercices qu'elle
+                           relie (#85), au lieu du seul menu « … ». Enfant de la carte du
+                           dessous, pas un frère : le DOM du bloc doit rester plat pour
+                           SortableJS. Le CSS la remonte dans l'espace entre les cartes.
+                           Même route que le menu : SupersetGrouper décide (rejoindre ou
+                           fusionner le groupe du dessus). #}
+                        <form method="post" class="kd-cexo__seam"
+                              action="{{ path('app_workout_prescribed_link', {id: workout.id, prescribedId: prescribed.id}) }}">
+                            <input type="hidden" name="_token" value="{{ csrf_token('prescribed_link' ~ prescribed.id) }}">
+                            <button type="submit" class="kd-cexo__seambtn"
+                                    title="Enchaîner avec l'exercice du dessus, sans repos entre les deux">
+                                {{ ux_icon('lucide:link') }} Enchaîner
+                            </button>
+                        </form>
+                    {% endif %}
                     {% if segment.label and loop.first %}
                         {# Nommé une fois en tête de groupe. Hors de .kd-cexo__row :
                            le stream ciblé qui re-rend une ligne ne l'emporte pas. #}
@@ -97,10 +125,27 @@
                         summary: summaries[prescribed.id]|default(''),
                         groupLabel: segment.label ? segment.label ~ loop.index : null,
                         groupKind: segment.kind,
-                        canLink: not (segLoop.first and loop.first)
+                        canLink: canLink
                     }) }}
 
                     <div class="kd-cexo__params" id="cexo-params-{{ prescribed.id }}" hidden>
+                        {% if segment.label %}
+                            {# Quel repos compte dans un superset (#85) : celui du DERNIER
+                               membre, pris avant de reprendre le premier. Le champ repos
+                               des autres est masqué par le CSS (`--chained`), sa valeur
+                               reste en base et revient si l'on détache. Hors de
+                               #prescribed-params : les streams de séries ne l'emportent pas. #}
+                            {% set kindLabel = segment.kind == 'circuit' ? 'circuit' : 'superset' %}
+                            {% set lastLabel = segment.label ~ loop.length %}
+                            <p class="kd-cexo__restnote">
+                                {{ ux_icon('lucide:link') }}
+                                {% if chained %}
+                                    Enchaîné sans repos vers {{ segment.label ~ (loop.index + 1) }}. Le repos se règle sur {{ lastLabel }}, en fin de {{ kindLabel }}.
+                                {% else %}
+                                    Ce repos se prend après {{ lastLabel }}, avant de reprendre {{ segment.label }}1. C'est le seul repos du {{ kindLabel }}.
+                                {% endif %}
+                            </p>
+                        {% endif %}
                         {# Conteneur re-rendu d'un bloc par les mutations de séries (stream
                            ciblant cet id). .kd-cexo__params (et son `hidden`) survit :
                            seul le contenu change, le panneau reste ouvert. #}
@@ -115,7 +160,7 @@
                 </div>
             {% endfor %}
         {% else %}
-            <div class="kd-cblock__drop">Déposez un exercice ici</div>
+            <div class="kd-cblock__drop">Dépose un exercice ici</div>
         {% endfor %}
     </div>
 

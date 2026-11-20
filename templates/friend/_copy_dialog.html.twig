@@ -1,0 +1,66 @@
+{#
+    « Copier dans mes séances » (#126) : la confirmation, où l'on renomme la
+    copie et où l'on voit ce qui part dans sa bibliothèque — les exercices perso
+    de l'ami y sont recopiés (`FriendSessionCopier`), et la modale le dit avant,
+    exercice par exercice.
+
+    Attend : entry (FeedEntry d'une séance d'ami), filter, page.
+#}
+{% set session = entry.session %}
+{% set first = entry.author.displayName|split(' ')|first %}
+
+<div data-controller="dialog">
+    <button type="button" class="kd-btn kd-btn--secondary kd-btn--sm" data-action="dialog#open">
+        {{ ux_icon('lucide:copy') }} Copier dans mes séances
+    </button>
+
+    <dialog class="kd-modal kd-modal--copy" data-dialog-target="dialog" data-action="click->dialog#backdrop"
+            aria-labelledby="copy-title-{{ session.id }}">
+        <form method="post" action="{{ path('app_friend_session_copy', {id: session.id}) }}" class="kd-modal__card">
+            <div class="kd-modal__head">
+                <div>
+                    <p class="kd-eyebrow kd-eyebrow--accent">Copier la séance de {{ first }}</p>
+                    <h2 class="kd-modal__title" id="copy-title-{{ session.id }}">Dans tes séances</h2>
+                </div>
+                <button type="button" class="kd-modal__close" data-action="dialog#close" aria-label="Fermer">
+                    {{ ux_icon('lucide:x') }}
+                </button>
+            </div>
+
+            <p class="kd-copy__lead">Copiée telle que {{ first }} l'a faite : séries, répétitions et charges. Tu pourras la modifier et la planifier ensuite.</p>
+
+            <input type="hidden" name="_token" value="{{ csrf_token('friend_copy' ~ session.id) }}">
+            <input type="hidden" name="ami" value="{{ filter }}">
+            <input type="hidden" name="page" value="{{ page }}">
+
+            <div class="kd-field">
+                <label class="kd-label" for="copy-name-{{ session.id }}">Nom de la séance</label>
+                <input class="kd-input" type="text" id="copy-name-{{ session.id }}" name="title"
+                       value="{{ entry.copyTitle }}" maxlength="255" required>
+            </div>
+
+            <p class="kd-copy__count">
+                {{ entry.exercises|length }} exercice{{ entry.exercises|length > 1 ? 's' }}
+                {%- if entry.addedCount > 0 %} · {{ entry.addedCount }} exo{{ entry.addedCount > 1 ? 's' }} perso de {{ first }} ajouté{{ entry.addedCount > 1 ? 's' }} à tes exercices{% endif %}
+            </p>
+            <ol class="kd-copy__list">
+                {% for row in entry.exercises %}
+                    <li>
+                        <span class="kd-feedex__n">{{ row.n }}</span>
+                        <span class="kd-copy__name">{{ exercise_name(row.exercise, row.name) }}</span>
+                        {% if row.addedToMine %}
+                            <span class="kd-copy__added">{{ ux_icon('lucide:user-plus') }} Ajouté à tes exercices</span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ol>
+
+            <p class="kd-copy__notice">{{ ux_icon('lucide:eye') }} {{ first }} verra « Copiée par {{ app.user.displayName }} » sous sa séance. Rien d'autre ne lui est envoyé.</p>
+
+            <div class="kd-formactions">
+                <button type="button" class="kd-btn kd-btn--ghost" data-action="dialog#close">Annuler</button>
+                <button type="submit" class="kd-btn kd-btn--primary">{{ ux_icon('lucide:copy') }} Copier</button>
+            </div>
+        </form>
+    </dialog>
+</div>

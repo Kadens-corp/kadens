@@ -125,7 +125,14 @@ final class LineageSeed
         return $prescribed;
     }
 
-    private function applyLogged(PrescribedExercise $target, LoggedExercise $logged): void
+    /**
+     * Reporte le réalisé d'un exercice sur sa copie prescrite, selon la règle
+     * de la classe (séries chiffrées, échauffement gardé, mode simple si tout
+     * est identique). Public pour la copie d'une séance d'ami (#126,
+     * `FriendSessionCopier`), qui part de la même séance faite : une seule
+     * écriture de « reprendre ce qui a été fait ».
+     */
+    public function applyLogged(PrescribedExercise $target, LoggedExercise $logged): void
     {
         if ($logged->isSkipped() || !\in_array($target->getPrescriptionType(), self::LOGGABLE, true)) {
             return;

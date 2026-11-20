@@ -14,7 +14,6 @@ use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\EnumType;
 use Symfony\Component\Form\Extension\Core\Type\IntegerType;
-use Symfony\Component\Form\Extension\Core\Type\NumberType;
 use Symfony\Component\Form\Extension\Core\Type\TextareaType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
@@ -62,16 +61,17 @@ class PrescribedExerciseType extends AbstractType
                 'attr' => ['min' => 0],
             ])
             ->add('distanceMeters', DistanceType::class, [
-                // Unité déduite de l'activité de l'exercice prescrit (course/vélo
+                // L'unité se choisit à côté du champ (m ou km, #97). Celle de
+                // l'activité n'est que la proposition d'un champ vide (course/vélo
                 // en km, natation et reste en mètres).
-                'label' => 'Distance ('.$distanceUnit->label().')',
+                'label' => 'Distance',
                 'unit' => $distanceUnit,
                 'required' => false,
-                'attr' => ['placeholder' => $distanceUnit->placeholder()],
             ])
             ->add('paceSecondsPerKm', PaceType::class, [
                 // Unité déduite de l'activité de l'exercice prescrit (course
-                // min/km, vélo km/h, natation min/100m).
+                // min/km, vélo km/h, natation min/100m, rameur et autres
+                // ergomètres min/500m).
                 'label' => 'Allure ('.$paceUnit->label().')',
                 'unit' => $paceUnit,
                 'required' => false,
@@ -128,18 +128,17 @@ class PrescribedExerciseType extends AbstractType
                     'required' => false,
                     'attr' => ['min' => 0],
                 ])
-                ->add('weightKg', NumberType::class, [
+                ->add('weightKg', WeightType::class, [
                     'label' => 'Charge (kg)',
                     'required' => false,
-                    'scale' => 2,
-                    'attr' => ['min' => 0, 'step' => 0.5],
                 ])
                 ->add('durationSeconds', DurationType::class, [
                     // Saisie humaine mm:ss ou h:mm:ss (round-trip vers les secondes
-                    // stockées) : « 45:00 » plutôt que 2700.
+                    // stockées) : « 45:00 » plutôt que 2700. L'exemple suit le
+                    // format annoncé par le libellé (#97).
                     'label' => 'Durée (h:mm:ss)',
                     'required' => false,
-                    'attr' => ['placeholder' => '45:00'],
+                    'attr' => ['placeholder' => 'ex. 0:45:00'],
                 ])
             ;
         }

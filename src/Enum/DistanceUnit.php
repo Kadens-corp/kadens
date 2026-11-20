@@ -41,12 +41,32 @@ enum DistanceUnit: string
         };
     }
 
+    /**
+     * Exemple affiché dans le champ vide, préfixé « ex. » pour ne pas passer pour
+     * une valeur déjà saisie (#97).
+     */
     public function placeholder(): string
     {
         return match ($this) {
-            self::KM => '5',
-            self::METERS => '2000',
+            self::KM => 'ex. 5',
+            self::METERS => 'ex. 400',
         };
+    }
+
+    /**
+     * Unité dans laquelle relire une distance enregistrée, `$this` étant l'unité
+     * par défaut de l'activité. La base ne garde que des mètres, pas l'unité
+     * choisie à la saisie : on la redéduit de la valeur. Une distance sous le
+     * kilomètre se relit en mètres même en course (« 400 m », pas « 0,4 km ») :
+     * c'est le cas des répétitions de fractionné (#97). Vide : l'unité par défaut.
+     */
+    public function forValue(?int $meters): self
+    {
+        if (null !== $meters && $meters < 1000) {
+            return self::METERS;
+        }
+
+        return $this;
     }
 
     /**

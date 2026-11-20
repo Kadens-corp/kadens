@@ -158,7 +158,7 @@ avec la même fonction : une séance ne change pas de couleur d'un écran à l'a
 
 | Écran | Rendu |
 |---|---|
-| Calendrier (`_cal_event`) | carte entière en aplat, bande 4 px ; le statut passe par l'icône du bouton de cycle sur une rangée foncée (82 %), la manquée se hachure, la faite se barre ; le retard devient un contour pointillé rouge. Une séance sans activité garde la pastille neutre à filet de statut. Légende des six couleurs au-dessus de la grille. |
+| Calendrier (`_cal_event`) | carte entière en aplat, bande 4 px ; le statut passe par l'icône du bouton de statut sur une rangée foncée (82 %), la manquée se hachure, la faite prend une coche devant son titre (jamais un barré, qui se lit « annulé ») ; tout ce qui s'écrit sur l'aplat (coche, ressenti) passe au blanc ; le retard devient un contour pointillé rouge. Une séance sans activité garde la pastille neutre à filet de statut. Légende des six couleurs au-dessus de la grille. |
 | Hero de séance | l'aplat encre devient l'aplat d'activité, bande 6 px. Le hero redéfinit **localement** les tokens « sur encre » (`--color-on-ink*`, `--color-primary-on-ink`) plutôt que de doubler ses règles. |
 | Bibliothèques | filet gauche + pastille d'icône pleine (icône de la dominante). Les cartes de plan restent neutres : un plan mélange les activités. |
 | Trame de plan | consultation : séances en aplat, bande 3 px. Éditeur : filet gauche seulement (kebab, survol et glisser-déposer vivent sur la case). |
@@ -300,6 +300,19 @@ l'accent rouge reste disponible pour l'exercice sauté du réalisé.
 | `--color-status-planned` | `#8a8a82` | `PLANNED` — prévu |
 | `--color-status-missed` | `#d8261e` | `MISSED` — manqué |
 
+### Succès
+Un geste qui a réussi (« Exercice créé. », « Séance déplacée. ») se dit en
+**vert**, dérivé du statut « fait ». Le rouge reste à l'échec : un message
+rose se lisait comme une erreur (#87). C'est un token dédié, au même titre que
+les statuts, et il ne sert qu'aux retours de réussite (`.kd-flash` par défaut).
+
+| Token | Valeur | Rôle | Contraste |
+|---|---|---|---|
+| `--color-success` | `#006d14` | texte, icône et filet (22 %) | 5,7:1 sur son fond |
+| `--color-success-tint` | `#e8f2ea` | fond teinté (9 % du vert sur blanc) | — |
+
+De nuit : `#45a35a` sur `#13281a`, 4,9:1 (§10).
+
 ---
 
 ## 3. Typographie
@@ -368,7 +381,7 @@ sont publiés pour l'app mobile, comme `design-tokens.json` (cf. §9).
 
 | Palier | Cible | Ce qui bascule |
 |---|---|---|
-| `560px` | téléphone | une colonne, nav en barre basse, calendrier en agenda vertical, filtres d'index repliés |
+| `560px` | téléphone | une colonne, nav en barre basse, calendrier en agenda vertical (bilan et légende repliés, actions secondaires réduites à l'icône, jours sans séance du mois masqués), filtres d'index repliés |
 | `900px` | tablette | bibliothèque/palette des éditeurs en **feuille** (`kd-libsheet`), nav condensée, repères de hero sous le titre |
 | `1200px` | petit portable | palette de l'éditeur de trame sous la grille |
 
@@ -476,6 +489,16 @@ Classes `.kd-*` dans `assets/styles/components.css`.
   natif + contrôleur `dismiss` (clic extérieur, Échap) pour le seul confort.
   Panneau à contour encre.
 - **Modale** : `<dialog>` natif, contour encre.
+- **Message flash** (`.kd-flash`) : succès par défaut, sur `--color-success-tint`
+  (§2, Succès) ; `--error` en rouge du « manqué ». Les deux portent une icône,
+  pour ne pas reposer sur la seule couleur. **Toujours en toast, jamais dans le
+  flux (#129)** : `base.html.twig` rend les flashes de toute page dans la pile
+  fixe `.kd-toasts` (bas droite, avec la pastille « Enregistré »), via
+  `components/_flash_toasts`. Un template ne boucle donc plus sur
+  `app.flashes('success'|'error')` : il consommerait le message avant la pile.
+  Le succès s'efface après 6 s, l'erreur reste jusqu'à sa croix. Une erreur
+  qui commente un formulaire de la page (aperçu de progression) reste, elle, à
+  côté de son formulaire : ce n'est pas un flash.
 - **Record : la couronne** (`lucide:crown`, classe `.kd-icon--solid`). Seule
   icône peinte **pleine** de l'app : le CSS remplit le tracé importé, le fichier
   reste celui de Lucide. Elle marque un record battu (historique d'exercice,
@@ -510,7 +533,8 @@ décomposé en `_workout_program`, `_workout_sets_table`, `_workout_analysis`.
   série**, y compris quand la saisie est scalaire (`PlanFlattener::setLines`
   déroule « 3 × 15 » en trois lignes) : la répétition est le prix d'une lecture
   identique quel que soit le mode de saisie. Deux colonnes ne s'affichent que si
-  elles ont quelque chose à dire : « % du max » seulement si les charges varient,
+  elles ont quelque chose à dire : « % de la série la plus lourde » seulement si
+  les charges varient (jamais « % du max », lu comme un % du 1RM),
   « Type » seulement si une série est qualifiée. **Largeur plafonnée à 34rem** —
   étiré sur un grand écran, le tableau éloignait les reps de la charge de
   plusieurs centaines de pixels. Sous 560px il se comprime au lieu de défiler :
@@ -519,7 +543,7 @@ décomposé en `_workout_program`, `_workout_sets_table`, `_workout_analysis`.
 - **Tableau de séries en comparaison** (`.kd-settable--compared`) : le **même**
   composant, un paramètre de plus. Trois colonnes — Série / Prévu / Réalisé — et
   la charge rejoint sa cellule d'effort (« 8 × 80 kg » se lit d'un bloc, et c'est
-  ce qu'on compare) ; le « % du max » cède sa largeur. La colonne « Prévu » tombe
+  ce qu'on compare) ; le pourcentage cède sa largeur. La colonne « Prévu » tombe
   quand rien n'était prescrit en face (séance libre, exercice hors programme) :
   une colonne de tirets ne dit rien. Plafond porté à **42rem**, deux des trois
   colonnes portant une valeur composée.
@@ -778,7 +802,8 @@ Le reste s'inverse, et trois familles demandent plus qu'une inversion mécanique
   qui prend sa place. `--color-primary-on-ink` fait le trajet inverse.
 
 Trois familles ont dû être choisies plutôt que dérivées : le vert du statut
-« fait » (`#006d14` tombe à 2,9:1 sur une surface nuit), les cinq teintes de
+« fait » (`#006d14` tombe à 2,9:1 sur une surface nuit, et son fond de succès
+se retourne comme le rose de l'accent, `#13281a`, où il écrit à 4,9:1), les cinq teintes de
 groupe musculaire, qui devaient remonter en luminosité **en gardant leur écart
 mutuel** — une pastille de 6 px ne porte que ça — et les six couleurs
 d'activité, remontées de la même façon (oklch L 0,72). Sur ces aplats devenus

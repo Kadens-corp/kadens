@@ -54,7 +54,7 @@
 {% if logSummary and logSummary.loggedAt %}
     <p class="kd-logmeta">
         {{ ux_icon('lucide:timer') }}
-        Consigné le {{ logSummary.loggedAt|date('d/m/Y') }} à {{ logSummary.loggedAt|date('H\\hi') }}
+        Saisi le {{ logSummary.loggedAt|date('d/m/Y') }} à {{ logSummary.loggedAt|date('H\\hi') }}
     </p>
 {% endif %}
 
@@ -86,10 +86,10 @@
 {% if is_granted('SCHEDULED_WORKOUT_LOG', scheduled) %}
     <form method="post" class="kd-logdel"
           action="{{ path('app_scheduled_workout_log_delete', {id: scheduled.id}) }}"
-          onsubmit="return confirm('Supprimer tout le réalisé de cette séance ? La séance reste au planning, seules les séries consignées disparaissent.');">
+          onsubmit="return confirm('Supprimer tout le détail saisi de cette séance ? La séance reste au planning, seules les séries saisies disparaissent.');">
         <input type="hidden" name="_token" value="{{ csrf_token('log_delete' ~ scheduled.id) }}">
         <button type="submit" class="kd-btn kd-btn--ghost kd-btn--danger kd-btn--sm">
-            {{ ux_icon('lucide:trash-2') }} Supprimer le réalisé
+            {{ ux_icon('lucide:trash-2') }} Supprimer le détail saisi
         </button>
         <span class="kd-logdel__hint">La séance et sa date restent au planning.</span>
     </form>

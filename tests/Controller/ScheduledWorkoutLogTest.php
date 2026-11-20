@@ -112,22 +112,6 @@ final class ScheduledWorkoutLogTest extends WebTestCase
         self::assertStringContainsString('82,5 kg', $logged->text());
     }
 
-    /** Le prescrit passe en encre atténuée, mais reste rendu. */
-    public function testPrescribedSideIsAttenuatedNotRemoved(): void
-    {
-        $user = $this->createUser('owner@example.com');
-        [$scheduled] = $this->createLoggedSession($user, [[SetType::NORMAL, 8, 80.0]]);
-
-        $this->client->loginUser($user);
-        $crawler = $this->client->request('GET', '/schedule/'.$scheduled->getId());
-
-        // La classe porte l'atténuation ; le nom de l'exercice, lui, n'est pas
-        // atténué (ce n'est pas un paramètre, c'est le sujet de la ligne).
-        self::assertGreaterThan(0, $crawler->filter('.kd-exrow--logged')->count());
-        self::assertGreaterThan(0, $crawler->filter('.kd-setrow__planned')->count());
-        self::assertSelectorTextContains('.kd-exrow--logged .kd-exrow__name', 'Développé couché');
-    }
-
     /**
      * L'onglet d'ouverture dépend du statut. On ne peut pas observer la sélection
      * (le contrôleur Stimulus la fait au navigateur) : ce qu'on garde, c'est ce que
@@ -165,6 +149,35 @@ final class ScheduledWorkoutLogTest extends WebTestCase
         self::assertSelectorNotExists('.kd-settable--compared');
         // Le tableau du prescrit, lui, est toujours là.
         self::assertSelectorExists('.kd-settable');
+    }
+
+    /**
+     * #78 (B-10) : sur une séance datée, le bandeau du prescrit se dit « prévu ».
+     * Faite sans rien consigner, elle affichait « Volume total 1 920 kg » à côté
+     * de stats qui disaient 0 kg réalisé. Le bandeau du réalisé, lui, se dit
+     * « réalisé ».
+     */
+    public function testDatedSessionLabelsPlannedAndLoggedVolumes(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        [$unlogged] = $this->createLoggedSession($user, []);
+        $unlogged->setStatus(ScheduledStatus::DONE);
+        [$logged] = $this->createLoggedSession($user, [[SetType::NORMAL, 8, 80.0]]);
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+
+        $crawler = $this->client->request('GET', '/schedule/'.$unlogged->getId());
+        self::assertResponseIsSuccessful();
+        $kpis = $crawler->filter('.kd-wk__kpis');
+        self::assertCount(1, $kpis);
+        self::assertStringContainsString('Volume prévu', $kpis->text());
+        self::assertStringContainsString('3 séries de travail prévues', $kpis->text());
+        self::assertStringNotContainsString('Volume total', $kpis->text());
+
+        $crawler = $this->client->request('GET', '/schedule/'.$logged->getId());
+        self::assertStringContainsString('Volume prévu', $crawler->filter('.kd-wk__kpis')->first()->text());
+        self::assertStringContainsString('Volume réalisé', $crawler->filter('.kd-wk__kpis--logged')->text());
     }
 
     /** Une séance manquée le dit en clair, sinon elle a l'allure d'une séance à venir. */
@@ -336,6 +349,12 @@ final class ScheduledWorkoutLogTest extends WebTestCase
         $workout = $prescribed->getBlock()?->getWorkout();
         self::assertNotNull($workout);
 
+        // La page publique n'existe qu'une fois le partage ouvert (#61). Posé
+        // avant toute requête : celles-ci réinitialisent le gestionnaire.
+        $shareToken = bin2hex(random_bytes(16));
+        $workout->setShareToken($shareToken);
+        $this->em->flush();
+
         $this->client->loginUser($user);
 
         // 1. La page de la séance datée : le réalisé y est, c'est le seul endroit.
@@ -348,8 +367,8 @@ final class ScheduledWorkoutLogTest extends WebTestCase
         self::assertStringNotContainsString('123,5', (string) $this->client->getResponse()->getContent());
         self::assertSelectorNotExists('.kd-settable--compared');
 
-        // 3. La page de partage public.
-        $this->client->request('GET', '/s/'.$workout->getSlug());
+        // 3. La page de partage public (partage ouvert plus haut, #61).
+        $this->client->request('GET', '/s/'.$shareToken);
         self::assertResponseIsSuccessful();
         self::assertStringNotContainsString('123,5', (string) $this->client->getResponse()->getContent());
         self::assertSelectorNotExists('.kd-settable--compared');

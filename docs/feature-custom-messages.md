@@ -12,7 +12,8 @@ changelog : c'est une surprise, elle n'a de sens que si on ne la voit pas venir.
 
 | Pièce | Rôle |
 |---|---|
-| `CustomMessage` | Le message : `title` (interne), `body`, `mediaFile`, `startsOn`/`endsOn`, `audience`, `recipients`, `seenBy`, `active`. |
+| `CustomMessage` | Le message : `title` (interne), `body`, `mediaFile`, `startsOn`/`endsOn`, `audience`, `recipients`, `platform`, `seenBy`, `active`. |
+| `MessagePlatform` | Où il s'affiche : `BOTH` (défaut), `WEB` ou `APP`. |
 | `CustomMessageRepository::findUnseenFor()` | La seule requête de lecture côté destinataire. |
 | `CustomMessageInbox` | Le message du jour (web), les messages à venir (mobile), l'URL signée de l'image. |
 | `MessageMediaStorage` | Le fichier, sous `var/uploads/messages`. |
@@ -42,6 +43,14 @@ sur l'écran Aujourd'hui (`kadens-mobile`).
 - **Bornes incluses, jours entiers.** « Aujourd'hui » est le jour du serveur
   sur le web, le jour local du téléphone sur mobile. Un écart de fuseau peut
   donc décaler l'affichage de quelques heures aux bornes, c'est accepté.
+- **Le message choisit où il s'affiche** (`platform`) : le site, l'appli ou les
+  deux. Le filtre est dans `findUnseenFor()`, qui reçoit la surface qui lit
+  (`WEB` pour la modale, `APP` pour le bootstrap) : un message réservé au site
+  ne descend jamais sur le téléphone, et inversement. Le « vu » reste commun :
+  un message affiché des deux côtés, fermé sur l'un, disparaît de l'autre.
+  Passer un message à `WEB` le retire du téléphone au bootstrap suivant (la
+  liste mobile est remplacée entière) ; un téléphone resté hors réseau peut
+  encore le montrer d'ici là, c'est accepté.
 - **Une modale à la fois.** Un message en attente fait passer l'invitation à
   choisir un pseudo à la page suivante. Rien ne s'affiche dans `/admin`.
 - **Audience explicite.** `ALL` ou `USERS` ; une liste de destinataires vide ne

@@ -137,7 +137,7 @@ final class AuthController extends AbstractController
         PairingCodeRepository $pairingCodes,
         #[Target('apiPairingLimiter')] RateLimiterFactoryInterface $limiter,
     ): JsonResponse {
-        $throttled = $this->throttle($limiter, $request, 'Trop de tentatives d\'appairage. Réessayez dans un instant.');
+        $throttled = $this->throttle($limiter, $request, 'Trop de tentatives d\'appairage. Réessaie dans un instant.');
 
         if ($throttled instanceof JsonResponse) {
             return $throttled;
@@ -347,7 +347,7 @@ final class AuthController extends AbstractController
     private function throttle(
         RateLimiterFactoryInterface $limiter,
         Request $request,
-        string $detail = 'Trop de tentatives de connexion. Réessayez dans un instant.',
+        string $detail = 'Trop de tentatives de connexion. Réessaie dans un instant.',
     ): ?JsonResponse {
         $quota = $limiter->create($request->getClientIp())->consume();
 

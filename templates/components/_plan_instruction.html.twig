@@ -1,0 +1,26 @@
+{# ======================= CONSIGNE DU PLAN (#95) ============================
+   La note de case d'un plan (« + note » dans l'éditeur, « + Consigne pour
+   l'athlète » chez le coach), sur la séance datée qui en est issue. Avant, elle
+   ne se lisait que dans la grille du plan : « descente lente en 3 s sur squat et
+   fentes » n'apparaissait ni sur /schedule/{id} ni dans la modale du calendrier,
+   et l'athlète ne la lisait jamais.
+
+   La consigne vient de `PlanFlattener::planInstruction()`, seule porte de sortie
+   d'un plan vers une vue de lecture. Ce n'est pas une donnée privée : la page
+   publique du plan l'affiche déjà.
+
+   Contenu saisi : police de texte, casse normale, retours à la ligne gardés.
+
+   Attend :
+     - instruction : string|null — rien n'est rendu sans consigne
+     - compact     : bool (optionnel) — version modale du calendrier
+   ============================================================================ #}
+{% set compact = compact|default(false) %}
+{% if instruction|default(null) %}
+    <aside class="kd-instruction{{ compact ? ' kd-instruction--compact' }}" aria-label="Consigne du plan">
+        <p class="kd-instruction__label">
+            {{ ux_icon('lucide:quote', {'aria-hidden': 'true'}) }} Consigne du plan
+        </p>
+        <p class="kd-instruction__text">{{ instruction|nl2br }}</p>
+    </aside>
+{% endif %}

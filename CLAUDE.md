@@ -117,7 +117,11 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   numéros sont renumérotés 1..n, ils se comparent mais ne s'interprètent pas ; les
   libellés A1/A2 sont **dérivés** de l'ordre, jamais stockés. Le groupe ne porte
   **ni tours ni repos propres** (le nombre de tours est déjà dans le `sets` de
-  chaque exercice, `Block.rounds` reste au bloc). Conséquences à ne pas casser :
+  chaque exercice, `Block.rounds` reste au bloc). **Seul le repos du dernier
+  membre compte** (la pause avant de reprendre le premier) : celui des autres est
+  masqué au compositeur, compté zéro par `WorkoutEstimator` et sorti à `0` par
+  `PlanFlattener` (drapeau `chained`), mais gardé en base. `0` et non `null` : pour
+  l'app mobile, `null` veut dire « repos par défaut des réglages », `0` « enchaîner ». Conséquences à ne pas casser :
   changer de bloc détache (le numéro n'a de sens que dans son bloc) ; déposer un
   exercice **strictement à l'intérieur** d'un groupe l'y fait entrer ; le DOM du
   compositeur reste **plat** (SortableJS ne trie que ses enfants directs), le
@@ -223,7 +227,12 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   `ScheduledWorkoutVoter` (mémoïsée par `CoachingResolver`). Conséquences à ne pas
   casser : les repos owner-scoped, le repli `PlanScheduler::resync()` →
   `$template->getOwner()` et l'affichage chez l'athlète restent corrects sans
-  condition ; l'athlète **garde son contenu** quand la relation se termine. Les
+  condition ; l'athlète **garde son contenu** quand la relation se termine.
+  **Ces droits sont écrits pour l'athlète (#66)** dans
+  `components/_coaching_rights.html.twig` (bandeau d'accueil, cartes `/coaching`,
+  formulaire de demande) : toute évolution de ces voters, d'`ExerciseVoter` ou
+  d'une garde « propriétaire seul » (notes privées, `LOG`, partage, publication)
+  doit y être répercutée, la liste ne doit rien promettre de faux. Les
   actions coach ne forkent aucun éditeur : elles créent la coquille et redirigent
   vers le compositeur / l'éditeur de plan normaux. `ROLE_COACH` s'accorde par
   commande (`app:user:promote-coach`), jamais depuis l'app. `GoalVoter` porte la
@@ -248,6 +257,9 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   `WorkoutController::duplicate` : la copie appartient au propriétaire de la
   source. Une copie qui atterrirait chez le coach serait inerte — ni posable au
   calendrier de l'athlète ni dans son plan, qui n'acceptent que son contenu.
+  C'est le défaut, et l'écran le nomme (« Dupliquer chez <athlète> », #83) ;
+  `target=mine` (« Copier chez moi ») passe par `SharedWorkoutCopier::copyFor`
+  et donne au coach une séance pour lui, que l'athlète ne voit pas.
   **Portée des index (`CoachedLibrary`)** : les bibliothèques `/workout` et
   `/plan-template` listent **soi + ses athlètes en relation acceptée**, pour qu'un
   coach retrouve ce qu'il a composé (le contenu appartenant à l'athlète en
@@ -255,13 +267,37 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   regardent pas — et c'est une portée **de consultation seulement** : les
   sélecteurs de pose gardent `findLibraryForOwnerWithContent` (un seul
   propriétaire), celui de l'entité qu'on garnit — soi pour son calendrier,
-  `$template->getOwner()` pour une trame. Pas de
-  champ « créé par » : le coach voit/édite déjà tout le contenu de son athlète.
+  `$template->getOwner()` pour une trame. Aucun **droit** ne dérive de l'auteur :
+  le coach voit/édite déjà tout le contenu de son athlète.
+  **Origine coach (#80, règle révisée le 17/11/2026)** : `addedBy` (nullable, SET
+  NULL) sur `Workout`, `PlanTemplate` et `ScheduledWorkout` dit **de qui vient** un
+  contenu, jamais qui peut y toucher. Null = le propriétaire lui-même. Il est posé
+  à un seul endroit, `ContentAuthorListener` (prePersist : utilisateur connecté ≠
+  propriétaire), plus `PlanTransfer` (un don n'est pas une création ; il remet aussi
+  `createdAt` au jour du don). Fait d'origine, jamais réécrit. Déduire des données
+  existantes ne suffisait pas : séances et plans créés vides, poses au calendrier
+  et dons ne laissaient aucune trace. Côté athlète : `components/_added_by`
+  (pastille « Coach » des cartes et du calendrier, bandeau des pages), qui ne se
+  rend que si l'auteur n'est pas le lecteur ; `ScheduledWorkout::getContributor()`
+  crédite aussi le coach d'une séance datée posée par l'athlète depuis un plan du
+  coach. Encart d'accueil sur sept jours glissants (`CoachContributions`, sans
+  état « vu »). Corollaire en test : un `persist` fait après `loginUser()` passe
+  par l'écouteur au nom de l'utilisateur connecté.
   À l'écran, une facette `owner` avec **« Moi » actif par défaut** et un badge de
-  propriétaire sur les cartes des autres.
+  propriétaire sur les cartes des autres. Corollaire (#75) : les effectifs des
+  puces se recalculent selon les puces actives des autres groupes, et une liste
+  vide dit **pourquoi** (`components/_filter_empty.html.twig` : recherche, puces,
+  ou « rien à toi » avec un lien vers chaque athlète qui a du contenu) — sans
+  quoi un coach croit que ce qu'il vient de créer pour son athlète a disparu.
+- **Amis (#126) : une amitié n'ouvre que le flux, en lecture.** `Friendship`
+  ne donne aucun droit (aucun voter ne la lit) : elle fait entrer les séances de
+  salle faites de l'autre dans son flux, rien d'autre. Ce que le flux montre est
+  écrit une fois (`ScheduledWorkoutRepository::feedQuery()`), et la copie d'une
+  séance d'ami passe par `LineageSeed` et `SharedWorkoutCopier`. Invariants :
+  [`docs/feature-friends.md`](./docs/feature-friends.md).
 - **Copier une séance chez un autre (#58) ne référence jamais un exercice qu'il
   ne peut pas lire.** Coach → athlète (`/coach/athlete/{id}/workout/copy`) et
-  copie depuis le lien public (`/workout/shared/{slug}/copy`) passent par
+  copie depuis le lien public (`/workout/shared/{token}/copy`) passent par
   `SharedWorkoutCopier` : un exercice perso de l'auteur que `ExerciseVoter::VIEW`
   refuse au destinataire est recopié dans sa bibliothèque (homonyme de même
   activité réutilisé, jamais de `refKey`). Ce n'est pas du confort : la FK
@@ -271,7 +307,7 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   **Les plans suivent la même règle** (`SharedPlanCopier` : copie publique,
   « Un de mes plans » sur la fiche coach) et une de plus : chaque case se
   **re-racine** dans la bibliothèque du destinataire (une copie par racine). Un
-  plan peut aussi être **donné** depuis son éditeur (« Donner ce plan à »,
+  plan peut aussi être **donné** depuis son éditeur (« Transférer ce plan à »,
   `PlanTransfer`) : il change de propriétaire, le coach reste co-éditeur. Gardes :
   propriétaire seul, athlète accepté, plan **jamais posé au calendrier** (ses
   séances datées pointeraient des cases parties chez l'athlète). Ni le bloc-notes
@@ -289,6 +325,13 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   `PlanFlattener` — c'est ce qui garantit qu'aucune vue de consultation, page
   publique, export Excel ou flux ICS ne le laisse fuiter. `WorkoutCloner` ne le
   copie pas non plus (le fork à la pose le dupliquerait dans chaque case d'un plan).
+  **Le pendant côté coach (#65) vit sur la relation, jamais sur le contenu** :
+  `Coaching.coachNotes`, une note par athlète, écrite depuis la fiche
+  (`/coach/athlete/{id}/notes`) et rappelée dans les éditeurs via
+  `CoachingRepository::findAcceptedRelation()` (null pour l'athlète et pour soi).
+  Tout le reste d'une séance ou d'un plan est lu par l'athlète, et l'écran le dit
+  (`components/_visible_to`). Effacée à la fin de la relation (la ligne survit et
+  peut se rouvrir).
 - **Objectif ↔ Plan : relation N:N, libre et réversible.** Table de jointure
   `plan_template_goal`, côté propriétaire sur `PlanTemplate` (`addGoal`/`removeGoal`,
   qui maintiennent **les deux côtés** — sinon un fragment re-rendu par Turbo Stream
@@ -299,6 +342,15 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   lien ne se perde plus). Se pose et se défait des deux côtés : bandeau `#plan-goals`
   dans l'éditeur de plan, section « Plans de préparation » sur la fiche objectif.
   Jamais affiché sur la page publique d'un plan (les objectifs sont privés).
+- **Séances et plans : privés par défaut, partage par lien opt-in (#61).** Aucune
+  page publique tant que le **propriétaire** (jamais son coach, 403) n'a pas ouvert
+  le partage : `shareToken` nullable, jeton aléatoire de 128 bits posé par
+  `ShareLink`, seul porteur des adresses `/s/{token}` et `/s/plan/{token}` (le slug
+  ne nomme plus que le fichier d'export). Arrêter = effacer le jeton : l'ancien
+  lien rend la même 404 qu'un jeton inventé, repartager en tire un nouveau. Une
+  case de plan (`planLocal`) n'a jamais de jeton, elle se lit sous celui de son
+  plan (`/s/plan/{token}/seance/{item}`). Donner un plan (`PlanTransfer`) le rend
+  privé. Copie depuis le lien et plage de semaines suivent le même jeton.
 - **Récit d'objectif : privé par défaut, publication opt-in (#42).** Un objectif
   porte un récit en blocs (`GoalBlock` : texte, photo, activité importée, séance
   faite). Les blocs de référence ne recopient aucun chiffre (`GoalStory`). Seul le
@@ -310,9 +362,17 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
 - **Création sans écran intermédiaire.** « Nouvelle séance » / « Nouveau plan » sont
   des **POST** qui créent un brouillon titré par défaut (plan : 4 semaines) et
   redirigent vers l'éditeur avec `rename=1`, qui ouvre le titre en édition en ligne.
-  Il n'y a plus de `WorkoutType` ni de `PlanTemplateType`. Le slug d'un brouillon est
-  régénéré au **premier** vrai renommage seulement (`SlugGenerator::derivesFrom`) :
-  une entité déjà nommée garde le sien, sinon son lien de partage public casserait.
+  Il n'y a plus de `WorkoutType` ni de `PlanTemplateType`. Le slug **suit le titre**
+  à chaque renommage (aucun lien public n'en dépend depuis #61) ;
+  `SlugGenerator::derivesFrom` évite seulement de le régénérer à titre inchangé.
+  **Corollaire (#115) : le brouillon abandonné.** Titre par défaut et aucune
+  trace d'intention (contenu, description, note, partage, pose, objectif) :
+  `abandonedDraftCondition()` de `WorkoutRepository` / `PlanTemplateRepository`
+  en est la seule écriture, à compléter si un nouveau champ de contenu apparaît.
+  Les listes et la palette le **masquent** tout de suite ; `DraftPurger` ne le
+  **supprime** qu'après 24 h (un onglet ou un préchargement Turbo peut encore le
+  tenir), via `/cron/drafts` (tâche quotidienne du Manager Infomaniak, même
+  secret que `/cron/intervals`) ou `app:drafts:purge`.
 - **Métadonnées : édition en ligne uniquement.** Titre, description et nombre de
   semaines n'ont plus de formulaire de repli — c'est un choix assumé : sans JS, ces
   trois champs ne sont pas modifiables (le reste des éditeurs garde son repli par
@@ -324,6 +384,8 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   back-office `/admin` (messages programmés,
   [`docs/feature-custom-messages.md`](./docs/feature-custom-messages.md)). L'app n'expose que ce que le titulaire du compte peut
   changer lui-même : son mot de passe et son pseudo, dans `/profile/settings`.
+  Pas de réinitialisation par email : « Mot de passe oublié ? » sur `/login`
+  renvoie vers l'administrateur, qui en redéfinit un par `app:user:reset-password`.
   L'email reste un identifiant fixe côté console.
 - **Le pseudo s'affiche, l'email identifie.** `User.username` est facultatif,
   unique (collation `utf8mb4_general_ci` : insensible à la casse et aux accents),
@@ -348,9 +410,14 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   ce que faisait « Voir la trajectoire », qui envoyait le coach de l'athlète à
   lui-même. Le coach a donc son propre espace de lecture, gardé par
   `CoachController::denyUnlessCoachOf()` : `/coach/athlete/{id}/exercise/{exId}`,
-  `/stats`, `/history`, qui rendent les **mêmes** templates au nom de quelqu'un
-  d'autre (paramètre `subject`, null = soi ; les services `ExerciseTrajectory`,
-  `TrainingStats` et `TrainingHistory` prennent déjà n'importe quel `User`). Règle
+  `/stats`, `/history`, `/calendar/{date}` (#77), qui rendent les **mêmes**
+  templates au nom de quelqu'un d'autre (paramètre `subject`, null = soi ; les
+  services `ExerciseTrajectory`, `TrainingStats`, `TrainingHistory` et
+  `CalendarWeek` prennent n'importe quel `User`). L'agenda coach garde les gestes
+  `EDIT` (statut, déplacer, retirer) et perd ce qui parle du calendrier du
+  lecteur (ajout depuis sa bibliothèque, export, ICS) ; après un geste sur la
+  séance d'un autre, `ScheduledWorkoutController::redirectToCalendarOf()` ramène
+  dans l'agenda du **propriétaire**, jamais dans celui du lecteur. Règle
   à tenir de ce côté : un template servi aux deux calcule ses destinations depuis
   `subject` — un lien interne oublié (fenêtre `?range=`, retour) ramènerait le
   coach sur ses propres données au clic suivant.
@@ -370,7 +437,8 @@ Détail complet dans `ROADMAP.md §1`. L'essentiel :
   un type et une clé résolus contre une table fermée de routes
   (`App\Http\BackTarget`, garde-fou testé) — aucune redirection ouverte n'est
   possible ; les droits se vérifient **avant** le libellé, un titre de plan étant
-  privé — de même pour `athlete-<id>` / `athlete-log-<id>`, gardés par la relation
+  privé — de même pour `athlete-<id>` / `athlete-log-<id>` /
+  `athlete-cal-<id>-<Y-m-d>`, gardés par la relation
   acceptée : l'adresse d'un athlète ne se laisse pas deviner dans la query ; et
   un jeton illisible, périmé ou hors droits **n'est pas une erreur**, il se lit
   comme une absence et la page retombe sur son retour d'origine.
@@ -468,7 +536,30 @@ Règles non négociables :
 
 ---
 
-## 6. État d'avancement
+## 6. Tests
+
+Un test vérifie un **comportement**, jamais une présentation. Revue de la
+suite (#130) : les tests de libellé et de balisage cassaient à chaque retouche
+d'interface sans jamais attraper de vrai bug.
+
+- **Unitaire** pour la logique métier (`src/Service/`, enums, voters) : calculs,
+  règles, invariants. C'est le socle, et il ne coûte presque rien à l'exécution.
+- **Fonctionnel** (`WebTestCase`) pour ce qu'un test unitaire ne voit pas :
+  droits et cloisonnement (403/404, ce qu'un lecteur voit ou non des données
+  d'un autre), effets en base d'une action, cible d'un Turbo Stream, contrat de
+  l'API mobile (champs, absence des notes privées). Un sélecteur sert à
+  **trouver** la donnée à vérifier, pas à vérifier le balisage.
+- **Pas de test** pour un libellé, un accord, une classe CSS, un ordre de
+  sections, une icône ou le câblage `data-action` d'un contrôleur Stimulus. Un
+  ticket purement visuel se vérifie à la main dans le navigateur, et ne reçoit
+  pas de test.
+
+Question à se poser avant d'écrire un test : une régression qu'il attraperait
+casserait-elle quelque chose pour l'utilisateur, ou seulement la maquette ?
+
+---
+
+## 7. État d'avancement
 
 Toutes les phases du `ROADMAP.md` sont livrées : socle Symfony (Docker,
 MariaDB, CI/CD), design tokens posés, identité **« Presse »** déployée sur

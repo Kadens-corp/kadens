@@ -40,7 +40,7 @@ enum SetType: string
     public function shortLabel(): string
     {
         return match ($this) {
-            self::WARMUP => 'Échauf',
+            self::WARMUP => 'Échauf.',
             self::NORMAL => '',
             self::DEGRESSIVE => 'Dégressive',
             self::TO_FAILURE => 'À l\'échec',
@@ -49,14 +49,15 @@ enum SetType: string
     }
 
     /**
-     * Sigle de la pastille de type (1 à 2 lettres), affiché dans les listes de
-     * séries. Vide pour NORMAL : pas de pastille pour une série ordinaire.
-     * D et DS sont volontairement distincts (dégressive ≠ drop set).
+     * Sigle de la pastille de type, affiché dans les listes de séries. Vide pour
+     * NORMAL : pas de pastille pour une série ordinaire. D et DS sont
+     * volontairement distincts (dégressive ≠ drop set). L'échauffement s'écrit en
+     * toutes lettres (#102) : « W » (warm-up) se lisait « watts ».
      */
     public function letter(): string
     {
         return match ($this) {
-            self::WARMUP => 'W',
+            self::WARMUP => 'Échauf.',
             self::NORMAL => '',
             self::DEGRESSIVE => 'D',
             self::TO_FAILURE => 'F',

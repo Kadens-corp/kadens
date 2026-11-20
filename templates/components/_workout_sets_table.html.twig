@@ -20,7 +20,15 @@
    ---- Deux modes, un seul composant ----
 
    Sans `compared`, le tableau détaille le prescrit : Type / Série / Reps /
-   Charge / % du max. C'est le mode de la bibliothèque et de la page publique.
+   Charge / % de la série la plus lourde. C'est le mode de la bibliothèque et de
+   la page publique.
+
+   Ce pourcentage se rapporte à la série la plus lourde de l'exercice dans cette
+   séance (`topWeightKg`), jamais au 1RM de la fiche athlète (#106). « % du max »
+   se lisait comme un % du 1RM : on l'a renommé plutôt que de le recalculer. Le
+   1RM n'existe que pour quatre mouvements, et le tableau est aussi celui de la
+   page publique et du coach : rapporter une charge au 1RM laisserait déduire un
+   record privé de la fiche en une division.
 
    Avec `compared` (LogComparator), il devient la comparaison **en place** :
    Série / Prévu / Réalisé. Le réalisé est une colonne de plus dans le tableau
@@ -31,7 +39,7 @@
 
    Deux colonnes disparaissent dans ce mode, et c'est assumé : la charge rejoint
    sa cellule d'effort (« 8 × 80 kg » se lit d'un bloc, et c'est ce qu'on compare)
-   et le « % du max » cède sa largeur — au téléphone, la largeur est ce qui manque.
+   et le pourcentage cède sa largeur — au téléphone, la largeur est ce qui manque.
 
    La colonne « Prévu » elle-même tombe quand rien n'était prescrit en face :
    séance libre, exercice ajouté à la volée. Une colonne de tirets ne dit rien. #}
@@ -52,7 +60,7 @@
         {{- settype.badge(line.type) -}}
         <span class="kd-setcell__effort">{{ line.effort }}</span>
         {%- if line.weightKg is not null %}
-            <span class="kd-setcell__load">{{ line.weightKg|number_format(line.weightKg == line.weightKg|round ? 0 : 1, ',', ' ') }} kg</span>
+            <span class="kd-setcell__load">{{ line.weightKg|weight }}</span>
         {%- endif %}
         {%- if line.rpe|default(null) is not null %}
             <span class="kd-setcell__rpe">RPE {{ line.rpe }}</span>
@@ -110,7 +118,7 @@
 
     {# Deux colonnes ne s'affichent que si elles ont quelque chose à dire — une
        colonne vide coûte de la largeur, et la largeur est ce qui manque au
-       téléphone. Le « % du max » n'aurait que des 100 % à charge constante, et la
+       téléphone. Le pourcentage n'aurait que des 100 % à charge constante, et la
        colonne « Type » que des cases vides si aucune série n'est qualifiée (mode
        simple : toutes les séries sont ordinaires). #}
     {% set show_percent = topWeightKg is not null and topWeightKg > 0
@@ -125,7 +133,9 @@
                     <th scope="col" class="kd-settable__c-num">Série</th>
                     <th scope="col">{{ type is not null and type.value == 'sets_time' ? 'Durée' : 'Reps' }}</th>
                     <th scope="col" class="kd-settable__c-num">Charge</th>
-                    {% if show_percent %}<th scope="col" class="kd-settable__c-num">% du max</th>{% endif %}
+                    {# Le seul en-tête qui va à la ligne : ses cellules sont courtes
+                       (« 50 % »), c'est l'intitulé qui a besoin d'être entier. #}
+                    {% if show_percent %}<th scope="col" class="kd-settable__c-num kd-settable__c-pct">% de la série la plus lourde</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -141,7 +151,7 @@
                             {% if l.typeLabel %}<span class="kd-setrow__tag">· {{ l.typeLabel|lower }}</span>{% endif %}
                         </td>
                         <td class="kd-settable__c-num">
-                            {{- l.weightKg is not null ? l.weightKg|number_format(l.weightKg == l.weightKg|round ? 0 : 1, ',', ' ') ~ ' kg' : '—' -}}
+                            {{- l.weightKg is not null ? l.weightKg|weight : '—' -}}
                         </td>
                         {% if show_percent %}
                             <td class="kd-settable__c-num kd-setrow__pct">

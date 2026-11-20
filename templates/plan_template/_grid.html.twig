@@ -16,6 +16,9 @@
 {% import 'components/_activity.html.twig' as activity %}
 {% set dayNames = {1: 'Lun', 2: 'Mar', 3: 'Mer', 4: 'Jeu', 5: 'Ven', 6: 'Sam', 7: 'Dim'} %}
 {% set dayFull = {1: 'lundi', 2: 'mardi', 3: 'mercredi', 4: 'jeudi', 5: 'vendredi', 6: 'samedi', 7: 'dimanche'} %}
+{# Coach sur le plan de son athlète (#65) : comparaison par `id`, comme `_owner_banner`. #}
+{% set caseNoteForAthlete = template.owner is not null and app.user and template.owner.id != app.user.id %}
+{% set caseNotePlaceholder = caseNoteForAthlete ? "+ Consigne pour l'athlète" : '+ note' %}
 
 <div class="kd-planweeks">
     {% for week in flat.weeks %}
@@ -30,22 +33,38 @@
                             {{ ux_icon('lucide:ellipsis') }}
                         </summary>
                         <div class="kd-kebab__panel">
-                            {# Copier cette semaine vers une cible libre (remplace la cible). #}
+                            {# Copier cette semaine vers une ou plusieurs autres (#111),
+                               chacune remplacée. Des cases à cocher en pastilles : S1 vers
+                               S2 à S4 en un geste. La suivante est cochée d'office, le cas
+                               le plus courant (comme « Copier vers » d'une séance).
+                               « Toutes les suivantes » envoie le formulaire sans tenir compte
+                               des cases : remplir S2 à S12 depuis S1 ne demande pas 11 clics.
+                               Bouton d'envoi nommé, donc sans JS aussi ; la confirmation lit
+                               le bouton cliqué (`event.submitter`) pour dire ce qui part où. #}
+                            {% set followingWeeks = template.durationWeeks - week.weekNumber %}
                             <form method="post" class="kd-kebab__form"
                                   action="{{ path('app_plan_template_week_copy', {id: template.id, week: week.weekNumber}) }}"
-                                  onsubmit="return confirm('Copier la semaine {{ week.weekNumber }} vers la semaine choisie ? Son contenu actuel sera remplacé.');">
+                                  onsubmit="return confirm(event.submitter &amp;&amp; event.submitter.name === 'all_after' ? 'Copier la semaine {{ week.weekNumber }} vers toutes les suivantes (S{{ week.weekNumber + 1 }} à S{{ template.durationWeeks }}) ? Leur contenu actuel sera remplacé.' : 'Copier la semaine {{ week.weekNumber }} vers les semaines cochées ? Leur contenu actuel sera remplacé.');">
                                 <input type="hidden" name="_token" value="{{ csrf_token('week_copy' ~ week.weekNumber) }}">
-                                <label class="kd-kebab__formlabel" for="week-copy-{{ week.weekNumber }}">
-                                    {{ ux_icon('lucide:copy') }} Copier vers
-                                </label>
-                                <div class="kd-kebab__formrow">
-                                    <select name="target" id="week-copy-{{ week.weekNumber }}" class="kd-input"
-                                            aria-label="Semaine de destination">
+                                <fieldset class="kd-weekcopy">
+                                    <legend class="kd-kebab__formlabel">
+                                        {{ ux_icon('lucide:copy') }} Copier vers
+                                    </legend>
+                                    <div class="kd-choicegrid kd-weekcopy__choices">
                                         {% for w in 1..template.durationWeeks %}
-                                            {% if w != week.weekNumber %}<option value="{{ w }}">Semaine {{ w }}</option>{% endif %}
+                                            {% if w != week.weekNumber %}
+                                                <input type="checkbox" name="targets[]" value="{{ w }}"
+                                                       id="week-copy-{{ week.weekNumber }}-{{ w }}"{{ w == week.weekNumber + 1 ? ' checked' }}>
+                                                <label class="kd-label" for="week-copy-{{ week.weekNumber }}-{{ w }}">S{{ w }}</label>
+                                            {% endif %}
                                         {% endfor %}
-                                    </select>
+                                    </div>
+                                </fieldset>
+                                <div class="kd-weekcopy__actions">
                                     <button type="submit" class="kd-btn kd-btn--secondary kd-btn--sm">Copier</button>
+                                    {% if followingWeeks >= 2 %}
+                                        <button type="submit" name="all_after" value="1" class="kd-btn kd-btn--ghost kd-btn--sm">Toutes les suivantes</button>
+                                    {% endif %}
                                 </div>
                             </form>
 
@@ -61,6 +80,15 @@
                     </details>
                 {% endif %}
             </div>
+            {# Confirmation de « Copier vers » (#111), là où l'on vient de cliquer. #}
+            {% set notice = gridNotice|default(null) %}
+            {% if notice and notice.week == week.weekNumber %}
+                {% if notice.tone == 'error' %}
+                    <p class="kd-planweek__notice kd-planweek__notice--error" role="alert">{{ ux_icon('lucide:x') }} {{ notice.text }}</p>
+                {% else %}
+                    <p class="kd-planweek__notice" role="status">{{ ux_icon('lucide:circle-check') }} {{ notice.text }}</p>
+                {% endif %}
+            {% endif %}
 
             {# Charge de la semaine, ventilée par activité (salle : séries par groupe
                musculaire + tonnage ; endurance : distance/durée). Source : PlanVolumeAggregator. #}
@@ -109,9 +137,24 @@
                                             <button type="button" class="kd-planitem__link"
                                                     data-action="plangrid#edit"
                                                     data-panel-url="{{ path('app_workout_quick_panel', {id: entry.item.workout.id}) }}"
+                                                    data-cell-label="S{{ week.weekNumber }} · {{ dayFull[day.dayOfWeek] }}"
+                                                    data-meta-url="{{ path('app_workout_meta', {id: entry.item.workout.id}) }}"
+                                                    data-meta-token="{{ csrf_token('workout_meta' ~ entry.item.workout.id) }}"
                                                     data-full-url="{{ path('app_workout_edit', {id: entry.item.workout.id}|merge(back_to('plan-edit', template.id))) }}">
                                                 <span class="kd-planitem__title">{{ entry.workout.workout.title }}</span>
                                                 <span class="kd-planitem__meta">
+                                                    {# Case qui répète à l'identique la fois d'avant de sa
+                                                       séance dans le plan (#93, LineageDivergence) : pas
+                                                       encore ajustée, ou volontairement stable. Une case
+                                                       qui progresse n'a pas de repère. Même semaine : le
+                                                       jour suffit. #}
+                                                    {% set repeat = repeats[entry.item.workout.id] ?? null %}
+                                                    {% if repeat %}
+                                                        <span class="kd-planitem__same"
+                                                              title="Identique à la semaine {{ repeat.week }}, {{ dayFull[repeat.day] }}">
+                                                            = {{ repeat.week == week.weekNumber ? dayNames[repeat.day]|lower ~ '.' : 'S' ~ repeat.week }}
+                                                        </span>
+                                                    {% endif %}
                                                     {% if entry.item.workout.estimatedDurationMinutes %}
                                                         <span>{{ ux_icon('lucide:clock') }} {{ entry.item.workout.estimatedDurationMinutes }} min</span>
                                                     {% endif %}
@@ -136,7 +179,7 @@
                                                        exclue de la bibliothèque : sans contexte, son retour
                                                        menait à un index où elle n'apparaît pas. #}
                                                     <a class="kd-kebab__item" href="{{ path('app_workout_edit', {id: entry.item.workout.id}|merge(back_to('plan-edit', template.id))) }}">
-                                                        {{ ux_icon('lucide:square-pen') }} Édition complète
+                                                        {{ ux_icon('lucide:square-pen') }} Ouvrir dans l'éditeur de séance
                                                     </a>
 
                                                     {# Repli du glisser-déposer : indispensable au clavier, et plus
@@ -193,23 +236,25 @@
                                                         token: csrf_token('item_delete' ~ entry.item.id),
                                                         icon: 'lucide:x',
                                                         variant: 'danger',
-                                                        label: 'Retirer de la trame'
+                                                        label: 'Retirer du plan'
                                                     }) }}
                                                 </div>
                                             </details>
                                         </div>
                                         {# Note de case éditable en ligne (clic). Toujours présente : une note
-                                           vide devient un discret « + note ». #}
+                                           vide devient un discret « + note ». Chez le coach d'un athlète,
+                                           c'est une consigne que l'athlète lira, et elle se nomme ainsi (#65). #}
                                         <p class="kd-planday__notes kd-inlineedit kd-inlineedit--note{{ entry.item.notes ? '' : ' kd-inlineedit--empty' }}"
                                            data-controller="inline-edit"
                                            data-inline-edit-url-value="{{ path('app_plan_template_item_note', {id: template.id, itemId: entry.item.id}) }}"
                                            data-inline-edit-token-value="{{ csrf_token('item_note' ~ entry.item.id) }}"
                                            data-inline-edit-field-value="notes"
                                            data-inline-edit-type-value="textarea"
-                                           data-inline-edit-placeholder-value="+ note"
+                                           data-inline-edit-placeholder-value="{{ caseNotePlaceholder }}"
                                            data-inline-edit-target="display"
                                            data-value="{{ entry.item.notes }}"
-                                           data-action="click->inline-edit#start">{{ entry.item.notes ?: '+ note' }}</p>
+                                           data-action="click->inline-edit#start"
+                                           {%- if caseNoteForAthlete %} title="Consigne visible par {{ template.owner.displayName }}"{% endif %}>{{ entry.item.notes ?: caseNotePlaceholder }}</p>
 
                                         {# Aperçu au survol (top-layer via Popover API), positionné par le
                                            contrôleur plangrid pour échapper à l'overflow de la grille. #}
@@ -228,7 +273,7 @@
                         <button type="button" class="kd-planday__add"
                                 data-action="plangrid#openLib"
                                 data-week="{{ week.weekNumber }}" data-day="{{ day.dayOfWeek }}"
-                                data-cell-label="S{{ week.weekNumber }} · {{ dayFull[day.dayOfWeek] }}"
+                                data-cell-label="semaine {{ week.weekNumber }}, {{ dayFull[day.dayOfWeek] }}"
                                 aria-label="Ajouter une séance — semaine {{ week.weekNumber }}, {{ dayFull[day.dayOfWeek] }}">
                             {{ ux_icon('lucide:plus') }}
                         </button>

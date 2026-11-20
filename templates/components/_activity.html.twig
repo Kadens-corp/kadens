@@ -13,6 +13,7 @@
      {{ activity.badge(exercise.activity) }}    {# pastille pleine icône + label #}
      {{ activity.icon(exercise.activity) }}      {# 'lucide:...'                  #}
      {{ activity.modifier(exercise.activity) }}  {# 'run'|'gym'|'swim'|'bike'|…   #}
+     {{ activity.label(row.activity) }}          {# libellé, « Sans contenu » si null #}
      {{ activity.surface(fw.activities) }}       {# 'kd-act--gym kd-act2--run'    #}
    ============================================================================ #}
 
@@ -21,7 +22,7 @@
         'gym': 'lucide:dumbbell', 'running': 'lucide:footprints',
         'swimming': 'lucide:waves', 'cycling': 'lucide:bike',
         'mobility': 'lucide:person-standing', 'other': 'lucide:circle-dot',
-    }[activity.value] ?? 'lucide:circle-dot' -}}
+    }[activity ? activity.value : ''] ?? 'lucide:circle-dot' -}}
 {%- endmacro -%}
 
 {%- macro modifier(activity) -%}
@@ -39,10 +40,20 @@
     {{- second ? ' kd-act2--' ~ second.cssKey -}}
 {%- endmacro -%}
 
+{#- Le libellé d'une activité. `null` = une séance faite dont ni le prescrit,
+    ni l'activité importée, ni le réalisé ne disent la nature (SessionNature) :
+    une séance restée vide, pas une séance « sans programme ». -#}
+{%- macro label(activity) -%}
+    {{- activity ? activity.label : 'Sans contenu' -}}
+{%- endmacro -%}
+
+{#- Sans activité, la pastille reste neutre (contour, sans aplat) : la classe
+    `kd-badge--act` sans couleur d'activité rendrait un texte blanc sur fond
+    transparent. -#}
 {%- macro badge(activity, with_label = true) -%}
     {%- import _self as self -%}
-    <span class="kd-badge kd-badge--act kd-act--{{ self.modifier(activity) }}">
+    <span class="kd-badge{{ activity ? ' kd-badge--act kd-act--' ~ self.modifier(activity) }}">
         {{- ux_icon(self.icon(activity)|trim) -}}
-        {%- if with_label %} {{ activity.label }}{% endif -%}
+        {%- if with_label %} {{ self.label(activity) }}{% endif -%}
     </span>
 {%- endmacro -%}

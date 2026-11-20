@@ -1,0 +1,13 @@
+{# Alerte de vraisemblance sous la distance d'un exercice (#97) : « 6 × 400 km,
+   soit 2 400 km au total : vérifie l'unité (m ou km). » Un avertissement, jamais
+   un refus (cf. DistancePlausibility).
+
+   Le conteneur est toujours rendu, vide (donc masqué en CSS) quand tout va bien :
+   les streams d'enregistrement automatique (`prescribed_row`,
+   `quick_exo_summary`) ne re-rendent pas le formulaire en cours de saisie, ils
+   mettent à jour son seul contenu (`_distance_check_text`). Le conteneur reste
+   en place, c'est ce qui permet à `role="status"` d'annoncer la phrase quand
+   elle paraît. Contexte : prescribed. #}
+<p class="kd-distcheck" id="distance-check-{{ prescribed.id }}" role="status">
+    {{- include('workout/_distance_check_text.html.twig') -}}
+</p>

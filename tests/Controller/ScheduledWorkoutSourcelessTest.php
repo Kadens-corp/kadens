@@ -157,7 +157,7 @@ final class ScheduledWorkoutSourcelessTest extends WebTestCase
 
     /**
      * Le flux Turbo qui re-rend la pastille après un changement de statut passe
-     * par le même composant : la marque doit survivre au cycle, sinon elle
+     * par le même composant : la marque doit survivre au changement, sinon elle
      * disparaîtrait au premier clic sur « fait ».
      */
     public function testFreeformMarkSurvivesTheStatusStream(): void
@@ -170,8 +170,11 @@ final class ScheduledWorkoutSourcelessTest extends WebTestCase
 
         $this->client->request(
             'POST',
-            '/schedule/'.$scheduled->getId().'/cycle-status',
-            ['_token' => $crawler->filter('.kd-calevent__statusform input[name="_token"]')->attr('value')],
+            '/schedule/'.$scheduled->getId().'/quick-status',
+            [
+                '_token' => $crawler->filter('.kd-statusmenu input[name="_token"]')->attr('value'),
+                'status' => 'done',
+            ],
             [],
             ['HTTP_ACCEPT' => 'text/vnd.turbo-stream.html']
         );
@@ -192,7 +195,10 @@ final class ScheduledWorkoutSourcelessTest extends WebTestCase
         self::assertResponseIsSuccessful();
         self::assertSelectorTextContains('.kd-wk__title', 'Séance improvisée');
         self::assertSelectorTextContains('.kd-wk__date', 'Dimanche 15 mars 2026');
-        self::assertSelectorTextContains('.kd-done', 'Marquer fait');
+        self::assertSelectorTextContains('#schedule-summary', 'Prévue');
+        self::assertSelectorTextContains('.kd-done', 'Enregistrer');
+        // Pas de séance type à ouvrir : le bilan n'en annonce pas.
+        self::assertSelectorTextNotContains('#schedule-summary', 'Séance type');
         self::assertStringNotContainsString('kd-wk__panel', $crawler->html());
     }
 

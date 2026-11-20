@@ -52,7 +52,7 @@
                     </span>
                     <span class="kd-exohist__meta">
                         {{ entry.last.workingSets }} série{{ entry.last.workingSets > 1 ? 's' }}
-                        {%- if entry.last.topWeightKg is not null %} · top {{ entry.last.topWeightKg|round|number_format(0, ',', ' ') }} kg{% endif -%}
+                        {%- if entry.last.topWeightKg is not null %} · jusqu'à {{ entry.last.topWeightKg|weight }}{% endif -%}
                     </span>
                 </div>
             {% endif %}

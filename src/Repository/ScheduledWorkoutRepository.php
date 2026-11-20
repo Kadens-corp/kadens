@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\ImportedActivity;
+use App\Entity\LoggedExercise;
 use App\Entity\PlanItem;
 use App\Entity\PlanTemplate;
 use App\Entity\ScheduledWorkout;
@@ -24,6 +25,152 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, ScheduledWorkout::class);
+    }
+
+    /**
+     * Une page du flux d'amis (#126) : les séances de salle FAITES des auteurs
+     * donnés, la plus récente d'abord, hydratées avec leur réalisé (exercices,
+     * séries, exercice de bibliothèque) et leur séance d'origine.
+     *
+     * « De salle faite » = statut `DONE` et au moins un exercice consigné : le
+     * flux montre le réalisé, une séance simplement cochée n'a rien à y lire, et
+     * seule la muscu se logue (le cardio s'importe et reste hors du flux).
+     *
+     * La visibilité se lit ICI, à chaque affichage, et nulle part ailleurs :
+     * les séances de `$viewer` passent toujours (masquées comprises, le template
+     * les dit masquées), celles d'un autre seulement si son partage est ouvert
+     * et qu'il ne l'a pas masquée. Couper le partage retire donc aussi l'ancien.
+     * L'appelant ne passe que des auteurs autorisés (lui-même et ses amis).
+     *
+     * Deux temps, parce qu'une page bornée par `setMaxResults` ne se combine pas
+     * avec des jointures de collection : les identifiants d'abord, triés et
+     * bornés, puis le contenu de ces seules séances. Bornée à une dizaine de
+     * séances, l'hydratation reste dans la contrainte de coût du projet.
+     *
+     * @param list<User> $authors
+     *
+     * @return list<ScheduledWorkout>
+     */
+    public function findFeedPage(User $viewer, array $authors, int $offset, int $limit): array
+    {
+        if ([] === $authors || $limit < 1) {
+            return [];
+        }
+
+        $ids = array_map('intval', array_column($this->feedQuery($viewer, $authors)
+            ->select('s.id')
+            ->orderBy('s.scheduledDate', 'DESC')
+            ->addOrderBy('s.endedAt', 'DESC')
+            ->addOrderBy('s.id', 'DESC')
+            ->setFirstResult(max(0, $offset))
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getScalarResult(), 'id'));
+
+        if ([] === $ids) {
+            return [];
+        }
+
+        /** @var list<ScheduledWorkout> $sessions */
+        $sessions = $this->createQueryBuilder('s')
+            ->addSelect('o', 'w', 'le', 'ls', 'e')
+            ->join('s.owner', 'o')
+            ->leftJoin('s.workout', 'w')
+            ->leftJoin('s.loggedExercises', 'le')
+            ->leftJoin('le.loggedSets', 'ls')
+            ->leftJoin('le.exercise', 'e')
+            ->andWhere('s.id IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->getResult();
+
+        $byId = [];
+        foreach ($sessions as $session) {
+            $byId[(int) $session->getId()] = $session;
+        }
+
+        return array_values(array_filter(array_map(static fn (int $id): ?ScheduledWorkout => $byId[$id] ?? null, $ids)));
+    }
+
+    /**
+     * La séance la plus récente que chacun de ces amis montre dans le flux, pour
+     * la ligne « Dernière séance » de la page Amis. Mêmes conditions que le flux
+     * (`feedQuery()`), vues par un tiers : partage ouvert, séance non masquée.
+     * Un ami qui ne partage rien est absent du tableau.
+     *
+     * @param list<User> $friends
+     *
+     * @return array<int, array{title: string, date: \DateTimeImmutable}> indexé par identifiant d'ami
+     */
+    public function latestSharedByOwner(array $friends): array
+    {
+        if ([] === $friends) {
+            return [];
+        }
+
+        $rows = $this->createQueryBuilder('s')
+            ->select('IDENTITY(s.owner) AS ownerId', 's.id AS id', 's.scheduledDate AS date', 'w.title AS workoutTitle', 's.title AS ownTitle')
+            ->join('s.owner', 'o')
+            ->leftJoin('s.workout', 'w')
+            ->andWhere('s.owner IN (:authors)')
+            ->andWhere('s.status = :done')
+            ->andWhere('EXISTS (SELECT 1 FROM '.LoggedExercise::class.' le WHERE le.scheduledWorkout = s)')
+            ->andWhere('o.shareWithFriends = true')
+            ->andWhere('s.hiddenFromFriends = false')
+            ->setParameter('authors', $friends)
+            ->setParameter('done', ScheduledStatus::DONE)
+            ->orderBy('s.scheduledDate', 'DESC')
+            ->addOrderBy('s.endedAt', 'DESC')
+            ->addOrderBy('s.id', 'DESC')
+            ->getQuery()
+            ->getArrayResult();
+
+        $latest = [];
+        foreach ($rows as $row) {
+            $ownerId = (int) $row['ownerId'];
+            if (isset($latest[$ownerId])) {
+                continue;
+            }
+            $latest[$ownerId] = [
+                // La règle de titrage de l'entité, rejouée (cf. `TrainingLog`).
+                'title' => (string) ($row['workoutTitle'] ?? $row['ownTitle'] ?? 'Séance libre'),
+                'date' => self::asDate($row['date']) ?? throw new \UnexpectedValueException('Séance sans date.'),
+            ];
+        }
+
+        return $latest;
+    }
+
+    /** Le nombre de ses séances que `$owner` a masquées pour ses amis (#126). */
+    public function countHiddenFromFriends(User $owner): int
+    {
+        return (int) $this->createQueryBuilder('s')
+            ->select('COUNT(s.id)')
+            ->andWhere('s.owner = :owner')
+            ->andWhere('s.hiddenFromFriends = true')
+            ->setParameter('owner', $owner)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * Le périmètre du flux, sans projection ni tri : cf. `findFeedPage()`. Aussi
+     * la garde de la copie (`FriendFeed::canRead()`), pour qu'une séance qu'on
+     * ne voit pas ne se copie pas.
+     *
+     * @param list<User> $authors
+     */
+    public function feedQuery(User $viewer, array $authors): QueryBuilder
+    {
+        return $this->createQueryBuilder('s')
+            ->join('s.owner', 'o')
+            ->andWhere('s.owner IN (:authors)')
+            ->andWhere('s.status = :done')
+            ->andWhere('EXISTS (SELECT 1 FROM '.LoggedExercise::class.' le WHERE le.scheduledWorkout = s)')
+            ->andWhere('s.owner = :viewer OR (o.shareWithFriends = true AND s.hiddenFromFriends = false)')
+            ->setParameter('authors', $authors)
+            ->setParameter('viewer', $viewer)
+            ->setParameter('done', ScheduledStatus::DONE);
     }
 
     /**
@@ -51,9 +198,12 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
      */
     public function findByOwnerBetween(User $owner, \DateTimeImmutable $start, \DateTimeImmutable $end): array
     {
+        // La case d'origine vient avec : sa consigne s'affiche dans la modale du
+        // calendrier (#95), sans une requête par pastille.
         return $this->createQueryBuilder('s')
-            ->addSelect('w')
+            ->addSelect('w', 'pi')
             ->leftJoin('s.workout', 'w')
+            ->leftJoin('s.sourcePlanItem', 'pi')
             ->andWhere('s.owner = :owner')
             ->andWhere('s.scheduledDate BETWEEN :start AND :end')
             ->setParameter('owner', $owner)
@@ -162,11 +312,21 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
         ;
     }
 
-    /** La branche du PRESCRIT : une chaîne, donc aussi profonde qu'on veut. */
+    /**
+     * La branche du PRESCRIT : une chaîne, donc aussi profonde qu'on veut.
+     *
+     * La case et le plan d'origine (`pi`, `pt`) en font partie : la case porte la
+     * consigne que l'API sort (#128), le plan le `{id, title}` du payload. Deux
+     * ManyToOne, donc des colonnes en plus, jamais des lignes ; sans eux, le
+     * bootstrap paierait une requête par séance issue d'un plan pour la case, et
+     * une par plan distinct de la fenêtre pour le titre.
+     */
     private function withPrescribed(QueryBuilder $qb): QueryBuilder
     {
         return $qb
-            ->addSelect('w', 'b', 'pe', 'ps', 'e')
+            ->addSelect('w', 'b', 'pe', 'ps', 'e', 'pi', 'pt')
+            ->leftJoin('s.sourcePlanItem', 'pi')
+            ->leftJoin('s.sourcePlanTemplate', 'pt')
             ->leftJoin('s.workout', 'w')
             ->leftJoin('w.blocks', 'b')
             ->leftJoin('b.prescribedExercises', 'pe')
@@ -196,6 +356,50 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
     public function countByStatusForOwnerBetween(User $owner, \DateTimeImmutable $start, \DateTimeImmutable $end): array
     {
         return $this->countByStatusForOwnerIn($owner, $start, $end);
+    }
+
+    /**
+     * Les séances encore prévues du **prochain jour qui en porte**, à partir de
+     * `$from` inclus : ce que montre le bloc « Ta prochaine séance » de l'accueil
+     * (#70). Un jour peut en porter plusieurs (séance double) : on les rend
+     * toutes, dans l'ordre du calendrier. Les séances faites ou manquées du jour
+     * ne comptent pas, la suivante reste celle qu'il reste à faire.
+     *
+     * Deux requêtes courtes plutôt qu'une sous-requête MIN : la première trouve
+     * le jour, la seconde charge ses séances avec leur source.
+     *
+     * @return list<ScheduledWorkout>
+     */
+    public function findNextPlannedDay(User $owner, \DateTimeImmutable $from): array
+    {
+        $first = $this->createQueryBuilder('s')
+            ->andWhere('s.owner = :owner')
+            ->andWhere('s.status = :planned')
+            ->andWhere('s.scheduledDate >= :from')
+            ->setParameter('owner', $owner)
+            ->setParameter('planned', ScheduledStatus::PLANNED)
+            ->setParameter('from', $from, \Doctrine\DBAL\Types\Types::DATE_IMMUTABLE)
+            ->orderBy('s.scheduledDate', 'ASC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        if (!$first instanceof ScheduledWorkout) {
+            return [];
+        }
+
+        return $this->createQueryBuilder('s')
+            ->addSelect('w')
+            ->leftJoin('s.workout', 'w')
+            ->andWhere('s.owner = :owner')
+            ->andWhere('s.status = :planned')
+            ->andWhere('s.scheduledDate = :day')
+            ->setParameter('owner', $owner)
+            ->setParameter('planned', ScheduledStatus::PLANNED)
+            ->setParameter('day', $first->getScheduledDate(), \Doctrine\DBAL\Types\Types::DATE_IMMUTABLE)
+            ->orderBy('s.id', 'ASC')
+            ->getQuery()
+            ->getResult();
     }
 
     /**
@@ -726,8 +930,8 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
     /**
      * Le nombre de séances consignées d'un utilisateur, toutes fenêtres
      * confondues. Un COUNT, pas un `count()` sur des lignes remontées : c'est ce
-     * qui permet à la fiche du coach de dire « les 10 dernières **sur 214** »
-     * sans lire les 214.
+     * qui permet à la fiche du coach d'annoncer « Son journal (214) » sans lire
+     * les 214.
      */
     public function countLoggedForOwner(User $owner): int
     {
@@ -738,6 +942,49 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
             ->setParameter('owner', $owner)
             ->getQuery()
             ->getSingleScalarResult();
+    }
+
+    /**
+     * Le nombre de séances de force **faites sans réalisé** sur une fenêtre
+     * (bornes nulles = sans borne) : cochées « faites », au moins un exercice
+     * d'activité `gym` au prescrit, aucune ligne consignée (#63).
+     *
+     * C'est le compte de ce que les pages de lecture doivent expliquer : une
+     * séance pareille pèse dans l'assiduité et pas dans le volume, et ses charges
+     * se saisissent dans l'app. « De force » suit la définition de
+     * `TrackableSchedule` (un exercice `gym` suffit) : une séance que le téléphone
+     * ne reçoit pas ne peut pas lui être reprochée.
+     *
+     * Un COUNT, jamais une hydratation : il vit à côté des agrégats des
+     * statistiques et du journal, soumis à la même contrainte de coût.
+     */
+    public function countDoneStrengthWithoutLogForOwner(User $owner, ?\DateTimeImmutable $start, ?\DateTimeImmutable $end): int
+    {
+        $qb = $this->createQueryBuilder('s')
+            ->select('COUNT(DISTINCT s.id)')
+            ->join('s.workout', 'w')
+            ->join('w.blocks', 'b')
+            ->join('b.prescribedExercises', 'pe')
+            ->join('pe.exercise', 'e')
+            ->andWhere('s.owner = :owner')
+            ->andWhere('s.status = :done')
+            ->andWhere('e.activity = :gym')
+            ->andWhere('NOT EXISTS (SELECT 1 FROM '.LoggedExercise::class.' le WHERE le.scheduledWorkout = s)')
+            ->setParameter('owner', $owner)
+            ->setParameter('done', ScheduledStatus::DONE)
+            ->setParameter('gym', ActivityType::GYM);
+
+        if (null !== $start) {
+            $qb->andWhere('s.scheduledDate >= :windowStart')
+                ->setParameter('windowStart', $start, \Doctrine\DBAL\Types\Types::DATE_IMMUTABLE);
+        }
+
+        if (null !== $end) {
+            $qb->andWhere('s.scheduledDate <= :windowEnd')
+                ->setParameter('windowEnd', $end, \Doctrine\DBAL\Types\Types::DATE_IMMUTABLE);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
     /**
@@ -910,6 +1157,74 @@ class ScheduledWorkoutRepository extends ServiceEntityRepository
             ->setParameter('item', $item)
             ->getQuery()
             ->getResult();
+    }
+
+    /**
+     * Séances datées qui pointent CETTE séance elle-même (#113) : les poses
+     * directes à l'agenda, qui ne forkent pas et suivent donc chaque
+     * modification. Les séances issues d'un plan pointent une copie locale et
+     * n'entrent pas dans ce compte. Tous statuts, et les faites à part : elles
+     * relisent elles aussi le prescrit vivant, si bien que modifier la séance
+     * change ce que leur comparaison prévu/réalisé affiche. Le compositeur le dit.
+     *
+     * Portée = le propriétaire de la séance, comme `findDoneInLineage`.
+     *
+     * @return array{total: int, done: int}
+     */
+    public function directPoseCounts(Workout $workout): array
+    {
+        $owner = $workout->getOwner();
+        if (null === $owner) {
+            return ['total' => 0, 'done' => 0];
+        }
+
+        /** @var array{total: int|string|null, done: int|string|null} $row */
+        $row = $this->createQueryBuilder('s')
+            ->select('COUNT(s.id) AS total', 'SUM(CASE WHEN s.status = :done THEN 1 ELSE 0 END) AS done')
+            ->andWhere('s.workout = :workout')
+            ->andWhere('s.owner = :owner')
+            ->setParameter('workout', $workout)
+            ->setParameter('owner', $owner)
+            ->setParameter('done', ScheduledStatus::DONE)
+            ->getQuery()
+            ->getSingleResult();
+
+        return ['total' => (int) $row['total'], 'done' => (int) $row['done']];
+    }
+
+    /**
+     * Date de la dernière séance FAITE de chacune de ces séances (copies locales de
+     * plan, en pratique), en une requête. L'outil de progression du plan (#110)
+     * laisse ces cases telles quelles : leur prescrit est celui qu'on a suivi, et
+     * `LogComparator` compare le réalisé à lui.
+     *
+     * @param list<int> $workoutIds
+     *
+     * @return array<int, \DateTimeImmutable> id de séance → date de la dernière faite
+     */
+    public function lastDoneDateByWorkout(array $workoutIds): array
+    {
+        if ([] === $workoutIds) {
+            return [];
+        }
+
+        /** @var list<array{workoutId: int|string, last: string}> $rows */
+        $rows = $this->createQueryBuilder('s')
+            ->select('IDENTITY(s.workout) AS workoutId', 'MAX(s.scheduledDate) AS last')
+            ->andWhere('s.workout IN (:ids)')
+            ->andWhere('s.status = :done')
+            ->setParameter('ids', $workoutIds)
+            ->setParameter('done', ScheduledStatus::DONE)
+            ->groupBy('s.workout')
+            ->getQuery()
+            ->getArrayResult();
+
+        $dates = [];
+        foreach ($rows as $row) {
+            $dates[(int) $row['workoutId']] = new \DateTimeImmutable($row['last']);
+        }
+
+        return $dates;
     }
 
     /**

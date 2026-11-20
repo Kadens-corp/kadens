@@ -1,0 +1,54 @@
+{# ============================================================================
+   Infobulle d'un sigle ou d'un anglicisme sportif (#102). Composant unique : le
+   glossaire est ici, et nulle part ailleurs.
+
+   `title` seul ne suffit pas : rien ne le montre au doigt, et un lecteur d'écran
+   ne le restitue pas toujours. Le texte vit donc dans la page (`role="tooltip"`,
+   relié par `aria-describedby`), s'affiche au survol et au focus clavier en CSS,
+   et au toucher par le contrôleur `term` (Safari ne donne pas le focus à un
+   bouton qu'on touche, `:focus-within` n'y suffirait pas).
+
+   Deux formes :
+     {{ terms.abbr('RPE') }}              → le sigle souligné en pointillé, dans le texte
+     {{ terms.abbr('zone', 'Z2') }}       → la définition d'une clé, sous un autre texte
+     {{ terms.hint('RPE') }}              → un « ? » à poser à côté d'un libellé de champ
+                                            (jamais DANS le <label> : le toucher
+                                            donnerait le focus au champ et refermerait
+                                            l'infobulle aussitôt)
+   ============================================================================ #}
+
+{% macro definition(key) %}
+    {%- set glossary = {
+        RPE: 'Effort ressenti, de 1 (très facile) à 10 (maximal, plus rien en réserve).',
+        AMRAP: 'Max de répétitions (AMRAP, « as many reps as possible ») : le plus de répétitions possible dans le temps donné.',
+        'For time': 'Le plus vite possible (« for time ») : finir le travail demandé en un minimum de temps.',
+        zone: 'Zone d\'intensité, de Z1 (très facile) à Z5 (maximal). Ses bornes se calculent depuis ta FC max et ta FC de repos.',
+        '1RM': 'Charge maximale soulevée sur une seule répétition.',
+        SBD: 'Squat, développé couché (bench) et soulevé de terre (deadlift) : le total de ces trois records.',
+        DOTS: 'Score qui compare la force entre gabarits : le total SBD rapporté au poids de corps.',
+        FTP: 'Puissance tenue environ une heure à vélo, en watts. Elle sert de repère aux zones de puissance.',
+        'FC max': 'Fréquence cardiaque maximale, en battements par minute.',
+        Karvonen: 'Méthode de calcul des zones : elles se placent entre ta FC de repos et ta FC max.',
+    } -%}
+    {{- glossary[key]|default('') -}}
+{% endmacro %}
+
+{% macro abbr(key, text = null) %}
+    {%- import _self as terms -%}
+    {%- set id = 'term-' ~ random() -%}
+    <span class="kd-term" data-controller="term">
+        <abbr class="kd-term__word" tabindex="0" aria-describedby="{{ id }}"
+              data-action="click->term#toggle keydown.esc->term#close">{{ text ?? key }}</abbr>
+        <span class="kd-term__tip" role="tooltip" id="{{ id }}">{{ terms.definition(key) }}</span>
+    </span>
+{%- endmacro %}
+
+{% macro hint(key) %}
+    {%- import _self as terms -%}
+    {%- set id = 'term-' ~ random() -%}
+    <span class="kd-term kd-term--hint" data-controller="term">
+        <button type="button" class="kd-term__hint" aria-describedby="{{ id }}" aria-label="Que veut dire {{ key }} ?"
+                data-action="click->term#toggle keydown.esc->term#close">?</button>
+        <span class="kd-term__tip" role="tooltip" id="{{ id }}">{{ terms.definition(key) }}</span>
+    </span>
+{%- endmacro %}

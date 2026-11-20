@@ -4,6 +4,7 @@ namespace App\Entity;
 
 use App\Enum\CoachingStatus;
 use App\Repository\CoachingRepository;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
@@ -55,6 +56,27 @@ class Coaching
     // Date de la réponse (acceptation ou refus), null tant que PENDING.
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $respondedAt = null;
+
+    // Moment où l'initiateur a pris connaissance de la réponse (#79). Tant
+    // qu'il est null sur une demande tranchée, son accueil porte un bandeau
+    // « X a accepté ton invitation ». Remis à null à chaque réponse et à chaque
+    // réouverture : une nouvelle réponse est une nouvelle nouvelle.
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $responseSeenAt = null;
+
+    // Date de fin de la relation (#81), posée par « Terminer ». Elle borne la
+    // ligne « Anciens athlètes » du coach : un nom et deux dates, rien d'autre.
+    // Remise à null quand une nouvelle demande rouvre la ligne.
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $endedAt = null;
+
+    // Notes privées du coach sur son athlète (#65) : santé, contexte, rappels.
+    // Portées par la relation et non par le contenu, parce que tout ce qui vit
+    // sur une séance ou un plan appartient à l'athlète et lui est visible. Lues
+    // et écrites par le coach seul, jamais par l'athlète, et effacées à la fin de
+    // la relation : le coach n'a plus rien à garder sur quelqu'un qu'il ne suit plus.
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $coachNotes = null;
 
     #[ORM\PrePersist]
     public function onPrePersist(): void
@@ -143,6 +165,42 @@ class Coaching
         return $this;
     }
 
+    public function getResponseSeenAt(): ?\DateTimeImmutable
+    {
+        return $this->responseSeenAt;
+    }
+
+    public function setResponseSeenAt(?\DateTimeImmutable $responseSeenAt): static
+    {
+        $this->responseSeenAt = $responseSeenAt;
+
+        return $this;
+    }
+
+    public function getEndedAt(): ?\DateTimeImmutable
+    {
+        return $this->endedAt;
+    }
+
+    public function setEndedAt(?\DateTimeImmutable $endedAt): static
+    {
+        $this->endedAt = $endedAt;
+
+        return $this;
+    }
+
+    public function getCoachNotes(): ?string
+    {
+        return $this->coachNotes;
+    }
+
+    public function setCoachNotes(?string $coachNotes): static
+    {
+        $this->coachNotes = $coachNotes;
+
+        return $this;
+    }
+
     public function isActive(): bool
     {
         return $this->status->isActive();
@@ -152,6 +210,12 @@ class Coaching
     public function otherParty(User $user): ?User
     {
         return $this->coach === $user ? $this->athlete : $this->coach;
+    }
+
+    /** `$user` a-t-il envoyé la demande (donc seul habilité à l'annuler) ? */
+    public function isRequester(User $user): bool
+    {
+        return null !== $this->requestedBy && $this->requestedBy === $user;
     }
 
     /** `$user` est-il le destinataire de la demande (donc seul habilité à répondre) ? */

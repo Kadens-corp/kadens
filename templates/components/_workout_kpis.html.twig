@@ -6,6 +6,10 @@
    Attendus :
      summary  sortie de WorkoutMetrics::summary ou de LogMetrics::summary (requis)
      logged   true quand `summary` décrit du réalisé (optionnel, défaut false)
+     planned  true quand le prescrit s'affiche sur une séance DATÉE (optionnel,
+              défaut false) : il voisine alors avec le réalisé, ou avec son
+              absence, et doit dire qu'il est l'intention (#78). La bibliothèque
+              et la page publique n'ont rien à quoi l'opposer : « Volume total ».
 
    Une seule tuile diffère, et elle ne peut pas ne pas différer : le prescrit
    annonce ses **enchaînements** (une intention), le réalisé sa **durée réelle**
@@ -17,12 +21,13 @@
    prescrit c'est `summary.workingSets > 0`, côté réalisé c'est le null de
    LogMetrics::summary(). #}
 {% set logged = logged|default(false) %}
+{% set planned = planned|default(false) and not logged %}
 
 <dl class="kd-wk__kpis{{ logged ? ' kd-wk__kpis--logged' }}">
     <div class="kd-wk__kpi">
-        <dt>Volume total</dt>
+        <dt>{{ planned ? 'Volume prévu' : (logged ? 'Volume réalisé' : 'Volume total') }}</dt>
         <dd>{{ summary.tonnageKg|round|number_format(0, ',', ' ') }}<span class="kd-wk__unit"> kg</span></dd>
-        <p class="kd-wk__kpimeta">{{ summary.workingSets }} série{{ summary.workingSets > 1 ? 's' }} de travail</p>
+        <p class="kd-wk__kpimeta">{{ summary.workingSets }} série{{ summary.workingSets > 1 ? 's' }} de travail{{ planned ? ' prévue' ~ (summary.workingSets > 1 ? 's') }}</p>
     </div>
 
     {% if logged %}
@@ -48,7 +53,7 @@
                 {%- if summary.supersets %}{{ summary.supersets }} superset{{ summary.supersets > 1 ? 's' }}{% endif -%}
                 {%- if summary.supersets and summary.circuits %} · {% endif -%}
                 {%- if summary.circuits %}{{ summary.circuits }} circuit{{ summary.circuits > 1 ? 's' }}{% endif -%}
-                {%- if not summary.supersets and not summary.circuits %}Séance à plat{% endif -%}
+                {%- if not summary.supersets and not summary.circuits %}Sans enchaînement{% endif -%}
             </p>
         </div>
     {% endif %}

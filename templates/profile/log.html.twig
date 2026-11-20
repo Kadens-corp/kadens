@@ -39,12 +39,22 @@
     <div class="kd-pagehead">
         <div>
             <p class="kd-eyebrow kd-eyebrow--accent">Journal</p>
-            <h1 class="kd-title">{{ subject ? 'Ce qui a été consigné' : 'Ce que tu as consigné' }}</h1>
+            <h1 class="kd-title">{{ subject ? 'Ses séances détaillées' : 'Tes séances détaillées' }}</h1>
             <p class="kd-pagehead__lead">
                 {%- if subject %}{{ subject.displayName }} · {% endif -%}
                 {{ period.label }} ·
-                {{ sessions }} séance{{ sessions > 1 ? 's' }} consignée{{ sessions > 1 ? 's' }}
+                {{ sessions }} séance{{ sessions > 1 ? 's' }} détaillée{{ sessions > 1 ? 's' }}
                 {%- if total > sessions %} · {{ total }} au total{% endif -%}
+            </p>
+            {# Ce que la page montre ET ce qu'elle ne montre pas (#73) : à côté,
+               l'historique et les statistiques comptent une séance faite sans
+               détail, ici non. Sans cette phrase, « 0 séance consignée » côtoie
+               « 1 faite » et se lit comme une contradiction. #}
+            <p class="kd-pagehead__scope">
+                {{- subject
+                    ? 'Les séances dont le détail (exercices, charges, répétitions) a été saisi dans l\'app, une par ligne.'
+                    : 'Les séances dont tu as saisi le détail (exercices, charges, répétitions) dans l\'app, une par ligne.' }}
+                Une séance marquée faite sans ce détail, ou une sortie course, vélo ou natation, n'y figure pas : elle compte dans l'Historique et les Statistiques.
             </p>
         </div>
         <div class="kd-actionbar__end">
@@ -61,19 +71,30 @@
     </div>
 
     {{ include('profile/_stats_range.html.twig', {
-        period: period, ranges: ranges, months: months, subject: subject,
+        period: period, ranges: ranges, months: months, years: years, subject: subject,
         route: subject ? 'app_coach_athlete_log' : 'app_profile_log'
     }) }}
+
+    {# Le journal ne liste que le consigné : une séance de force cochée faite sans
+       réalisé n'y a pas de ligne, mais elle compte comme « faite » dans les
+       statistiques à côté. On le dit, plutôt que de laisser croire qu'elle a
+       disparu (#63). #}
+    {% set unloggedStrength = unloggedStrength|default(0) %}
+    {% if unloggedStrength > 0 %}
+        {{ include('components/_log_in_app.html.twig', {
+            count: unloggedStrength, third: subject is not null
+        }, with_context = false) }}
+    {% endif %}
 
     {% if groups is empty %}
         <div class="kd-empty kd-section__block">
             {{ ux_icon('lucide:history') }}
-            <div>Aucune séance consignée sur cette fenêtre.</div>
-            <p class="kd-empty__hint">
-                {{- total > 0
-                    ? 'Élargis la fenêtre : il y a ' ~ total ~ ' séance' ~ (total > 1 ? 's') ~ ' consignée' ~ (total > 1 ? 's') ~ ' au total.'
-                    : 'Le détail série par série remonte du téléphone, une fois la séance terminée.' -}}
-            </p>
+            <div>Aucune séance détaillée sur cette fenêtre.</div>
+            {% if total > 0 %}
+                <p class="kd-empty__hint">Élargis la fenêtre : il y a {{ total }} séance{{ total > 1 ? 's' }} détaillée{{ total > 1 ? 's' }} au total.</p>
+            {% elseif unloggedStrength == 0 %}
+                {{ include('components/_log_in_app.html.twig', {third: subject is not null}, with_context = false) }}
+            {% endif %}
         </div>
     {% else %}
         {# Un mois, son sous-total, ses séances. Les deux viennent déjà calculés

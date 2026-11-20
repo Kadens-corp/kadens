@@ -99,10 +99,35 @@ final class ExerciseControllerTest extends WebTestCase
             'exercise[activity]' => ActivityType::GYM->value,
         ]);
 
-        self::assertResponseRedirects('/exercise');
         $created = $this->em->getRepository(Exercise::class)->findOneBy(['name' => 'Fentes']);
         self::assertNotNull($created);
         self::assertSame($user->getId(), $created->getOwner()?->getId());
+
+        // Vers la fiche de l'exercice créé, pas vers la liste rangée de A à Z,
+        // où il n'était pas visible (#114) ; le message y suit.
+        self::assertResponseRedirects('/exercise/'.$created->getId());
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-flash', 'Exercice créé.');
+        self::assertSelectorTextContains('h1', 'Fentes');
+    }
+
+    /**
+     * L'erreur d'un champ porte de quoi s'effacer côté client dès que le champ
+     * est corrigé (#114) ; un champ sans erreur n'embarque rien.
+     */
+    public function testFieldErrorIsWiredToClearItself(): void
+    {
+        $this->client->loginUser($this->createUser('owner@example.com'));
+
+        $this->client->request('GET', '/exercise/new');
+        $crawler = $this->client->submitForm('Créer', ['exercise[name]' => 'Fentes']);
+
+        self::assertResponseStatusCodeSame(422);
+        $row = $crawler->filter('#exercise_activity')->closest('.kd-field');
+        self::assertNotNull($row);
+        self::assertSame('field-errors', $row->attr('data-controller'));
+        self::assertStringContainsString('Choisis une activité.', $row->filter('[data-field-errors-target="list"]')->text());
+        self::assertNull($crawler->filter('#exercise_name')->closest('.kd-field')?->attr('data-controller'));
     }
 
     /**
@@ -189,14 +214,18 @@ final class ExerciseControllerTest extends WebTestCase
         $this->em->persist($exercise);
         $this->em->flush();
 
-        $this->log($mine, $exercise, '2026-03-08', [[SetType::NORMAL, 5, 90.0]]);
+        $this->log($mine, $exercise, '2026-03-08', [[SetType::NORMAL, 5, 92.5]]);
         $theirs = $this->log($other, $exercise, '2026-03-09', [[SetType::NORMAL, 5, 180.0]]);
 
         $this->client->loginUser($mine);
         $this->client->request('GET', '/exercise/'.$exercise->getId());
 
         self::assertResponseIsSuccessful();
-        self::assertSelectorTextContains('.kd-wk__kpi--accent dd', '90');
+        self::assertSelectorTextContains('.kd-wk__kpi--accent dd', '93');
+        // « Dernière fois » dit la charge la plus lourde en français, au demi-kilo
+        // près : ni « top », ni 92,5 arrondi à 93 (#106).
+        self::assertSelectorTextContains('.kd-wk__kpis', "jusqu'à 92,5 kg");
+        self::assertSelectorTextNotContains('.kd-wk__kpis', 'top');
         self::assertSelectorTextNotContains('.kd-extraj', '180');
         // Et surtout : aucun lien vers la séance datée de l'autre.
         self::assertSelectorNotExists('a[href="/schedule/'.$theirs->getId().'"]');

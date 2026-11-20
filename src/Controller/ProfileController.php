@@ -109,6 +109,7 @@ final class ProfileController extends AbstractController
             'period' => $period,
             'ranges' => StatsRange::pickable(),
             'months' => $training->availableMonths($user),
+            'years' => $training->availableYears($user),
             'tab' => StatsTab::resolve($request->query->getString('tab')),
             'tabs' => StatsTab::cases(),
         ]);
@@ -141,9 +142,11 @@ final class ProfileController extends AbstractController
             'groups' => $groups,
             'sessions' => array_sum(array_column($groups, 'sessions')),
             'total' => $log->total($user),
+            'unloggedStrength' => $log->unloggedStrength($user, $period),
             'period' => $period,
             'ranges' => StatsRange::pickable(),
             'months' => $training->availableMonths($user),
+            'years' => $training->availableYears($user),
         ]);
     }
 

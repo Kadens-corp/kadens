@@ -28,7 +28,7 @@ final class PlanFlattenerTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->flattener = new PlanFlattener(new UnitFormatter(), new WorkoutMetrics(new WorkoutEstimator(), new SupersetGrouper(), new RegionBreakdown()), new SupersetGrouper());
+        $this->flattener = new PlanFlattener(new UnitFormatter(), new WorkoutMetrics(new WorkoutEstimator(new SupersetGrouper()), new SupersetGrouper(), new RegionBreakdown()), new SupersetGrouper());
     }
 
     #[DataProvider('summaryCases')]
@@ -69,7 +69,7 @@ final class PlanFlattenerTest extends TestCase
         $flat = $this->flattener->flattenWorkout($workout)['blocks'][0]['exercises'][0];
 
         self::assertSame(
-            'Échauf 10 reps @ 40 kg · 2× 8 reps @ 100 kg · Drop set 6 reps @ 80 kg',
+            'Échauf. 10 reps @ 40 kg · 2× 8 reps @ 100 kg · Drop set 6 reps @ 80 kg',
             $flat['summary'],
         );
         // Structure : 3 groupes (les 2 séries de travail identiques fusionnées).
@@ -144,7 +144,7 @@ final class PlanFlattenerTest extends TestCase
         self::assertCount(2, $flat['sets']);
         self::assertCount(3, $flat['setLines']);
         self::assertSame([SetType::WARMUP, SetType::NORMAL, SetType::NORMAL], array_column($flat['setLines'], 'type'));
-        self::assertSame('Échauf', $flat['setLines'][0]['typeLabel']);
+        self::assertSame('Échauf.', $flat['setLines'][0]['typeLabel']);
         self::assertNull($flat['setLines'][1]['typeLabel']);
     }
 
@@ -211,6 +211,36 @@ final class PlanFlattenerTest extends TestCase
     }
 
     /**
+     * Dans un superset, seul le dernier membre repose (#85) : A1 sort à 0 (pour
+     * l'app, null voudrait dire « repos par défaut »), A2 et l'exercice isolé
+     * gardent le leur. Le repos de A1 reste en base.
+     */
+    public function testOnlyTheLastSupersetMemberKeepsItsRest(): void
+    {
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $made = [];
+        foreach ([[1, 90], [1, 120], [null, 60]] as $position => [$group, $rest]) {
+            $exercise = (new Exercise())->setName('Ex'.$position)->setActivity(ActivityType::GYM);
+            $made[] = $prescribed = (new PrescribedExercise())
+                ->setPrescriptionType(PrescriptionType::SETS_REPS)
+                ->setExercise($exercise)
+                ->setPosition($position)
+                ->setSupersetGroup($group)
+                ->setRestSeconds($rest);
+            $block->addPrescribedExercise($prescribed);
+        }
+
+        $workout = (new Workout())->setTitle('Séance')->setSlug('seance');
+        $workout->addBlock($block);
+
+        $exercises = $this->flattener->flattenWorkout($workout)['blocks'][0]['exercises'];
+
+        self::assertSame([0, 120, 60], array_column($exercises, 'rest'));
+        self::assertSame([true, false, false], array_column($exercises, 'chained'));
+        self::assertSame(90, $made[0]->getRestSeconds(), 'La valeur saisie reste en base.');
+    }
+
+    /**
      * Le regroupement condense l'affichage, il ne doit pas faire perdre le rang
      * réel des séries : le tableau de lecture affiche « 02 — 03 » sur un groupe
      * de deux, et dérive le « % du max » de la charge brute conservée.
@@ -254,7 +284,7 @@ final class PlanFlattenerTest extends TestCase
 
     /**
      * L'allure s'affiche dans l'unité naturelle de l'activité de l'exercice :
-     * min/km (course), km/h (vélo), min/100m (natation).
+     * min/km (course), km/h (vélo), min/100m (natation), min/500m (rameur, #97).
      */
     #[DataProvider('paceUnitCases')]
     public function testPaceUnitFollowsActivity(ActivityType $activity, int $distanceMeters, int $paceSecondsPerKm, string $expected): void
@@ -283,6 +313,8 @@ final class PlanFlattenerTest extends TestCase
         yield 'course en min/km' => [ActivityType::RUNNING, 5000, 300, '5 km @ 5:00/km'];
         yield 'vélo en km/h' => [ActivityType::CYCLING, 40000, 120, '40 km @ 30 km/h'];
         yield 'natation en min/100m' => [ActivityType::SWIMMING, 2000, 1050, '2 km @ 1:45/100m'];
+        // 2:00/500m = 240 s/km : l'allure d'un ergomètre se lit au 500 m.
+        yield 'rameur en min/500m' => [ActivityType::OTHER, 2000, 240, '2 km @ 2:00/500m'];
     }
 
     public function testFlattenPlanTemplateProducesDenseGrid(): void
@@ -336,14 +368,14 @@ final class PlanFlattenerTest extends TestCase
             (new PrescribedExercise())
                 ->setPrescriptionType(PrescriptionType::AMRAP)
                 ->setDurationSeconds(720)->setTargetReps(100),
-            'AMRAP 12:00 · cible 100 reps',
+            'Max de reps en 12:00 · cible 100 reps',
         ];
 
         yield 'for_time avec cap' => [
             (new PrescribedExercise())
                 ->setPrescriptionType(PrescriptionType::FOR_TIME)
                 ->setTargetReps(30)->setCapSeconds(300),
-            '30 reps for time · cap 5:00',
+            '30 reps le plus vite possible · limite 5:00',
         ];
 
         yield 'distance_pace en km' => [

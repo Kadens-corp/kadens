@@ -1,14 +1,19 @@
 {# Contenu de #quick-panel : les exercices d'une séance, groupés par bloc, avec
    leurs paramètres éditables. Injecté dans la mini-modale de l'éditeur de plan
-   (fetch) et re-rendu par Turbo Stream à chaque enregistrement (action="update").
+   (fetch), re-rendu en entier par Turbo Stream quand son contenu change (ajout
+   d'un exercice fait hors programme, action="update").
    Contexte (quickPanelContext) : workout, prescribedForms, summaries,
    supersetLabels (rang « A1 » par id, seulement pour les exercices enchaînés),
-   offProgram (ce que l'athlète a fait hors programme la dernière fois).
+   offProgram (ce que l'athlète a fait hors programme la dernière fois),
+   staleTitle (le titre chiffré ne suit peut-être plus le contenu, #93).
+
+   Chaque champ s'enregistre seul au changement (#86) : le serveur ne renvoie
+   alors que la ligne de résumé de l'exercice (`_quick_exo_summary`).
 
    Portée volontairement limitée aux valeurs (reps/séries/repos…) : la structure
    (blocs, ordre, glisser-déposer) reste au compositeur, atteignable par le lien
    « Édition complète ». #}
-{% import 'components/_activity.html.twig' as activity %}
+{{ include('workout/_quick_title.html.twig') }}
 
 {{ include('components/_off_program.html.twig', {
     recap: offProgram|default(null), workout: workout, context: 'quick'
@@ -17,7 +22,7 @@
 {% if workout.blocks is empty %}
     <p class="kd-quickedit__empty">
         {{ ux_icon('lucide:layers') }}
-        Cette séance n'a pas encore de bloc. Utilise l'édition complète pour la composer.
+        Cette séance n'a pas encore de bloc. Ouvre-la dans l'éditeur de séance pour la composer.
     </p>
 {% else %}
     {% for block in workout.blocks|sort((a, b) => a.position <=> b.position) %}
@@ -27,29 +32,24 @@
                     {{ block.role.label }}{% if block.label %} · {{ block.label }}{% endif %}
                 </span>
                 {% if block.rounds > 1 %}
-                    <span class="kd-quickblock__rounds">{{ ux_icon('lucide:repeat') }} {{ block.rounds }} tours</span>
+                    <span class="kd-quickblock__rounds">{{ ux_icon('lucide:repeat') }} Répété {{ block.rounds }} fois</span>
                 {% endif %}
             </header>
 
             {% for prescribed in block.prescribedExercises|sort((a, b) => a.position <=> b.position) %}
-                {% set ex = prescribed.exercise %}
-                {% set mod = ex ? activity.modifier(ex.activity) : '' %}
                 <details class="kd-quickexo">
-                    <summary class="kd-quickexo__sum">
-                        {% if supersetLabels[prescribed.id]|default(null) %}
-                            <span class="kd-cexo__rank" title="Enchaîné sans repos">{{ supersetLabels[prescribed.id] }}</span>
-                        {% endif %}
-                        <span class="kd-cexo__code{{ mod ? ' kd-cexo__code--act kd-act--' ~ mod }}">{{ ex ? exercise_name(ex)|slice(0, 2)|upper : '??' }}</span>
-                        <span class="kd-quickexo__name">{{ ex ? exercise_name(ex) : 'Exercice supprimé' }}</span>
-                        {% if summaries[prescribed.id]|default('') is not empty %}
-                            <span class="kd-cexo__pill">{{ summaries[prescribed.id] }}</span>
-                        {% endif %}
-                        <span class="kd-quickexo__chevron">{{ ux_icon('lucide:chevron-down') }}</span>
-                    </summary>
+                    {{ include('workout/_quick_exo_summary.html.twig', {
+                        prescribed: prescribed,
+                        rank: supersetLabels[prescribed.id]|default(null),
+                        summary: summaries[prescribed.id]|default(''),
+                    }, with_context = false) }}
                     <div class="kd-quickexo__form">
+                        {# Enregistrement automatique, comme au compositeur (#86) : un
+                           seul mode dans toute l'app, donc pas de bouton ici, et rien
+                           à perdre en fermant la modale. #}
                         {{ include('workout/_prescribed_form.html.twig', {
                             form: prescribedForms[prescribed.id],
-                            submit_label: 'Enregistrer'
+                            auto_action: 'change->plangrid#submitForm'
                         }) }}
                     </div>
                 </details>

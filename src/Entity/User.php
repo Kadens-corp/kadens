@@ -51,6 +51,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $usernamePromptDismissedAt = null;
 
+    // « Partager mes séances avec mes amis » (#126). Ouvert par défaut : accepter
+    // un ami, c'est déjà consentir à ce qu'il lise ses séances de salle faites.
+    // Coupé, plus rien ne sort, ni le nouveau ni l'ancien : le flux lit ce
+    // réglage à chaque affichage (`ScheduledWorkoutRepository::feedQuery()`).
+    #[ORM\Column(options: ['default' => true])]
+    private bool $shareWithFriends = true;
+
     /**
      * @var list<string> The user roles
      */
@@ -71,8 +78,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     // Jeton secret d'abonnement calendrier (ICS). Nullable tant que l'utilisateur
     // n'a pas activé l'abonnement ; régénérer = révoquer l'ancien lien. Sert
-    // d'autorisation à lui seul (route /feed hors access_control, comme le partage
-    // public par slug), d'où l'entropie (32 octets → 64 hex) et l'unicité.
+    // d'autorisation à lui seul (route /feed hors access_control, comme le jeton
+    // de partage par lien), d'où l'entropie (32 octets → 64 hex) et l'unicité.
     #[ORM\Column(length: 64, unique: true, nullable: true)]
     private ?string $calendarFeedToken = null;
 
@@ -306,6 +313,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     {
         $username = null === $username ? null : trim($username);
         $this->username = '' === $username ? null : $username;
+
+        return $this;
+    }
+
+    public function isShareWithFriends(): bool
+    {
+        return $this->shareWithFriends;
+    }
+
+    public function setShareWithFriends(bool $shareWithFriends): static
+    {
+        $this->shareWithFriends = $shareWithFriends;
 
         return $this;
     }

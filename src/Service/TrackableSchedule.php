@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\ScheduledWorkout;
+use App\Entity\Workout;
 use App\Enum\ActivityType;
 
 /**
@@ -61,19 +62,38 @@ final class TrackableSchedule
             return true;
         }
 
-        $empty = true;
+        // Un prescrit sans aucune ligne : cas 2, on ne prive de rien.
+        return $this->prescribesStrength($workout) || $this->isEmpty($workout);
+    }
 
-        foreach ($workout->getBlocks() as $block) {
+    /**
+     * La séance prescrit-elle de la muscu, c'est-à-dire au moins un exercice
+     * d'activité `gym` (cas 3) ? C'est aussi la question des pages web qui
+     * doivent dire où se saisissent les charges (#63) : la même réponse que
+     * celle qui décide si le téléphone reçoit la séance, sinon le web
+     * renverrait vers l'app pour une séance que l'app ne montre pas.
+     */
+    public function prescribesStrength(?Workout $workout): bool
+    {
+        foreach ($workout?->getBlocks() ?? [] as $block) {
             foreach ($block->getPrescribedExercises() as $prescribed) {
-                $empty = false;
-
                 if (ActivityType::GYM === $prescribed->getExercise()?->getActivity()) {
                     return true;
                 }
             }
         }
 
-        // Un prescrit sans aucune ligne : cas 2, on ne prive de rien.
-        return $empty;
+        return false;
+    }
+
+    private function isEmpty(Workout $workout): bool
+    {
+        foreach ($workout->getBlocks() as $block) {
+            if (!$block->getPrescribedExercises()->isEmpty()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

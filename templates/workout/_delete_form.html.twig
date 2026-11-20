@@ -1,7 +1,94 @@
-<form method="post" action="{{ path('app_workout_delete', {id: workout.id}) }}"
-      onsubmit="return confirm('Supprimer cette séance ?');" data-turbo="false" style="display:inline;">
-    <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ workout.id) }}">
-    <button type="submit" class="kd-btn kd-btn--danger">
-        {{ ux_icon('lucide:trash-2') }} Supprimer la séance
-    </button>
-</form>
+{# ============================================================================
+   Suppression d'une séance (POST + CSRF), et ce qu'elle laisse derrière elle
+   (#116). Rendu à deux endroits : la zone dangereuse du compositeur (bouton,
+   conséquences écrites dessous) et le menu « … » de la vue (item de menu).
+
+   Ce que dit la confirmation est vérifié contre le schéma, pas supposé :
+     - les séances datées qui la référencent restent (`ScheduledWorkout.workout`
+       en SET NULL) : titre figé à la pose, statut et réalisé gardés, mais plus
+       de détail prévu (donc plus de comparaison prévu/réalisé) ;
+     - les cases de plan gardent leur copie (fork à la pose), seule la lignée
+       (`Workout.origin`, SET NULL) se perd ;
+     - le lien de partage meurt avec la séance.
+   Une copie de case (`planLocal`) ne se supprime pas d'ici : elle se retire
+   depuis la grille de son plan (cf. `WorkoutController::delete`).
+
+   Paramètres :
+     - workout     : Workout
+     - usedInPlans : list<PlanTemplate> (WorkoutController::deletionContext)
+     - directPoses : {total: int, done: int}
+     - menu        : bool, rendu en item du menu « … » (défaut : bouton)
+   ============================================================================ #}
+{% set menu = menu|default(false) %}
+
+{% if workout.planLocal %}
+    {# Pas d'item dans le menu : le chemin est la grille, la zone dangereuse du
+       compositeur y renvoie. #}
+    {% set cell = workout.planItems|first %}
+    {% if not menu and cell and cell.planTemplate %}
+        <p class="kd-editsection__hint">
+            Cette séance est une case du plan « {{ cell.planTemplate.title }} ».
+            Elle se retire depuis sa grille, qui retire avec elle ses séances encore prévues à l'agenda.
+        </p>
+        <a href="{{ path('app_plan_template_edit', {id: cell.planTemplate.id}) }}" class="kd-btn kd-btn--secondary">
+            {{ ux_icon('lucide:calendar-range') }} Ouvrir le plan
+        </a>
+    {% endif %}
+{% else %}
+
+    {% set total = directPoses.total %}
+    {% set done = directPoses.done %}
+    {% set consequences = [] %}
+
+    {% if total == 1 %}
+        {% set consequences = consequences|merge([done == 1
+            ? 'La séance déjà à l\'agenda reste, sans le détail prévu. Son réalisé est gardé.'
+            : 'La séance déjà à l\'agenda reste, sans le détail prévu.']) %}
+    {% elseif total > 1 %}
+        {% set line = 'Les ' ~ total ~ ' séances déjà à l\'agenda restent, sans le détail prévu.' %}
+        {% if done == 1 %}
+            {% set line = line ~ ' Le réalisé de celle déjà faite est gardé.' %}
+        {% elseif done > 1 %}
+            {% set line = line ~ ' Le réalisé des ' ~ done ~ ' déjà faites est gardé.' %}
+        {% endif %}
+        {% set consequences = consequences|merge([line]) %}
+    {% endif %}
+
+    {% if usedInPlans|length == 1 %}
+        {% set consequences = consequences|merge(['Le plan « ' ~ usedInPlans[0].title ~ ' » garde sa copie.']) %}
+    {% elseif usedInPlans|length > 1 %}
+        {% set consequences = consequences|merge(['Les ' ~ usedInPlans|length ~ ' plans qui l\'utilisent gardent leur copie.']) %}
+    {% endif %}
+
+    {% if workout.shared %}
+        {% set consequences = consequences|merge(['Son lien de partage ne marchera plus.']) %}
+    {% endif %}
+
+    {# Chez un athlète, le coach supprime dans la bibliothèque d'un autre : ça se
+       nomme. Comparaison par id, `owner` peut être un proxy. #}
+    {% set foreign = workout.owner and workout.owner.id != app.user.id %}
+    {% set question = 'Supprimer « ' ~ workout.title ~ ' »'
+        ~ (foreign ? ' de la bibliothèque de ' ~ workout.owner.displayName : '')
+        ~ ' ? C\'est définitif.' %}
+    {% set message = [question]|merge(consequences)|join("\n") %}
+
+    {% if not menu and consequences is not empty %}
+        <p class="kd-editsection__hint">{{ consequences|join(' ') }}</p>
+    {% endif %}
+
+    {# `e('js')` : le titre est saisi, et une apostrophe (« l'agenda ») fermerait
+       la chaîne de `confirm()` une fois l'attribut décodé par le navigateur. #}
+    <form method="post" action="{{ path('app_workout_delete', {id: workout.id}) }}"
+          onsubmit="return confirm('{{ message|e('js') }}');" data-turbo="false"{% if not menu %} style="display:inline;"{% endif %}>
+        <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ workout.id) }}">
+        {% if menu %}
+            <button type="submit" class="kd-kebab__item kd-kebab__item--danger">
+                {{ ux_icon('lucide:trash-2') }} Supprimer la séance
+            </button>
+        {% else %}
+            <button type="submit" class="kd-btn kd-btn--danger">
+                {{ ux_icon('lucide:trash-2') }} Supprimer la séance
+            </button>
+        {% endif %}
+    </form>
+{% endif %}

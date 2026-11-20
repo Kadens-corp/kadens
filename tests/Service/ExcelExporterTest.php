@@ -51,7 +51,7 @@ final class ExcelExporterTest extends TestCase
 
         $main = $this->block(BlockRole::MAIN, 0, rounds: 1, label: 'Force');
         $main->addPrescribedExercise($this->sets('Développé couché', 0, group: 1)->setRpe(9)->setRestSeconds(90));
-        $main->addPrescribedExercise($this->sets('Rowing barre', 1, group: 1));
+        $main->addPrescribedExercise($this->sets('Rowing barre', 1, group: 1)->setRestSeconds(90));
         $main->addPrescribedExercise($this->sets('Dips', 2)->setNotes('Lent en descente'));
         $workout->addBlock($main);
 
@@ -82,14 +82,19 @@ final class ExcelExporterTest extends TestCase
         self::assertSame(DataType::TYPE_NUMERIC, $sheet->getCell('C'.$bench)->getDataType());
         self::assertEquals(9, $sheet->getCell('C'.$bench)->getValue());
         self::assertSame('FFD8261E', $sheet->getStyle('C'.$bench)->getFont()->getColor()->getARGB(), 'RPE 9 = intensité, en rouge');
-        self::assertEquals(90, $sheet->getCell('D'.$bench)->getValue());
-        self::assertSame('90 s', $sheet->getCell('D'.$bench)->getFormattedValue());
+        // A1 enchaîne sur A2 : son repos saisi ne se prend pas, seul celui du
+        // dernier membre compte (#85).
+        self::assertEquals(0, $sheet->getCell('D'.$bench)->getValue());
+        self::assertSame('0 s', $sheet->getCell('D'.$bench)->getFormattedValue());
 
         self::assertSame('A2 · Rowing barre', $this->plain($sheet, 'A'.($bench + 1)));
+        self::assertSame(DataType::TYPE_NUMERIC, $sheet->getCell('D'.($bench + 1))->getDataType());
+        self::assertEquals(90, $sheet->getCell('D'.($bench + 1))->getValue());
+        self::assertSame('90 s', $sheet->getCell('D'.($bench + 1))->getFormattedValue());
         self::assertSame('Dips', $this->plain($sheet, 'A'.($bench + 2)));
         self::assertSame('Lent en descente', $this->plain($sheet, 'E'.($bench + 2)));
 
-        self::assertSame('02  RETOUR AU CALME · × 2 TOURS', $this->plain($sheet, 'A'.($bench + 3)));
+        self::assertSame('02  RETOUR AU CALME · RÉPÉTÉ 2 FOIS', $this->plain($sheet, 'A'.($bench + 3)));
     }
 
     /** Le libellé d'un exercice passe par ExerciseNaming : langue du lecteur, repli français. */
@@ -266,7 +271,7 @@ final class ExcelExporterTest extends TestCase
 
         $flattener = new PlanFlattener(
             new UnitFormatter(),
-            new WorkoutMetrics(new WorkoutEstimator(), new SupersetGrouper(), new RegionBreakdown()),
+            new WorkoutMetrics(new WorkoutEstimator(new SupersetGrouper()), new SupersetGrouper(), new RegionBreakdown()),
             new SupersetGrouper(),
         );
 

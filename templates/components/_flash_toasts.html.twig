@@ -1,0 +1,27 @@
+{# Les messages flash de la page, en toast en bas à droite. Rendus une seule
+   fois, par `base.html.twig`, dans la pile `.kd-toasts` qu'ils partagent avec la
+   pastille « Enregistré » (#129, après la fiche coach en #125). Jamais en tête
+   de page : un message qui s'insère dans le flux pousse la page vers le bas, et
+   après un geste qui garde le défilement (refresh morphé), il ne se lirait pas.
+
+   Même écriture que le flash (`kd-flash`, `kd-flash--error`) : seule la place
+   change. Le succès s'efface seul, l'erreur reste jusqu'à ce qu'on la ferme
+   (contrôleur `toast`).
+
+   L'id aléatoire n'est pas décoratif : le morphing apparie les éléments par id.
+   Sans lui, le toast d'une deuxième pose réutiliserait celui de la première,
+   avec son minuteur déjà entamé. #}
+{% for message in app.flashes('success') %}
+    <p id="toast-{{ random() }}" data-turbo-temporary class="kd-flash" role="status"
+       data-controller="toast" data-toast-hide-after-value="6000">
+        {{ ux_icon('lucide:circle-check') }} {{ message }}
+        <button type="button" class="kd-flash__close" data-action="toast#close" aria-label="Fermer">{{ ux_icon('lucide:x') }}</button>
+    </p>
+{% endfor %}
+{% for message in app.flashes('error') %}
+    <p id="toast-{{ random() }}" data-turbo-temporary class="kd-flash kd-flash--error" role="alert"
+       data-controller="toast">
+        {{ ux_icon('lucide:x') }} {{ message }}
+        <button type="button" class="kd-flash__close" data-action="toast#close" aria-label="Fermer">{{ ux_icon('lucide:x') }}</button>
+    </p>
+{% endfor %}

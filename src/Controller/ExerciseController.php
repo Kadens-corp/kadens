@@ -55,10 +55,22 @@ final class ExerciseController extends AbstractController
             }
         }
 
+        // La planche des images (#38) ne s'annonce qu'à qui a quelque chose à
+        // y illustrer : un admin (la globale), ou le propriétaire d'un exercice
+        // perso de salle, de mobilité ou « autre ».
+        $canIllustrate = false;
+        foreach ($exercises as $exercise) {
+            if ($exercise->acceptsImages() && $this->isGranted(ExerciseVoter::EDIT, $exercise)) {
+                $canIllustrate = true;
+                break;
+            }
+        }
+
         return $this->render('exercise/index.html.twig', [
             'exercises' => $exercises,
             'activityFacets' => $activityFacets,
             'usage' => $usage,
+            'canIllustrate' => $canIllustrate,
         ]);
     }
 
@@ -83,7 +95,9 @@ final class ExerciseController extends AbstractController
 
             $this->addFlash('success', 'Exercice créé.');
 
-            return $this->redirectToRoute('app_exercise_index');
+            // Vers sa fiche, pas vers la liste : rangée de A à Z, elle montrait
+            // « Exercice créé. » au-dessus des « A », l'exercice étant à « R ».
+            return $this->redirectToRoute('app_exercise_show', ['id' => $exercise->getId()]);
         }
 
         return $this->render('exercise/new.html.twig', [

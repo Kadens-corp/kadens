@@ -20,8 +20,8 @@ use Symfony\Component\Security\Core\Authorization\Voter\Voter;
  * - Plan d'un athlète coaché : son coach **accepté** est co-éditeur, et peut
  *   donc bâtir un plan directement dans l'éditeur de plan habituel.
  *
- * Un éventuel partage public en lecture (slug) passera par une route dédiée,
- * pas par ce voter.
+ * Le partage public en lecture passe par le jeton de partage (#61,
+ * `PublicShareController`), pas par ce voter.
  *
  * @extends Voter<string, PlanTemplate>
  */

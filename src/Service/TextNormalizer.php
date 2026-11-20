@@ -17,7 +17,9 @@ namespace App\Service;
  * Son **pendant JS vit dans `assets/search.js`** : les deux doivent produire la
  * même chaîne pour la même entrée, sans quoi une recherche trouverait à l'écran
  * ce que l'import considère comme un autre exercice. Les deux écritures bougent
- * ensemble.
+ * ensemble. La tolérance au pluriel et aux mots soudés de la recherche (#98)
+ * n'en fait pas partie : c'est une règle de comparaison de la requête, propre à
+ * `search.js`, et l'import doit continuer à distinguer « Pompe » de « Pompes ».
  *
  * `Any-Latin; Latin-ASCII` plutôt qu'une table d'accents à la main : la
  * translittération ICU couvre les ligatures (`œ` → `oe`) et les caractères que

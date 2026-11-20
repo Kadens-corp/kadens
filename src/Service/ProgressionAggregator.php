@@ -44,6 +44,8 @@ use App\Enum\ScheduledStatus;
  * l'échelle sur le **même** maximum — sans quoi deux barres de même hauteur
  * vaudraient deux valeurs différentes.
  *
+ * @phpstan-import-type EnduranceVolume from WorkoutMetrics
+ *
  * @phpstan-type VolumePoint array{week: int, value: float, label: string, heightPct: int, estimated: bool, missing: int, realValue: float|null, realLabel: string|null, realHeightPct: int}
  * @phpstan-type VolumeSeries array{key: string, label: string, unitLabel: string|null, missingNoun: string|null, modifier: string, points: list<VolumePoint>, max: float, hasRealized: bool, totalLabel: string|null, realTotalLabel: string|null, partialWeeks: list<int>}
  * @phpstan-type PlannedWeek array{value: float, estimated: bool, missing: int}
@@ -68,6 +70,7 @@ final class ProgressionAggregator
         private readonly UnitFormatter $units,
         private readonly WorkoutMetrics $metrics,
         private readonly LogMetrics $logMetrics,
+        private readonly EnduranceMeasure $endurance,
     ) {
     }
 
@@ -197,16 +200,15 @@ final class ProgressionAggregator
     {
         $weeksCount = max(1, (int) $template->getDurationWeeks());
 
-        $emptyEndurance = ['meters' => 0, 'derivedMeters' => 0, 'seconds' => 0, 'derivedSeconds' => 0, 'efforts' => 0, 'withoutDistance' => 0, 'withoutDuration' => 0];
         $acc = [];
         for ($w = 1; $w <= $weeksCount; ++$w) {
             $acc[$w] = [
                 'minutes' => 0,
                 'tonnage' => 0.0,
                 'sets' => 0,
-                'running' => $emptyEndurance,
-                'cycling' => $emptyEndurance,
-                'swimming' => $emptyEndurance,
+                'running' => EnduranceMeasure::EMPTY,
+                'cycling' => EnduranceMeasure::EMPTY,
+                'swimming' => EnduranceMeasure::EMPTY,
             ];
         }
 
@@ -221,9 +223,7 @@ final class ProgressionAggregator
             $acc[$week]['tonnage'] += $vol['gym']['tonnageKg'];
             $acc[$week]['sets'] += $vol['gym']['totalSets'];
             foreach (self::ENDURANCE as $key => $_) {
-                foreach ($emptyEndurance as $field => $__) {
-                    $acc[$week][$key][$field] += $vol[$key][$field];
-                }
+                $acc[$week][$key] = $this->endurance->add($acc[$week][$key], $vol[$key]);
             }
         }
 
@@ -314,37 +314,23 @@ final class ProgressionAggregator
     }
 
     /**
-     * Une activité d'endurance, dans l'unité qui chiffre le plus de semaines du
-     * plan : distance (saisie, ou déduite de durée × allure) ou durée (saisie, ou
-     * déduite de distance × allure). À égalité, la distance — c'est l'unité dans
-     * laquelle une sortie se raconte. Le réel importé portant les deux, il suit
-     * l'unité retenue.
+     * Une activité d'endurance, chiffrée selon la règle commune à la semaine de
+     * l'éditeur de trame (`EnduranceMeasure`, #122) : unité qui chiffre le plus
+     * de semaines, durée récupérations comprises. Le réel importé portant les
+     * deux, il suit l'unité retenue.
      *
-     * @param list<array<string, int>>  $weeks    volume prescrit par semaine (index 0 = S1)
-     * @param array<int, RealizedWeek>  $realized
+     * @param list<EnduranceVolume>    $weeks    volume prescrit par semaine (index 0 = S1)
+     * @param array<int, RealizedWeek> $realized
      *
      * @return VolumeSeries
      */
     private function enduranceSeries(string $key, string $label, ActivityType $activity, array $weeks, array $realized): array
     {
-        $byDistance = 0;
-        $byDuration = 0;
-        foreach ($weeks as $week) {
-            if ($week['efforts'] > 0) {
-                $byDistance += 0 === $week['withoutDistance'] ? 1 : 0;
-                $byDuration += 0 === $week['withoutDuration'] ? 1 : 0;
-            }
-        }
-        $distance = $byDistance >= $byDuration;
+        $distance = $this->endurance->prefersDistance($weeks);
 
         $planned = [];
         foreach ($weeks as $i => $week) {
-            $derived = $distance ? $week['derivedMeters'] : $week['derivedSeconds'];
-            $planned[$i + 1] = [
-                'value' => (float) (($distance ? $week['meters'] : $week['seconds']) + $derived),
-                'estimated' => $derived > 0,
-                'missing' => $distance ? $week['withoutDistance'] : $week['withoutDuration'],
-            ];
+            $planned[$i + 1] = $this->endurance->planned($week, $distance);
         }
 
         $real = [];
@@ -361,9 +347,7 @@ final class ProgressionAggregator
             $planned,
             $real,
             $distance ? 'distance' : 'durée',
-            $distance
-                ? fn (float $v): string => $this->compactDistance($v)
-                : fn (float $v): string => $this->humanMinutes((int) round($v / 60)),
+            fn (float $v): string => $this->endurance->format($v, $distance),
         );
     }
 
@@ -449,7 +433,7 @@ final class ProgressionAggregator
         foreach ($weeks as $occurrences) {
             foreach ($occurrences as $occurrence) {
                 $pe = $occurrence['pe'];
-                // Charge/séries détaillé-aware : top set et décompte dérivent des
+                // Charge/séries détaillé-aware : série la plus lourde et décompte dérivent des
                 // lignes en mode détaillé, du scalaire sinon.
                 $has['weight'] = $has['weight'] || null !== $pe->getTopWeightKg();
                 $has['pace'] = $has['pace'] || null !== $pe->getPaceSecondsPerKm();
@@ -460,7 +444,7 @@ final class ProgressionAggregator
         }
 
         [$metric, $metricLabel, $lowerIsBetter] = match (true) {
-            $has['weight'] => ['weight', 'Charge (top set)', false],
+            $has['weight'] => ['weight', 'Série la plus lourde', false],
             $has['pace'] => ['pace', 'Allure', true],
             $has['distance'] => ['distance', 'Distance', false],
             $has['duration'] => ['duration', 'Durée', false],
@@ -513,20 +497,24 @@ final class ProgressionAggregator
 
         $min ??= 0.0;
         $max ??= 0.0;
-        $span = $max - $min;
+        // Axe à zéro (#106) : une barre deux fois plus haute veut dire une valeur
+        // deux fois plus grande. L'ancienne échelle entre min et max faisait de
+        // 30 kg une barre minuscule face à 37,5 kg, alors que c'est 80 %. Une
+        // progression de plan est faite de petits écarts : c'est la vérité à
+        // montrer, et les valeurs écrites au-dessus des barres donnent le détail.
+        // Même règle que le volume hebdomadaire (heightPct).
+        // Allure : plus bas = plus rapide. La barre porte alors la vitesse,
+        // rapportée à la semaine la plus rapide (min / allure), toujours depuis
+        // zéro : 270 s/km en haut, 300 s/km à 90 %.
         foreach ($points as $i => $point) {
             foreach (['value' => 'heightPct', 'realValue' => 'realHeightPct'] as $source => $target) {
-                if (null === $point[$source]) {
+                $value = $point[$source];
+                if (null === $value) {
                     continue;
                 }
-                if ($span <= 0.0) {
-                    $points[$i][$target] = 60; // plan « plat » sur cet exo : hauteur neutre
-                    continue;
-                }
-                // Échelle entre min et max (plancher 15 %) pour faire ressortir la rampe.
-                // Allure : plus bas = plus rapide, donc barre inversée (haute = mieux).
-                $ratio = $lowerIsBetter ? ($max - $point[$source]) / $span : ($point[$source] - $min) / $span;
-                $points[$i][$target] = (int) round(15 + $ratio * 85);
+                $points[$i][$target] = $lowerIsBetter
+                    ? $this->heightPct($min, $value)
+                    : $this->heightPct($value, $max);
             }
         }
 
@@ -595,7 +583,7 @@ final class ProgressionAggregator
      * Mêmes règles que partout ailleurs : un exercice sauté n'apporte rien,
      * l'échauffement et la série cochée sans valeur n'entrent ni dans la charge
      * ni dans le décompte (LoggedSet::countsAsWorking). La charge
-     * retenue est la plus lourde de la semaine (top set, comme le prescrit) ;
+     * retenue est la plus lourde de la semaine (comme le prescrit) ;
      * séries et durée se cumulent.
      *
      * @param array<int, array<int, RealizedExerciseWeek>> $exercises accumulateur, modifié en place
@@ -711,15 +699,6 @@ final class ProgressionAggregator
         }
 
         return $this->oneDecimal($kg / 1000).' t';
-    }
-
-    private function compactDistance(float $meters): string
-    {
-        if ($meters < 1000) {
-            return $this->units->distance((int) round($meters));
-        }
-
-        return $this->oneDecimal($meters / 1000).' km';
     }
 
     private function oneDecimal(float $value): string

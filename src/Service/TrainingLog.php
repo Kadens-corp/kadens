@@ -69,6 +69,18 @@ final readonly class TrainingLog
     }
 
     /**
+     * Les séances consignées entre deux dates (bornes incluses), quand la
+     * fenêtre n'est pas un `StatsPeriod` choisi par le lecteur : l'aperçu des
+     * dernières semaines de la fiche athlète (`RecentSessions`, #76).
+     *
+     * @return list<LogEntry>
+     */
+    public function between(User $owner, \DateTimeImmutable $start, \DateTimeImmutable $end): array
+    {
+        return $this->compose($owner, $start, $end, null);
+    }
+
+    /**
      * La même fenêtre, groupée par mois et sous-totalisée : ce que le journal
      * affiche réellement.
      *
@@ -110,6 +122,17 @@ final readonly class TrainingLog
     public function total(User $owner): int
     {
         return $this->scheduledWorkouts->countLoggedForOwner($owner);
+    }
+
+    /**
+     * Les séances de force faites sans réalisé, sur la fenêtre ou depuis le
+     * début (`null`). Le journal ne les liste pas — il n'y a rien à y lire —
+     * mais il doit dire qu'elles existent : sans ce compte, « 0 séance
+     * consignée » côtoyait « 1 faite » sur la page d'à côté (#63).
+     */
+    public function unloggedStrength(User $owner, ?StatsPeriod $period = null): int
+    {
+        return $this->scheduledWorkouts->countDoneStrengthWithoutLogForOwner($owner, $period?->start, $period?->end);
     }
 
     /**

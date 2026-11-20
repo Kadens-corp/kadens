@@ -1,0 +1,95 @@
+{% extends 'base.html.twig' %}
+{% import 'components/_activity.html.twig' as activity %}
+
+{# La planche des images d'exercice (#38) : tous les exercices qu'on peut
+   illustrer (droit EDIT, salle / mobilité / autre), une ligne chacun, leurs
+   images en vignettes et un « + » pour en ajouter une. Filtrée côté client
+   comme la bibliothèque ; « Sans image » donne la liste de ce qui reste à faire.
+   Les gestes ne rechargent pas la page : seule la bande touchée est remplacée. #}
+
+{% block title %}Images des exercices{% endblock %}
+
+{% block body %}
+    <a href="{{ path('app_exercise_index') }}" class="kd-backlink">
+        {{ ux_icon('lucide:arrow-left') }} Exercices
+    </a>
+
+    <div class="kd-pagehead">
+        <div>
+            <p class="kd-eyebrow">Exercices</p>
+            <h1 class="kd-title">Images</h1>
+            <p class="kd-lead">
+                Une à six images par exercice, jouées en fondu sur sa fiche : typiquement le début du mouvement, puis la fin.
+                Chacune est recadrée en carré, compressée et signée du logo avant l'envoi.
+            </p>
+        </div>
+    </div>
+
+    {% if exercises is empty %}
+        <div class="kd-card kd-empty">
+            {{ ux_icon('lucide:image') }}
+            <div>Aucun exercice de salle, de mobilité ou « autre » que tu puisses illustrer.</div>
+        </div>
+    {% else %}
+        <div data-controller="filter exercise-images"
+             data-exercise-images-logo-value="{{ asset('icons/kadens.png') }}"
+             data-exercise-images-from-value="board">
+            {% set missing = exercises|length - illustrated %}
+            {% set globalCount = exercises|filter(e => e.owner is null)|length %}
+            {% set persoCount = exercises|length - globalCount %}
+
+            {{ include('components/_filterbar.html.twig', {
+                placeholder: 'Rechercher un exercice…',
+                total: exercises|length,
+                countNoun: 'exercice',
+                sortOptions: [
+                    { key: 'name', label: 'Nom (A→Z)', dir: 'asc' },
+                    { key: 'images', label: 'Les moins illustrés', dir: 'asc', numeric: true },
+                    { key: 'name', label: 'Nom (Z→A)', dir: 'desc' },
+                ],
+                facetGroups: [
+                    { group: 'images', allLabel: 'Tous', facets: [
+                        { value: 'none', label: 'Sans image', count: missing },
+                        { value: 'some', label: 'Avec images', count: illustrated },
+                    ]|filter(f => f.count > 0) },
+                    { group: 'activity', allLabel: 'Toutes activités', facets: activityFacets },
+                    { group: 'scope', allLabel: 'Tous', facets: [
+                        { value: 'global', label: 'Du site', count: globalCount },
+                        { value: 'perso', label: 'Les miens', count: persoCount },
+                    ]|filter(f => f.count > 0 and globalCount > 0 and persoCount > 0) },
+                ],
+            }) }}
+
+            <ul class="kd-imgboard" data-filter-target="list">
+                {% for exercise in exercises %}
+                    {% set mod = activity.modifier(exercise.activity)|trim %}
+                    <li class="kd-imgboard__row{{ mod ? ' kd-act--' ~ mod }}" id="exercise-row-{{ exercise.id }}"
+                        data-filter-target="item"
+                        data-filter-name="{{ exercise_name(exercise) }}"
+                        data-filter-text="{{ exercise_search_text(exercise) }} {{ exercise.activity.label }}"
+                        data-facet-images="{{ exercise.images is empty ? 'none' : 'some' }}"
+                        data-facet-activity="{{ exercise.activity.value }}"
+                        data-facet-scope="{{ exercise.owner is null ? 'global' : 'perso' }}"
+                        data-sort-name="{{ exercise_name(exercise)|lower }}"
+                        data-sort-images="{{ exercise.images|length }}">
+                        <div class="kd-imgboard__head">
+                            <span class="kd-libcard__icon">{{ ux_icon(activity.icon(exercise.activity)|trim) }}</span>
+                            <div class="kd-imgboard__title">
+                                <a class="kd-imgboard__name" href="{{ path('app_exercise_show', {id: exercise.id}) }}">{{ exercise_name(exercise) }}</a>
+                                <span class="kd-imgboard__meta">{{ exercise.activity.label }}{% if exercise.owner is not null %} · À moi{% endif %}</span>
+                            </div>
+                        </div>
+                        {{ include('exercise/_image_strip.html.twig', {exercise: exercise, from: 'board'}, with_context = false) }}
+                    </li>
+                {% endfor %}
+            </ul>
+
+            {{ include('components/_filter_empty.html.twig', {
+                search: 'Aucun exercice ne correspond à ta recherche.',
+                filters: 'Aucun exercice ne correspond à ces filtres.',
+            }) }}
+
+            {{ include('exercise/_image_dialog.html.twig', {}, with_context = false) }}
+        </div>
+    {% endif %}
+{% endblock %}

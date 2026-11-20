@@ -18,8 +18,8 @@ enum PrescriptionType: string
         return match ($this) {
             self::SETS_REPS => 'Séries × répétitions',
             self::SETS_TIME => 'Séries × durée',
-            self::AMRAP => 'AMRAP',
-            self::FOR_TIME => 'For time',
+            self::AMRAP => 'Max de répétitions',
+            self::FOR_TIME => 'Le plus vite possible',
             self::DISTANCE_PACE => 'Distance × allure',
             self::DURATION => 'Durée',
         };

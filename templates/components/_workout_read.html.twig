@@ -12,6 +12,7 @@
      comparison  sortie de LogComparator::compare         (optionnel)
      logSummary  sortie de LogMetrics::summary            (optionnel)
      defaultTab  nom du panneau ouvert à l'arrivée         (optionnel)
+     eyebrow     surtitre du hero, « Séance » par défaut   (optionnel)
 
    Les métriques sont optionnelles : sans elles, la page reste valide et rend
    le seul programme. C'est ce qui permet de réutiliser ce composant partout
@@ -26,7 +27,10 @@
    propriétaire sur workout/show, celle du visiteur (partager, copier chez soi)
    sur la page publique, qui n'y met aucune commande sur la séance elle-même.
    D'où un `embed` chez les deux plutôt qu'un `include` (un include ne porte pas
-   de blocs). #}
+   de blocs).
+
+   Le bloc `afterhero`, juste sous le hero, accueille ce qui parle de la séance
+   sans en être le contenu : le partage par lien du propriétaire (#61). #}
 {% import 'components/_activity.html.twig' as activity %}
 {% set workout = flat.workout %}
 {% set summary = summary|default(null) %}
@@ -35,6 +39,9 @@
 {% set comparison = comparison|default([]) %}
 {% set logSummary = logSummary|default(null) %}
 {% set defaultTab = defaultTab|default('') %}
+{# La séance datée se dit « au calendrier » : sans ça, son hero était celui de la
+   séance type, mot pour mot, et on ne savait plus laquelle on regardait (#91). #}
+{% set eyebrow = eyebrow|default('Séance') %}
 {% set volume = volume|default(null) %}
 {% set load = load|default(null) %}
 {% set plates = plates|default([]) %}
@@ -58,7 +65,7 @@
 
             <div class="kd-wk__herobody">
                 <div class="kd-wk__herotitle">
-                    <p class="kd-wk__eyebrow">Séance</p>
+                    <p class="kd-wk__eyebrow">{{ eyebrow }}</p>
                     <h1 class="kd-wk__title">{{ workout.title }}</h1>
                     {% if workout.description %}
                         <p class="kd-wk__desc">{{ workout.description|nl2br }}</p>
@@ -93,6 +100,8 @@
         </div>
     </header>
 
+    {% block afterhero %}{% endblock %}
+
     {# Le volume prévu ouvre l'analyse à lui seul : une séance de cardio pur n'a
        aucune série de travail et avait donc perdu son onglet, alors qu'elle a bien
        un volume à annoncer (4 × 1 km = 4 km). #}
@@ -115,7 +124,9 @@
            séance, comme le hero. Celui du réalisé vit DANS son panneau — deux
            bandeaux empilés ne se distingueraient plus l'un de l'autre. #}
         {% if summary and summary.workingSets > 0 %}
-            {{ include('components/_workout_kpis.html.twig', {summary: summary}, with_context = false) }}
+            {# Sur une séance datée, ce bandeau voisine avec le réalisé (ou avec
+               son absence) : il se dit « prévu » (#78). #}
+            {{ include('components/_workout_kpis.html.twig', {summary: summary, planned: scheduled is not null}, with_context = false) }}
         {% endif %}
 
         {# ------------------------------------------------------------ Onglets

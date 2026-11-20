@@ -138,8 +138,10 @@ final class GoalController extends AbstractController
     }
 
     /**
-     * Rattache/détache un plan existant à cet objectif (relation N:N, réversible).
+     * Associe/détache un plan existant à cet objectif (relation N:N, réversible).
      * Le pendant de `app_plan_template_goals` : le lien se pose des deux côtés.
+     * Le message dit ce qui s'est passé ET ce qui ne s'est pas passé : l'agenda
+     * ne bouge pas, c'est ce qui distingue ce geste de `prepare()` (A-34, A-35).
      */
     #[Route('/{id}/plans', name: 'app_goal_plans', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function updatePlans(Request $request, Goal $goal, PlanTemplateRepository $planTemplateRepository, EntityManagerInterface $entityManager): Response
@@ -157,10 +159,13 @@ final class GoalController extends AbstractController
         if (null !== $plan && $plan->getOwner() === $goal->getOwner()) {
             if ('detach' === (string) $request->request->get('action')) {
                 $plan->removeGoal($goal);
+                $message = 'Plan « %s » détaché de cet objectif. Ses séances déjà dans l\'agenda restent en place.';
             } else {
                 $plan->addGoal($goal);
+                $message = 'Plan « %s » associé à cet objectif. L\'agenda n\'a pas bougé.';
             }
             $entityManager->flush();
+            $this->addFlash('success', sprintf($message, $plan->getTitle()));
         }
 
         return $this->redirectToRoute('app_goal_show', ['id' => $goal->getId()]);
@@ -252,9 +257,9 @@ final class GoalController extends AbstractController
 
         if ($planScheduler->isInstantiated($plan, $owner)) {
             $this->addFlash('error', sprintf(
-                'Le plan « %s » est déjà posé sur %s. Vide-le d\'abord pour le ré-ancrer sur cette échéance.',
+                'Le plan « %s » est déjà dans %s. Vide-le d\'abord pour le replanifier sur cette échéance.',
                 $plan->getTitle(),
-                $mine ? 'ton calendrier' : 'le calendrier de '.$owner->getDisplayName(),
+                $mine ? 'ton agenda' : 'l\'agenda de '.$owner->getDisplayName(),
             ));
 
             return $this->redirectToRoute('app_goal_show', ['id' => $goal->getId()]);
@@ -268,11 +273,11 @@ final class GoalController extends AbstractController
         $entityManager->flush();
 
         $this->addFlash('success', sprintf(
-            'Plan « %s » posé : %d séance%s, dernière semaine calée sur %s.',
+            'Plan « %s » planifié : %d séance%s dans %s, dernière semaine calée sur le jour J.',
             $plan->getTitle(),
             \count($created),
             \count($created) > 1 ? 's' : '',
-            $mine ? 'ton échéance' : 'l\'échéance de '.$owner->getDisplayName(),
+            $mine ? 'ton agenda' : 'l\'agenda de '.$owner->getDisplayName(),
         ));
 
         return $this->redirectToRoute('app_goal_show', ['id' => $goal->getId()]);

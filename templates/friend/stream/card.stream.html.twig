@@ -1,0 +1,21 @@
+{# Réponse à un geste fait sur une carte du flux (#126) : copier la séance d'un
+   ami, masquer ou repartager la sienne. Seule la carte touchée est remplacée,
+   là où elle est (y compris dans une page chargée plus bas par « Séances plus
+   anciennes ») : la page ne se recharge pas et ne remonte pas en haut.
+   Remplacer la carte retire du DOM la modale de copie, ce qui la ferme.
+
+   Le message est un flash ordinaire, rendu ici en toast dans la pile du coin
+   (`.kd-toasts`, base.html.twig) : le lire le consomme, il ne ressortira pas à
+   la page suivante. #}
+<turbo-stream action="replace" target="seance-{{ entry.session.id }}">
+    <template>
+        {{ include('friend/_feed_card.html.twig', {
+            entry: entry, filter: filter, page: page, previewCount: previewCount
+        }, with_context = false) }}
+    </template>
+</turbo-stream>
+<turbo-stream action="append" targets=".kd-toasts">
+    <template>
+        {{ include('components/_flash_toasts.html.twig', {}, with_context = false) }}
+    </template>
+</turbo-stream>

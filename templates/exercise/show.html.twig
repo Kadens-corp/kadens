@@ -17,7 +17,7 @@
         </a>
     {% else %}
         <a href="{{ path('app_exercise_index') }}" class="kd-backlink">
-            {{ ux_icon('lucide:arrow-left') }} Bibliothèque
+            {{ ux_icon('lucide:arrow-left') }} Exercices
         </a>
     {% endif %}
 
@@ -33,9 +33,9 @@
                 {{ activity.badge(exercise.activity) }}
                 <span class="kd-scope">
                     {% if exercise.owner is null %}
-                        {{ ux_icon('lucide:library') }} Bibliothèque
+                        {{ ux_icon('lucide:library') }} Du site
                     {% else %}
-                        {{ ux_icon('lucide:user') }} Perso
+                        {{ ux_icon('lucide:user') }} À moi
                     {% endif %}
                 </span>
             </div>
@@ -54,6 +54,8 @@
 
     <div class="kd-card">
         <div class="kd-exsheet">
+            {# Le mouvement en images (#38), joué en boucle. Rien sans image. #}
+            {{ include('components/_exercise_frames.html.twig', {exercise: exercise}, with_context = false) }}
             {# Les zones que l'exercice déclare, sur le dessin du volume d'une séance.
                Le dessin ne porte rien seul : chaque zone peinte est nommée en toutes
                lettres juste à côté (« Zones travaillées »), d'où le `aria-hidden` du
@@ -91,14 +93,22 @@
                 </dd>
 
                 <dt>Média</dt>
+                {% set canAddImages = exercise.images is empty and exercise.acceptsImages and is_granted('EDIT', exercise) %}
                 <dd>
                     {% if exercise.mediaUrl %}
                         <a href="{{ exercise.mediaUrl }}" target="_blank" rel="noopener"
                            class="kd-btn kd-btn--ghost kd-btn--sm" style="padding-left:0;">
                             {{ ux_icon('lucide:external-link') }} Ouvrir le lien
                         </a>
-                    {% else %}
+                    {% elseif not canAddImages %}
                         <span style="color:var(--color-text-placeholder);">—</span>
+                    {% endif %}
+                    {# Sans image, celui qui peut éditer est invité à en poser (#38). #}
+                    {% if canAddImages %}
+                        <a href="{{ path('app_exercise_edit', {id: exercise.id}) }}#images"
+                           class="kd-btn kd-btn--ghost kd-btn--sm" style="padding-left:0;">
+                            {{ ux_icon('lucide:image') }} Ajouter des images du mouvement
+                        </a>
                     {% endif %}
                 </dd>
             </dl>

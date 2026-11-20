@@ -1,42 +1,75 @@
-{# ========================== BOUCLER LA SÉANCE ==========================
-   En bas de séance, à l'endroit où on arrive après avoir lu le programme.
-   Le bouton bascule entre « prévue » et « faite » ; « manquée » reste au
-   cycle rapide du calendrier, qui boucle sur les trois états.
+{# ===================== STATUT, COMMENTAIRE ET RESSENTI =====================
+   En bas de séance, à l'endroit où on arrive après avoir lu le programme. Le
+   même formulaire que la modale du calendrier (#90, #91) : les trois statuts en
+   radios, le commentaire, le ressenti, et un seul bouton « Enregistrer ». Avant,
+   cette page ne proposait qu'une bascule prévue / faite (« Manquée » ne se
+   choisissait qu'au calendrier) et le ressenti avait son propre formulaire,
+   qui n'apparaissait qu'après avoir marqué la séance faite.
 
-   Ce sont les gestes de **programmation** (attribut EDIT), que le coach fait
-   aussi : cocher, noter un écart léger, déplacer, retirer. Le réalisé série par
-   série, lui, vit dans le panneau « Réalisé » (`_log_panel`, attribut LOG) — d'où
-   le titre, qui ne dit plus « Réalisé » : deux sections de ce nom sur la même
-   page, l'une fermée au coach et l'autre pas, ne pourraient que se confondre.
+   Ce sont surtout des gestes de **programmation** (attribut EDIT), que le coach
+   fait aussi : statut, commentaire, déplacer, retirer. Le ressenti, lui, se
+   **consigne** (LOG, propriétaire seul) : ses sélecteurs ne se rendent qu'au
+   propriétaire, et l'endpoint l'ignore pour les autres. Le réalisé série par
+   série vit dans le panneau « Réalisé » (`_log_panel`).
+
+   Ce qui est enregistré se **lit** en tête de page, dans le bilan
+   (`_scheduled_summary`) : ici, on saisit.
 
    Fragment isolé parce qu'il est **cible d'un Turbo Stream** : le contrôleur
-   re-rend cette section (et la pastille du hero) après un changement de statut,
-   sans recharger la page. L'id doit donc survivre au remplacement, et tout ce
-   qui dépend du statut (libellé du bouton, statut posté, note) vit ici. #}
-{% set isDone = scheduled.status.value == 'done' %}
+   re-rend cette section (avec le bilan et la pastille du hero) après
+   enregistrement, sans recharger la page. L'id doit donc survivre au
+   remplacement. #}
+{% import 'components/_rating.html.twig' as ratings %}
+{% set statusIcons = {planned: 'lucide:circle-dot', done: 'lucide:check', missed: 'lucide:x'} %}
+{% set canLog = is_granted('SCHEDULED_WORKOUT_LOG', scheduled) %}
+{# Même garde-fou que la modale du calendrier (#109) : faite avant son jour, la
+   séance revient à aujourd'hui, et on le demande d'abord. #}
+{% set future = scheduled.scheduledDate|date('Y-m-d') > 'today'|date('Y-m-d') and scheduled.status.value != 'done' %}
 <section id="schedule-done" class="kd-done" aria-labelledby="done-title">
-    <h2 class="kd-done__title" id="done-title">Boucler la séance</h2>
+    <h2 class="kd-done__title" id="done-title">Statut, commentaire et ressenti</h2>
 
-    <form method="post" action="{{ path('app_scheduled_workout_status', {id: scheduled.id}) }}" class="kd-done__form">
+    <form method="post" action="{{ path('app_scheduled_workout_status', {id: scheduled.id}) }}" class="kd-done__form"
+          {%- if future %} onsubmit="return this.elements.status.value !== 'done' || confirm({{ ('Cette séance est prévue le ' ~ scheduled.scheduledDate|date('d/m') ~ ', elle n\'a pas encore eu lieu. La marquer faite la ramène à aujourd\'hui. Continuer ?')|json_encode(constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES'))|e('html_attr') }});"{% endif %}>
         <input type="hidden" name="_token" value="{{ csrf_token('status' ~ scheduled.id) }}">
         {# Sans ça, l'endpoint renvoie au calendrier : on quitterait la page
-           à chaque bascule. #}
+           à chaque enregistrement. #}
         <input type="hidden" name="return" value="schedule">
-        <input type="hidden" name="status" value="{{ isDone ? 'planned' : 'done' }}">
+
+        <div>
+            <p class="kd-label" id="done-status-lbl">Statut</p>
+            <div class="kd-segmented" role="radiogroup" aria-labelledby="done-status-lbl">
+                {% for status in statuses %}
+                    <label class="kd-segbtn kd-segbtn--{{ status.value }}">
+                        <input type="radio" name="status" value="{{ status.value }}"{{ status == scheduled.status ? ' checked' }}>
+                        {{ ux_icon(statusIcons[status.value], {'aria-hidden': 'true'}) }}
+                        {{ status.label }}
+                    </label>
+                {% endfor %}
+            </div>
+        </div>
 
         <div class="kd-field">
-            <label class="kd-label" for="completion-notes">Écart / ressenti (optionnel)</label>
+            <label class="kd-label" for="completion-notes">Commentaire (optionnel)</label>
             <textarea id="completion-notes" name="completionNotes" rows="3"
                       class="kd-input kd-input--area"
                       placeholder="Charge revue à la baisse, dos raide…">{{ scheduled.completionNotes }}</textarea>
         </div>
 
-        <button type="submit" class="kd-btn kd-btn--block {{ isDone ? 'kd-btn--secondary' : 'kd-btn--primary' }}">
-            {% if isDone %}
-                {{ ux_icon('lucide:rotate-ccw') }} Annuler « fait »
-            {% else %}
-                {{ ux_icon('lucide:check') }} Marquer fait
-            {% endif %}
+        {# Le ressenti ne compte que sur une séance faite : replié tant qu'elle ne
+           l'est pas et qu'il est vide, comme dans la modale. #}
+        {% if canLog %}
+            <details class="kd-done__rating"{{ scheduled.status.value == 'done' or scheduled.feeling or scheduled.sessionRpe ? ' open' }}>
+                <summary class="kd-label">Ressenti</summary>
+                {% if rating is not null and rating.fromIntervals %}
+                    <p class="kd-card__note">Noté sur la montre. Une saisie ici prend le pas, axe par axe.</p>
+                {% endif %}
+                {{ ratings.picker('feeling', scheduled.feeling, 'done-' ~ scheduled.id) }}
+                {{ ratings.picker('sessionRpe', scheduled.sessionRpe, 'done-' ~ scheduled.id) }}
+            </details>
+        {% endif %}
+
+        <button type="submit" class="kd-btn kd-btn--primary kd-btn--block">
+            {{ ux_icon('lucide:save') }} Enregistrer
         </button>
     </form>
 
@@ -55,10 +88,10 @@
         </form>
 
         <form method="post" action="{{ path('app_scheduled_workout_delete', {id: scheduled.id}) }}"
-              onsubmit="return confirm('Retirer cette séance du planning ?');">
+              onsubmit="return confirm('Retirer cette séance de l\'agenda ?');">
             <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ scheduled.id) }}">
             <button type="submit" class="kd-btn kd-btn--ghost kd-btn--danger">
-                {{ ux_icon('lucide:trash-2') }} Retirer du planning
+                {{ ux_icon('lucide:trash-2') }} Retirer de l'agenda
             </button>
         </form>
     </div>

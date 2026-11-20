@@ -16,7 +16,12 @@
 
    Un coach qui compose le plan de son athlète y voit aussi SES séances (`mine`,
    #58), marquées « À moi » : la poser la copie d'abord dans la bibliothèque de
-   l'athlète. Les pastilles « à qui » n'existent que dans ce cas. #}
+   l'athlète. Les pastilles « à qui » n'existent que dans ce cas.
+
+   Une séance du coach déjà copiée chez l'athlète n'est listée qu'une fois, par sa
+   copie (`copyOfMine`, « Copie de la tienne ») : la pose la reprendrait de toute
+   façon. L'effacement se dit sous les pastilles (`paletteAlreadyCopied`, #112),
+   sinon « Moi · 0 » se lit comme une séance perdue. #}
 {% import 'components/_activity.html.twig' as activity %}
 {% import 'components/_rating.html.twig' as ratings %}
 
@@ -26,18 +31,20 @@
      data-place-token="{{ csrf_token('plan_place' ~ template.id) }}">
     <div class="kd-libpanel__head">
         <div class="kd-libpanel__title">
-            <span>Séances</span>
+            {# Chez le coach, la liste croise deux bibliothèques : « Mes séances »
+               y serait faux, la facette « à qui » fait le tri. #}
+            <span>{{ paletteOwners ? 'Séances' : 'Mes séances' }}</span>
             <span class="kd-libpanel__count">{{ paletteCount }}</span>
             {# Visible uniquement en feuille (sous 900px) : sur écran large, le
                panneau n'est pas un calque, il n'y a rien à fermer. #}
-            <button type="button" class="kd-libpanel__close" data-action="plangrid#closeLib" aria-label="Fermer la palette">
+            <button type="button" class="kd-libpanel__close" data-action="plangrid#closeLib" aria-label="Fermer la liste des séances">
                 {{ ux_icon('lucide:x') }}
             </button>
         </div>
 
         {# Rappelle la case visée quand la palette est ouverte depuis un « + » : sans
            lui, la feuille masque la trame et on ne sait plus où l'on pose. #}
-        <p class="kd-libpanel__target" data-plangrid-target="targetLabel" hidden></p>
+        <p class="kd-libpanel__target kd-libpanel__target--cell" data-plangrid-target="targetLabel" hidden></p>
 
         <div class="kd-libsearch">
             {{ ux_icon('lucide:search') }}
@@ -58,7 +65,7 @@
         </div>
 
         {% if paletteOwners %}
-            <div class="kd-libfilters" aria-label="Bibliothèque">
+            <div class="kd-libfilters" aria-label="À qui">
                 <button type="button" class="kd-libfilter kd-libfilter--on"
                         data-owner-pill data-owner="all"
                         data-action="plangrid#pickOwner">Toutes · {{ paletteCount }}</button>
@@ -68,6 +75,19 @@
                             data-action="plangrid#pickOwner">{{ facet.label }} · {{ facet.count }}</button>
                 {% endfor %}
             </div>
+            {% set copied = paletteAlreadyCopied|length %}
+            {% if copied %}
+                <p class="kd-libpanel__note">
+                    {% if copied == 1 %}
+                        <strong>{{ (paletteAlreadyCopied|first).title }}</strong> est déjà copiée
+                        chez {{ paletteOwners.owner.label }} : elle est dans ses séances,
+                        marquée « Copie de la tienne ».
+                    {% else %}
+                        {{ copied }} de tes séances sont déjà copiées chez {{ paletteOwners.owner.label }} :
+                        elles sont dans ses séances, marquées « Copie de la tienne ».
+                    {% endif %}
+                </p>
+            {% endif %}
         {% endif %}
     </div>
 
@@ -85,15 +105,19 @@
                 <span class="kd-libx__body">
                     <span class="kd-libx__name">{{ w.title }}</span>
                     {% if card.mine %}
-                        <span class="kd-scope" title="Posée, elle sera copiée dans sa bibliothèque">
+                        <span class="kd-scope" title="Ajoutée au plan, elle sera copiée dans ses séances">
                             {{ ux_icon('lucide:user') }} À moi
+                        </span>
+                    {% elseif card.copyOfMine %}
+                        <span class="kd-scope" title="Copiée depuis tes séances : c'est elle que l'ajout reprend">
+                            {{ ux_icon('lucide:copy') }} Copie de la tienne
                         </span>
                     {% endif %}
                     <span class="kd-palettecard__meta">
                         {% if w.estimatedDurationMinutes %}
                             <span>{{ ux_icon('lucide:clock') }} {{ w.estimatedDurationMinutes }} min</span>
                         {% endif %}
-                        <span>{{ card.exerciseCount }} exos</span>
+                        <span>{{ card.exerciseCount }} exo{{ card.exerciseCount > 1 ? 's' }}</span>
                     </span>
                     {# La pose part de la dernière réalisation (LineageSeed) : la
                        carte le dit, sinon la case changerait de source en silence. #}
@@ -137,13 +161,12 @@
                 </span>
             </button>
         {% else %}
-            <p class="kd-libpanel__empty">Aucune séance en bibliothèque. Crée-en une d'abord.</p>
+            <p class="kd-libpanel__empty">Tu n'as pas encore de séance. Crée-en une d'abord.</p>
         {% endfor %}
     </div>
 
     <p class="kd-libpanel__hint">
-        Clique une séance pour l'<strong>armer</strong>, puis clique les cases pour la poser.
-        Ou glisse-la dans une case. Le <strong>+</strong> d'un jour, lui, vise directement
-        sa case.
+        Clique sur une séance, puis sur les jours où tu veux la faire.
+        Tu peux aussi la glisser sur un jour.
     </p>
 </div>

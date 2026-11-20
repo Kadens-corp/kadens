@@ -1,0 +1,49 @@
+{# Les images d'un exercice, jouées en fondu enchaîné pour montrer le mouvement
+   (#38) : chaque image arrive par-dessus la précédente (`exercise-frames`). Une
+   seule image : elle s'affiche, sans commande. Sans JS, la première reste.
+
+   Les images sont des carrés de 1080 px déjà signés du logo (mise en forme à
+   l'envoi) : rien n'est superposé ici que les images entre elles.
+
+   Paramètres :
+     - exercise
+     - variant : 'sheet' (fiche, avec pause et étapes, défaut) ou 'mini' (aperçu
+       de la planche, sans commande ; décoratif, les vignettes à côté portent
+       les textes alternatifs). #}
+{% set images = exercise.images %}
+{% set variant = variant|default('sheet') %}
+{% set mini = variant == 'mini' %}
+{% if images is not empty %}
+    {% set name = exercise_name(exercise) %}
+    {% set animated = images|length > 1 %}
+    <figure class="kd-exframes kd-exframes--{{ variant }}"
+            {%- if animated %} data-controller="exercise-frames"{% endif %}
+            {%- if mini %} aria-hidden="true"{% endif %}>
+        <div class="kd-exframes__stage">
+            {% for file in images %}
+                <img src="{{ path('app_exercise_image', {id: exercise.id, file: file}) }}"
+                     alt="{{ mini ? '' : (animated ? 'Mouvement de ' ~ name ~ ', étape ' ~ loop.index ~ ' sur ' ~ images|length : 'Mouvement de ' ~ name) }}"
+                     width="1080" height="1080" decoding="async"{% if mini %} loading="lazy"{% endif %}
+                     class="kd-exframes__frame{{ loop.first ? ' is-active' }}"
+                     {% if animated %}data-exercise-frames-target="frame"{% endif %}>
+            {% endfor %}
+        </div>
+        {% if animated and not mini %}
+            <figcaption class="kd-exframes__controls">
+                <button type="button" class="kd-iconbtn" aria-pressed="false" aria-label="Lecture en boucle"
+                        data-exercise-frames-target="toggle" data-action="exercise-frames#toggle">
+                    <span data-when="playing" hidden>{{ ux_icon('lucide:pause') }}</span>
+                    <span data-when="paused">{{ ux_icon('lucide:play') }}</span>
+                </button>
+                <span class="kd-exframes__dots">
+                    {% for file in images %}
+                        <button type="button" class="kd-exframes__dot" aria-current="{{ loop.first ? 'true' : 'false' }}"
+                                aria-label="Étape {{ loop.index }}"
+                                data-exercise-frames-target="dot" data-action="exercise-frames#show"
+                                data-exercise-frames-index-param="{{ loop.index0 }}"></button>
+                    {% endfor %}
+                </span>
+            </figcaption>
+        {% endif %}
+    </figure>
+{% endif %}

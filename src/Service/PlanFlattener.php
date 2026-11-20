@@ -7,6 +7,7 @@ use App\Entity\PlanItem;
 use App\Entity\PlanTemplate;
 use App\Entity\PrescribedExercise;
 use App\Entity\PrescribedSet;
+use App\Entity\ScheduledWorkout;
 use App\Entity\Workout;
 use App\Enum\IntensityZone;
 use App\Enum\PaceUnit;
@@ -25,7 +26,7 @@ use App\Enum\SetType;
  *
  * @phpstan-type FlatSetGroup array{type: \App\Enum\SetType, typeLabel: string|null, count: int, detail: string, effort: string, firstIndex: int, lastIndex: int, weightKg: float|null}
  * @phpstan-type FlatSetLine array{type: \App\Enum\SetType, typeLabel: string|null, index: int, effort: string, weightKg: float|null, reps: int|null, durationSeconds: int|null}
- * @phpstan-type FlatPrescribed array{prescribed: PrescribedExercise, exercise: \App\Entity\Exercise|null, type: PrescriptionType|null, summary: string, values: string, sets: list<FlatSetGroup>|null, setLines: list<FlatSetLine>|null, rest: ?int, notes: ?string, topWeightKg: ?float, groupLabel: string|null}
+ * @phpstan-type FlatPrescribed array{prescribed: PrescribedExercise, exercise: \App\Entity\Exercise|null, type: PrescriptionType|null, summary: string, values: string, sets: list<FlatSetGroup>|null, setLines: list<FlatSetLine>|null, rest: ?int, chained: bool, notes: ?string, topWeightKg: ?float, groupLabel: string|null}
  * @phpstan-type FlatSegment array{label: string|null, kind: 'single'|'superset'|'circuit', exercises: list<FlatPrescribed>}
  * @phpstan-type FlatBlock array{block: Block, exercises: list<FlatPrescribed>, segments: list<FlatSegment>}
  * @phpstan-type FlatWorkout array{workout: Workout, blocks: list<FlatBlock>, activities: list<\App\Enum\ActivityType>, exerciseCount: int}
@@ -95,6 +96,49 @@ final class PlanFlattener
     }
 
     /**
+     * La consigne de case d'une séance datée issue d'un plan (#95) : la note que
+     * le coach (ou l'athlète) a posée sur la case S3 · mardi, et que l'athlète
+     * doit lire le jour J. Elle vit sur le `PlanItem`, pas sur la séance : deux
+     * cases peuvent partager le même contenu et des consignes différentes.
+     *
+     * Elle passe ici, comme le reste du rendu, parce que c'est ici qu'on décide de
+     * ce qui sort d'un plan vers une vue de lecture. Ce n'est **pas** une donnée
+     * privée (le bloc-notes privé est `Workout.notes` / `PlanTemplate.notes`, qui
+     * n'entrent jamais ici) : la page publique du plan l'affiche déjà, et
+     * l'éditeur la nomme « Consigne visible par <athlète> ».
+     *
+     * Null pour une séance posée hors plan, une case retirée depuis (SET NULL)
+     * ou une note vide.
+     */
+    public function planInstruction(ScheduledWorkout $scheduled): ?string
+    {
+        $notes = trim((string) $scheduled->getSourcePlanItem()?->getNotes());
+
+        return '' === $notes ? null : $notes;
+    }
+
+    /**
+     * `planInstruction()` pour une liste de séances datées (calendrier), indexée
+     * par id de séance datée. Seules les séances qui en ont une sont présentes.
+     *
+     * @param iterable<ScheduledWorkout> $scheduled
+     *
+     * @return array<int, string>
+     */
+    public function planInstructions(iterable $scheduled): array
+    {
+        $byId = [];
+        foreach ($scheduled as $one) {
+            $instruction = $this->planInstruction($one);
+            if (null !== $instruction) {
+                $byId[(int) $one->getId()] = $instruction;
+            }
+        }
+
+        return $byId;
+    }
+
+    /**
      * @return FlatWorkout
      */
     public function flattenWorkout(Workout $workout): array
@@ -128,11 +172,14 @@ final class PlanFlattener
         $exercises = [];
         foreach ($this->supersets->segments($block) as $segment) {
             $flatExercises = [];
+            $last = count($segment['exercises']) - 1;
             foreach ($segment['exercises'] as $index => $prescribed) {
                 // Rang lisible dans le groupe : « A1 », « A2 »… La lettre vient du
                 // segment, le numéro du rang dans le segment.
                 $label = null !== $segment['label'] ? $segment['label'].($index + 1) : null;
-                $flat = $this->flattenPrescribed($prescribed, $label);
+                // Suivi d'un autre membre du groupe : enchaîné sans repos (#85).
+                $chained = null !== $segment['label'] && $index < $last;
+                $flat = $this->flattenPrescribed($prescribed, $label, $chained);
                 $flatExercises[] = $flat;
                 $exercises[] = $flat;
             }
@@ -154,7 +201,7 @@ final class PlanFlattener
     /**
      * @return FlatPrescribed
      */
-    private function flattenPrescribed(PrescribedExercise $prescribed, ?string $groupLabel = null): array
+    private function flattenPrescribed(PrescribedExercise $prescribed, ?string $groupLabel = null, bool $chained = false): array
     {
         return [
             'prescribed' => $prescribed,
@@ -172,9 +219,14 @@ final class PlanFlattener
             // Vue déroulée : une entrée par série, quel que soit le mode de saisie.
             // C'est ce que consomme la page de consultation.
             'setLines' => $this->setLines($prescribed),
-            'rest' => $prescribed->getRestSeconds(),
+            // Dans un superset, seul le dernier membre repose (#85, même règle que
+            // WorkoutEstimator). Les autres valent 0 et non null : pour l'app,
+            // null veut dire « repos par défaut des réglages », 0 veut dire
+            // « enchaîner ». La valeur saisie reste en base, intacte.
+            'rest' => $chained ? 0 : $prescribed->getRestSeconds(),
+            'chained' => $chained,
             'notes' => $prescribed->getNotes(),
-            // Référence du « % du max » affiché par le tableau de séries.
+            // Référence du « % de la série la plus lourde » du tableau de séries.
             'topWeightKg' => $prescribed->getTopWeightKg(),
             // Rang dans le superset (« A1 », « A2 »…), null hors liaison.
             'groupLabel' => $groupLabel,
@@ -443,7 +495,7 @@ final class PlanFlattener
 
     private function summarizeAmrap(PrescribedExercise $pe): string
     {
-        $summary = 'AMRAP '.$this->units->duration($pe->getDurationSeconds());
+        $summary = 'Max de reps en '.$this->units->duration($pe->getDurationSeconds());
 
         if (null !== $pe->getTargetReps()) {
             $summary .= sprintf(' · cible %d reps', $pe->getTargetReps());
@@ -454,10 +506,10 @@ final class PlanFlattener
 
     private function summarizeForTime(PrescribedExercise $pe): string
     {
-        $summary = sprintf('%s reps for time', $pe->getTargetReps() ?? '?');
+        $summary = sprintf('%s reps le plus vite possible', $pe->getTargetReps() ?? '?');
 
         if (null !== $pe->getCapSeconds()) {
-            $summary .= ' · cap '.$this->units->duration($pe->getCapSeconds());
+            $summary .= ' · limite '.$this->units->duration($pe->getCapSeconds());
         }
 
         return $summary;

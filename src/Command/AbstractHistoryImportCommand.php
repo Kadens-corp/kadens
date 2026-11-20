@@ -143,7 +143,7 @@ abstract class AbstractHistoryImportCommand extends Command
 
         if ([] !== $unresolved) {
             $io->error(\sprintf(
-                '%d clé(s) d\'exercice non tranchée(s) dans %s. Lancez la commande avec --report pour les lister.',
+                '%d clé(s) d\'exercice non tranchée(s) dans %s. Lance la commande avec --report pour les lister.',
                 \count($unresolved),
                 basename($mapFile),
             ));
@@ -220,7 +220,7 @@ abstract class AbstractHistoryImportCommand extends Command
             // Rien n'a été flushé : `clear()` détache tout ce que le passage a
             // construit, y compris les exercices persistés par le mapping.
             $this->em->clear();
-            $io->warning('Rien n\'a été écrit. Relancez avec --force pour appliquer.');
+            $io->warning('Rien n\'a été écrit. Relance avec --force pour appliquer.');
 
             return Command::SUCCESS;
         }

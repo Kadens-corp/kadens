@@ -458,7 +458,7 @@ final class ExcelExporter
             $heading .= ' · '.$label;
         }
         if ($block->getRounds() > 1) {
-            $heading .= ' · × '.$block->getRounds().' TOURS';
+            $heading .= ' · RÉPÉTÉ '.$block->getRounds().' FOIS';
         }
 
         $this->mergedText($sheet, $row, self::PROGRAM_COLUMNS, $heading);

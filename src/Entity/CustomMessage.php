@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Entity;
 
 use App\Enum\MessageAudience;
+use App\Enum\MessagePlatform;
 use App\Repository\CustomMessageRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -25,6 +26,7 @@ use Symfony\Component\Validator\Context\ExecutionContextInterface;
  *   séances datées : pas d'heure, pas de fuseau.
  * - `seenBy` est la seule mémoire du « vu », commune au web et au téléphone :
  *   fermer la modale d'un côté la retire de l'autre.
+ * - `platform` choisit où le message s'affiche : site, appli ou les deux.
  */
 #[ORM\Entity(repositoryClass: CustomMessageRepository::class)]
 #[ORM\HasLifecycleCallbacks]
@@ -60,6 +62,9 @@ class CustomMessage
 
     #[ORM\Column(length: 10, enumType: MessageAudience::class)]
     private MessageAudience $audience = MessageAudience::USERS;
+
+    #[ORM\Column(length: 10, enumType: MessagePlatform::class, options: ['default' => 'both'])]
+    private MessagePlatform $platform = MessagePlatform::BOTH;
 
     /**
      * @var Collection<int, User>
@@ -193,6 +198,18 @@ class CustomMessage
     public function setAudience(MessageAudience $audience): static
     {
         $this->audience = $audience;
+
+        return $this;
+    }
+
+    public function getPlatform(): MessagePlatform
+    {
+        return $this->platform;
+    }
+
+    public function setPlatform(MessagePlatform $platform): static
+    {
+        $this->platform = $platform;
 
         return $this;
     }

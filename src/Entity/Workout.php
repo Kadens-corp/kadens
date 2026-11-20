@@ -14,6 +14,13 @@ use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 #[UniqueEntity(fields: ['slug'], message: 'Ce slug est déjà utilisé.')]
 class Workout
 {
+    /**
+     * Titre d'un brouillon créé en un clic (« Nouvelle séance »). Il sert aussi à
+     * reconnaître un brouillon abandonné (#115) : voir
+     * `WorkoutRepository::abandonedDraftCondition()`.
+     */
+    public const string DRAFT_TITLE = 'Nouvelle séance';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -41,8 +48,23 @@ class Workout
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $notes = null;
 
+    /**
+     * Identifiant lisible, dérivé du titre : nom du fichier d'export. N'apparaît
+     * plus dans aucune adresse publique (#61), c'est `shareToken` qui les porte.
+     */
     #[ORM\Column(length: 255, unique: true)]
     private ?string $slug = null;
+
+    /**
+     * Partage par lien (#61). Null = privée, c'est le défaut. Posé par
+     * `ShareLink::open()` à la demande du propriétaire : il sert alors à lui seul
+     * d'autorisation de lecture sous `/s/{shareToken}`, d'où l'aléa (128 bits) et
+     * aucune dérivation du titre. Arrêter le partage le remet à null : l'adresse
+     * meurt pour de bon, un nouveau partage en tire une autre. Jamais posé sur une
+     * copie `planLocal`, qui ne se lit que par le lien de son plan.
+     */
+    #[ORM\Column(length: 32, unique: true, nullable: true)]
+    private ?string $shareToken = null;
 
     #[ORM\Column(nullable: true)]
     private ?int $estimatedDurationMinutes = null;
@@ -83,6 +105,33 @@ class Workout
     #[ORM\ManyToOne(targetEntity: self::class)]
     #[ORM\JoinColumn(onDelete: 'SET NULL')]
     private ?Workout $copiedFrom = null;
+
+    /**
+     * La séance FAITE d'un ami dont cette séance est la copie (#126) : « Copier
+     * dans mes séances » depuis le flux. C'est ce qui permet d'écrire « Copiée
+     * par Tom » sous la séance de l'auteur, et « Copiée dans tes séances » sur la
+     * carte du flux de celui qui l'a prise. Un repère, jamais un droit : la copie
+     * appartient à son nouveau propriétaire et ne bouge plus avec l'original.
+     * SET NULL : l'auteur qui supprime sa séance ne touche pas la copie.
+     */
+    #[ORM\ManyToOne(targetEntity: ScheduledWorkout::class)]
+    #[ORM\JoinColumn(onDelete: 'SET NULL')]
+    private ?ScheduledWorkout $copiedFromSession = null;
+
+    /**
+     * Qui, autre que le propriétaire, a mis ce contenu chez lui (#80) : le coach
+     * qui l'a créé, copié, posé ou donné. Null = le propriétaire lui-même, c'est
+     * le cas courant. Posé une fois pour toutes par `ContentAuthorListener` à la
+     * création (et par `PlanTransfer` au don d'un plan), jamais réécrit : c'est
+     * un fait d'origine, que l'athlète retouche ensuite le contenu ou non.
+     *
+     * Ne donne aucun droit : les voters passent par `Coaching`, pas par ce champ.
+     * Il ne sert qu'à dire à l'athlète « ceci vient de ton coach ». SET NULL :
+     * supprimer le compte du coach laisse le contenu, sans badge.
+     */
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(onDelete: 'SET NULL')]
+    private ?User $addedBy = null;
 
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
@@ -193,6 +242,23 @@ class Workout
         return $this;
     }
 
+    public function getShareToken(): ?string
+    {
+        return $this->shareToken;
+    }
+
+    public function setShareToken(?string $shareToken): static
+    {
+        $this->shareToken = $shareToken;
+
+        return $this;
+    }
+
+    public function isShared(): bool
+    {
+        return null !== $this->shareToken;
+    }
+
     public function getEstimatedDurationMinutes(): ?int
     {
         return $this->estimatedDurationMinutes;
@@ -229,6 +295,18 @@ class Workout
         return $this;
     }
 
+    public function getCopiedFromSession(): ?ScheduledWorkout
+    {
+        return $this->copiedFromSession;
+    }
+
+    public function setCopiedFromSession(?ScheduledWorkout $copiedFromSession): static
+    {
+        $this->copiedFromSession = $copiedFromSession;
+
+        return $this;
+    }
+
     public function getCopiedFrom(): ?Workout
     {
         return $this->copiedFrom;
@@ -237,6 +315,19 @@ class Workout
     public function setCopiedFrom(?Workout $copiedFrom): static
     {
         $this->copiedFrom = $copiedFrom;
+
+        return $this;
+    }
+
+
+    public function getAddedBy(): ?User
+    {
+        return $this->addedBy;
+    }
+
+    public function setAddedBy(?User $addedBy): static
+    {
+        $this->addedBy = $addedBy;
 
         return $this;
     }

@@ -1,0 +1,119 @@
+{# ========================= MA SÉANCE DU JOUR (#91) =========================
+   Le bilan de la séance datée, en lecture, juste sous le hero de /schedule/{id} :
+   statut, commentaire, ressenti, réalisé et lien vers la séance type.
+
+   Cette page est la page de référence d'une séance posée au calendrier. Avant,
+   deux chemins menaient à deux pages : la séance de bibliothèque (sans date ni
+   statut) et la séance datée, où le commentaire ne se lisait que dans une zone
+   de saisie en bas et le ressenti seulement après coup. Personne ne savait s'il
+   regardait la séance type ou sa séance du jour. Le bilan le dit en tête, et
+   le lien « Séance type » nomme l'autre page au lieu de s'y confondre.
+
+   Fragment isolé parce qu'il est **cible d'un Turbo Stream** : enregistrer le
+   formulaire du bas le re-rend sans recharger la page. L'id doit survivre au
+   remplacement.
+
+   Attend :
+     - scheduled     : ScheduledWorkout
+     - rating        : SessionRating|null — ressenti effectif (Kadens, sinon la
+                       montre), null si la séance n'est pas faite ou pas notée
+     - logSummary    : sortie de LogMetrics::summary, null sans réalisé logué
+     - importedCount : int — activités de la montre rattachées
+     - strength      : bool — séance de force (TrackableSchedule)
+   ============================================================================ #}
+{% import 'components/_rating.html.twig' as ratings %}
+{% set statusIcons = {planned: 'lucide:circle-dot', done: 'lucide:check', missed: 'lucide:x'} %}
+{% set st = scheduled.status.value %}
+{% set canLog = is_granted('SCHEDULED_WORKOUT_LOG', scheduled) %}
+{% set canEdit = is_granted('SCHEDULED_WORKOUT_EDIT', scheduled) %}
+{% set workout = scheduled.workout %}
+{% set importedCount = importedCount|default(0) %}
+
+<section id="schedule-summary" class="kd-sumcard" aria-labelledby="summary-title">
+    <div class="kd-sumcard__head">
+        <h2 class="kd-sumcard__title" id="summary-title">Bilan de la séance</h2>
+        {% if canEdit %}
+            <a href="#schedule-done" class="kd-btn kd-btn--ghost kd-btn--sm">
+                {{ ux_icon('lucide:square-pen') }} Modifier
+            </a>
+        {% endif %}
+    </div>
+
+    <dl class="kd-sumcard__list">
+        <div class="kd-sumcard__row">
+            <dt>Statut</dt>
+            <dd class="kd-sumcard__status kd-sumcard__status--{{ st }}">
+                {{ ux_icon(statusIcons[st], {'aria-hidden': 'true'}) }} {{ scheduled.status.label }}
+            </dd>
+        </div>
+
+        <div class="kd-sumcard__row">
+            <dt>Commentaire</dt>
+            <dd>
+                {% if scheduled.completionNotes %}
+                    <p class="kd-sumcard__notes">{{ scheduled.completionNotes|nl2br }}</p>
+                {% else %}
+                    <span class="kd-sumcard__empty">Aucun commentaire.</span>
+                {% endif %}
+            </dd>
+        </div>
+
+        {# Le ressenti n'existe que sur une séance faite (CLAUDE.md §3) : sur une
+           séance prévue ou manquée, la ligne n'aurait rien à dire. #}
+        {% if st == 'done' %}
+            <div class="kd-sumcard__row">
+                <dt>Ressenti</dt>
+                <dd>
+                    {% if rating is not null and not rating.empty %}
+                        {{ ratings.badge(rating, true) }}
+                    {% else %}
+                        <span class="kd-sumcard__empty">{{ canLog ? 'Pas encore noté.' : 'Pas noté.' }}</span>
+                    {% endif %}
+                </dd>
+            </div>
+        {% endif %}
+
+        {# Le réalisé : ce qui est consigné, et où le lire. Sans réalisé, la phrase
+           sur l'app pour une séance de force (#63) : c'est là, et seulement là,
+           que se saisissent les charges. Une séance prévue de cardio n'a encore
+           rien à annoncer. #}
+        {% if logSummary or importedCount > 0 or strength or st != 'planned' %}
+            <div class="kd-sumcard__row">
+                <dt>Réalisé</dt>
+                <dd>
+                    {% if logSummary %}
+                        {{ logSummary.exerciseCount }} exercice{{ logSummary.exerciseCount > 1 ? 's' }}
+                        · {{ logSummary.workingSets }} série{{ logSummary.workingSets > 1 ? 's' }} de travail.
+                        <span class="kd-sumcard__hint">Le détail est dans l'onglet Réalisé.</span>
+                    {% endif %}
+                    {% if importedCount > 0 %}
+                        {{ importedCount }} activité{{ importedCount > 1 ? 's' }} de la montre rattachée{{ importedCount > 1 ? 's' }}.
+                        <span class="kd-sumcard__hint">Détail plus bas.</span>
+                    {% endif %}
+                    {% if not logSummary and importedCount == 0 %}
+                        {% if strength %}
+                            {{ include('components/_log_in_app.html.twig', {
+                                missing: st == 'done',
+                                third: not canLog
+                            }, with_context = false) }}
+                        {% else %}
+                            <span class="kd-sumcard__empty">Rien de rattaché.</span>
+                        {% endif %}
+                    {% endif %}
+                </dd>
+            </div>
+        {% endif %}
+
+        {# L'autre page, nommée pour ce qu'elle est : le modèle, sans date. #}
+        {% if workout and is_granted('WORKOUT_VIEW', workout) %}
+            <div class="kd-sumcard__row">
+                <dt>Séance type</dt>
+                <dd>
+                    <a href="{{ path('app_workout_show', {id: workout.id}|merge(back_carry())) }}" class="kd-sumcard__link">
+                        {{ workout.title }} {{ ux_icon('lucide:arrow-right', {'aria-hidden': 'true'}) }}
+                    </a>
+                </dd>
+            </div>
+        {% endif %}
+    </dl>
+</section>

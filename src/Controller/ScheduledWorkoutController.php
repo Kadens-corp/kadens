@@ -5,8 +5,10 @@ namespace App\Controller;
 use App\Entity\PlanTemplate;
 use App\Entity\ScheduledWorkout;
 use App\Entity\User;
+use App\Entity\Workout;
 use App\Enum\ScheduledStatus;
 use App\Form\PlanInstantiationType;
+use App\Http\BackTarget;
 use App\Repository\ImportedActivityRepository;
 use App\Repository\PlanTemplateRepository;
 use App\Repository\ScheduledWorkoutRepository;
@@ -14,12 +16,14 @@ use App\Repository\WorkoutRepository;
 use App\Security\Voter\PlanTemplateVoter;
 use App\Security\Voter\ScheduledWorkoutVoter;
 use App\Security\Voter\WorkoutVoter;
+use App\Service\CalendarWeek;
 use App\Service\ImportedActivityPresenter;
 use App\Service\LogComparator;
 use App\Service\LogMetrics;
 use App\Service\PlanFlattener;
 use App\Service\PlanScheduler;
 use App\Service\SessionRating;
+use App\Service\TrackableSchedule;
 use App\Service\VolumePanel;
 use App\Service\WorkoutMetrics;
 use Doctrine\ORM\EntityManagerInterface;
@@ -47,6 +51,11 @@ final class ScheduledWorkoutController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
         private readonly ScheduledWorkoutRepository $scheduledWorkouts,
+        private readonly TrackableSchedule $trackable,
+        private readonly LogMetrics $logMetrics,
+        private readonly ImportedActivityRepository $importedActivities,
+        private readonly CalendarWeek $calendarWeek,
+        private readonly WorkoutRepository $workoutRepository,
     ) {
     }
 
@@ -77,24 +86,86 @@ final class ScheduledWorkoutController extends AbstractController
 
         $this->denyAccessUnlessGranted(WorkoutVoter::VIEW, $workout);
 
+        // Un jour passé, on ne planifie plus : on consigne ce qui a eu lieu
+        // (#109). La modale y propose donc le statut tout de suite, Faite par
+        // défaut. Un statut posté pour aujourd'hui ou le futur est ignoré : à
+        // venir, une séance ne peut être que prévue.
+        $past = $date < new \DateTimeImmutable('today');
+        $status = $past ? ScheduledStatus::tryFrom($payload->getString('status')) : null;
+
         $scheduled = new ScheduledWorkout();
         $scheduled->setWorkout($workout);
         $scheduled->setScheduledDate($date);
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
         $scheduled->setOwner($user);
-        $scheduled->setStatus(ScheduledStatus::PLANNED);
+        $scheduled->setStatus($status ?? ScheduledStatus::PLANNED);
         $this->entityManager->persist($scheduled);
         $this->entityManager->flush();
 
-        $this->addFlash('success', 'Séance planifiée.');
+        $this->addFlash('success', $this->placedMessage($date, $past, $status));
+
+        if ($this->staysOnCalendar($request)) {
+            return $this->streamCalendarRefresh($request);
+        }
 
         return $this->redirectToMonth($date);
     }
 
     /**
-     * Instancie un plan complet à partir d'une date : PlanScheduler projette
-     * la trame sur des dates réelles et crée N ScheduledWorkout.
+     * « Séance planifiée » ne se dit que d'un jour à venir. Un jour passé, le
+     * message dit où la séance est tombée et ce qu'elle est devenue (#109).
+     */
+    private function placedMessage(\DateTimeImmutable $date, bool $past, ?ScheduledStatus $status): string
+    {
+        $day = $date->format('d/m');
+
+        if (!$past) {
+            return sprintf('Séance planifiée le %s.', $day);
+        }
+
+        return match ($status) {
+            ScheduledStatus::DONE => sprintf('Séance ajoutée au %s, marquée faite.', $day),
+            ScheduledStatus::MISSED => sprintf('Séance ajoutée au %s, marquée manquée.', $day),
+            default => sprintf('Séance ajoutée au %s. Dis si elle est faite ou manquée : elle compte en retard tant qu\'elle reste prévue.', $day),
+        };
+    }
+
+    /**
+     * Une séance faite porte le jour où elle a été faite (#109). La marquer
+     * faite alors qu'elle est prévue plus tard, c'est l'avoir faite en avance
+     * (le geste passe par une confirmation qui le dit) : elle revient à
+     * aujourd'hui. Sinon elle compterait dans l'observance d'une semaine qui n'a
+     * pas encore eu lieu, et dans la régularité d'un jour à venir.
+     *
+     * Rend la date d'origine quand la séance a été ramenée, null sinon.
+     */
+    private function bringDoneToToday(ScheduledWorkout $scheduled): ?\DateTimeImmutable
+    {
+        $today = new \DateTimeImmutable('today');
+        $planned = $scheduled->getScheduledDate();
+
+        if (ScheduledStatus::DONE !== $scheduled->getStatus() || $planned <= $today) {
+            return null;
+        }
+
+        $scheduled->setScheduledDate($today);
+
+        return $planned;
+    }
+
+    private function broughtToTodayMessage(\DateTimeImmutable $planned): string
+    {
+        return sprintf('Séance marquée faite et ramenée à aujourd\'hui : elle était prévue le %s.', $planned->format('d/m'));
+    }
+
+    /**
+     * Place un plan complet dans l'agenda à partir d'une date : PlanScheduler
+     * projette la trame sur des dates réelles et crée N ScheduledWorkout. Relancer
+     * sur un plan déjà placé n'ajoute que les nouvelles cases (resync add-only).
+     *
+     * Ouvre ensuite l'agenda sur la première séance posée (#68) : avant, on
+     * restait en haut du mois de la date de départ, les séances plus bas.
      */
     #[Route('/plan', name: 'app_scheduled_workout_instantiate', methods: ['POST'])]
     public function instantiate(
@@ -120,14 +191,48 @@ final class ScheduledWorkoutController extends AbstractController
             $alreadyOnCalendar = $planScheduler->isInstantiated($template, $user);
             $created = $planScheduler->instantiate($template, $user, $startDate);
 
-            $this->addFlash('success', $alreadyOnCalendar
-                ? sprintf('Plan resynchronisé : %d nouvelle(s) séance(s) ajoutée(s).', count($created))
-                : sprintf('Plan instancié : %d séance(s) planifiée(s).', count($created)));
+            $first = null;
+            foreach ($created as $scheduled) {
+                if (null === $first || $scheduled->getScheduledDate() < $first) {
+                    $first = $scheduled->getScheduledDate();
+                }
+            }
 
-            return $this->redirectToMonth($startDate);
+            $count = \count($created);
+            if (!$alreadyOnCalendar) {
+                $this->addFlash('success', 0 === $count
+                    ? 'Ce plan n\'a encore aucune séance : rien n\'a été placé dans ton agenda.'
+                    : sprintf(
+                        'Plan placé dans ton agenda : %d séance%s, la première le %s.',
+                        $count,
+                        $count > 1 ? 's' : '',
+                        $first->format('d/m/Y'),
+                    ));
+            } else {
+                $this->addFlash('success', 0 === $count
+                    ? 'Ce plan est déjà dans ton agenda et à jour : aucune séance ajoutée.'
+                    : sprintf(
+                        'Ce plan était déjà dans ton agenda : %d nouvelle%s séance%s ajoutée%s, les autres n\'ont pas bougé.',
+                        $count,
+                        $count > 1 ? 's' : '',
+                        $count > 1 ? 's' : '',
+                        $count > 1 ? 's' : '',
+                    ));
+                // Rien d'ajouté : on ouvre là où le plan commence déjà.
+                $first ??= $planScheduler->firstScheduledDate($template, $user);
+            }
+
+            // Première séance dans la vue affichée : on reste, la vue se morphe.
+            // Sinon on ouvre l'agenda sur elle (#68), quitte à changer de vue.
+            $landing = $first ?? $startDate;
+            if ($this->staysOnCalendar($request, $landing)) {
+                return $this->streamCalendarRefresh($request);
+            }
+
+            return $this->redirectToDay($landing);
         }
 
-        $this->addFlash('error', 'Impossible d\'instancier ce plan.');
+        $this->addFlash('error', 'Impossible de placer ce plan dans l\'agenda.');
 
         return $this->redirectToCurrentMonth();
     }
@@ -153,9 +258,7 @@ final class ScheduledWorkoutController extends AbstractController
         PlanFlattener $planFlattener,
         WorkoutMetrics $metrics,
         LogComparator $comparator,
-        LogMetrics $logMetrics,
         VolumePanel $volumePanel,
-        ImportedActivityRepository $importedActivities,
         ImportedActivityPresenter $activityPresenter,
     ): Response {
         $this->denyAccessUnlessGranted(ScheduledWorkoutVoter::VIEW, $scheduled);
@@ -167,6 +270,9 @@ final class ScheduledWorkoutController extends AbstractController
         // son onglet n'apparaissent pas, plutôt que d'apparaître vides.
         $comparison = $comparator->compare($scheduled);
 
+        $activities = $this->importedActivityContext($scheduled, $activityPresenter);
+        $summaryContext = $this->summaryContext($scheduled, \count($activities['importedActivities']));
+
         // Séance libre, ou séance de bibliothèque supprimée depuis : il n'y a pas
         // de prescrit à rendre, la page se réduit à sa date, son statut, son titre
         // (snapshot) et son réalisé. Le contexte de lecture passe donc à null.
@@ -176,14 +282,39 @@ final class ScheduledWorkoutController extends AbstractController
             'summary' => null === $workout ? null : $metrics->summary($workout),
             'blockStats' => null === $workout ? [] : $metrics->blockBreakdown($workout),
             'comparison' => $comparison,
-            'logSummary' => $logMetrics->summary($scheduled),
+            'logSummary' => $summaryContext['logSummary'],
             'defaultTab' => $this->defaultTab($scheduled, $comparison),
-            'rating' => $this->ratingOf($scheduled),
-        ] + $this->importedActivityContext($scheduled, $importedActivities, $activityPresenter) + [
+            'summaryContext' => $summaryContext,
+            'statuses' => ScheduledStatus::cases(),
+            // La consigne de la case du plan (#95), qui n'était lisible que dans
+            // l'éditeur de plan : l'athlète ne l'aurait jamais vue.
+            'planInstruction' => $planFlattener->planInstruction($scheduled),
+            // « Copiée par Tom le 20/11 » (#126) : les amis qui ont copié cette
+            // séance depuis leur flux. Au propriétaire seul : c'est le nom de
+            // ses amis, son coach n'a pas à le lire.
+            'copiedBy' => $viewer instanceof User && $scheduled->getOwner()?->getId() === $viewer->getId()
+                ? $this->copiesByOthers($scheduled)
+                : [],
+        ] + $activities + [
             // Le volume PRÉVU, dans le HTML initial comme le reste de la page :
             // une vue de consultation ne charge rien après coup (cache offline).
             // Sans prescrit, il n'y a pas de volume prévu à annoncer.
         ] + (null === $workout ? [] : $volumePanel->for($workout, $viewer instanceof User ? $viewer : null)));
+    }
+
+    /**
+     * Les copies de cette séance faites par d'autres, depuis le flux d'amis.
+     *
+     * @return list<Workout>
+     */
+    private function copiesByOthers(ScheduledWorkout $scheduled): array
+    {
+        $ownerId = $scheduled->getOwner()?->getId();
+
+        return array_values(array_filter(
+            $this->workoutRepository->findCopiesOfSessions([(int) $scheduled->getId()])[(int) $scheduled->getId()] ?? [],
+            static fn (Workout $copy): bool => $copy->getOwner()?->getId() !== $ownerId,
+        ));
     }
 
     /**
@@ -194,8 +325,9 @@ final class ScheduledWorkoutController extends AbstractController
      *
      * @return array{importedActivities: list<array<string, mixed>>, activityComparison: list<array<string, mixed>>, attachableActivities: list<\App\Entity\ImportedActivity>}
      */
-    private function importedActivityContext(ScheduledWorkout $scheduled, ImportedActivityRepository $repository, ImportedActivityPresenter $presenter): array
+    private function importedActivityContext(ScheduledWorkout $scheduled, ImportedActivityPresenter $presenter): array
     {
+        $repository = $this->importedActivities;
         $attached = $repository->findForScheduledWorkout($scheduled);
         $owner = $scheduled->getOwner();
 
@@ -205,6 +337,26 @@ final class ScheduledWorkoutController extends AbstractController
             'attachableActivities' => null !== $owner && $this->isGranted(ScheduledWorkoutVoter::LOG, $scheduled)
                 ? $repository->findUnattachedForOwnerOn($owner, $scheduled->getScheduledDate())
                 : [],
+        ];
+    }
+
+    /**
+     * Ce que lit le bilan en tête de /schedule/{id} (#91) : statut, commentaire,
+     * ressenti, réalisé. Partagé par la page et par le flux Turbo renvoyé à
+     * l'enregistrement, pour que le bilan re-rendu dise exactement la même chose.
+     *
+     * @param int|null $importedCount activités rattachées, si l'appelant les a déjà
+     *
+     * @return array{scheduled: ScheduledWorkout, rating: SessionRating|null, logSummary: array<string, mixed>|null, importedCount: int, strength: bool}
+     */
+    private function summaryContext(ScheduledWorkout $scheduled, ?int $importedCount = null): array
+    {
+        return [
+            'scheduled' => $scheduled,
+            'rating' => $this->ratingOf($scheduled),
+            'logSummary' => $this->logMetrics->summary($scheduled),
+            'importedCount' => $importedCount ?? \count($this->importedActivities->findForScheduledWorkout($scheduled)),
+            'strength' => $this->trackable->prescribesStrength($scheduled->getWorkout()),
         ];
     }
 
@@ -241,7 +393,14 @@ final class ScheduledWorkoutController extends AbstractController
             $scheduled->setScheduledDate($newDate);
             $this->entityManager->flush();
 
-            $this->addFlash('success', 'Séance déplacée.');
+            $this->addFlash('success', sprintf('Séance déplacée au %s.', $newDate->format('d/m')));
+
+            // Depuis le calendrier, vers un jour de la vue affichée : on reste.
+            // La pastille part avec sa modale, le refresh la repose à son jour.
+            // Ailleurs, on va la voir là où elle est tombée (redirection).
+            if ($this->staysOnCalendar($request, $newDate)) {
+                return $this->streamCalendarRefresh($request, $scheduled->getId());
+            }
 
             return $this->redirectAfterMutation($request, $scheduled, $newDate);
         }
@@ -272,8 +431,17 @@ final class ScheduledWorkoutController extends AbstractController
                 $notes = trim($payload->getString('completionNotes'));
                 $scheduled->setCompletionNotes('' === $notes ? null : $notes);
                 $this->applyRating($payload, $scheduled);
+                $planned = $this->bringDoneToToday($scheduled);
 
                 $this->entityManager->flush();
+
+                // Ramenée à aujourd'hui : la pastille change de jour, et la date
+                // de la page change aussi. Le flux remplace le fragment puis
+                // demande un refresh par morphing (cf. les gabarits de flux).
+                $refresh = null !== $planned;
+                if (null !== $planned) {
+                    $this->addFlash('success', $this->broughtToTodayMessage($planned));
+                }
 
                 // Réponse asynchrone : on re-rend le seul fragment concerné, la
                 // page n'est pas rechargée. Repli sans JS = redirection classique.
@@ -282,44 +450,19 @@ final class ScheduledWorkoutController extends AbstractController
                 // n'existe pas sur la page de la séance datée.
                 if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
                     return 'schedule' === $payload->getString('return')
-                        ? $this->streamScheduleStatus($request, $scheduled)
-                        : $this->streamCalEvent($request, $scheduled, $planFlattener);
+                        ? $this->streamScheduleStatus($request, $scheduled, $refresh)
+                        : $this->streamCalEvent($request, $scheduled, $planFlattener, $refresh);
                 }
 
-                $this->addFlash('success', 'Statut mis à jour.');
+                if (!$refresh) {
+                    $this->addFlash('success', 'Statut mis à jour.');
+                }
             } else {
                 $this->addFlash('error', 'Statut invalide.');
             }
         }
 
         return $this->redirectAfterMutation($request, $scheduled, $scheduled->getScheduledDate());
-    }
-
-    /**
-     * Le ressenti d'une séance faite, saisi ou corrigé sur le web : forme 1-5 et
-     * difficulté 1-10. C'est **consigner**, pas programmer : attribut LOG, le
-     * propriétaire seul, comme le réalisé série par série — personne ne dit à la
-     * place de l'athlète comment il s'est senti. Le coach le lit (VIEW).
-     */
-    #[Route('/{id}/rating', name: 'app_scheduled_workout_rating', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function rate(Request $request, ScheduledWorkout $scheduled): Response
-    {
-        $this->denyAccessUnlessGranted(ScheduledWorkoutVoter::LOG, $scheduled);
-
-        $payload = $request->getPayload();
-
-        if ($this->isCsrfTokenValid('rating'.$scheduled->getId(), $payload->getString('_token'))) {
-            $this->applyRating($payload, $scheduled);
-            $this->entityManager->flush();
-
-            if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
-                return $this->streamScheduleStatus($request, $scheduled);
-            }
-
-            $this->addFlash('success', 'Ressenti enregistré.');
-        }
-
-        return $this->redirectToRoute('app_scheduled_workout_show', ['id' => $scheduled->getId()]);
     }
 
     /**
@@ -374,47 +517,62 @@ final class ScheduledWorkoutController extends AbstractController
             return $this->redirectToRoute('app_scheduled_workout_show', ['id' => $scheduled->getId()]);
         }
 
-        return $this->redirectToMonth($date);
+        return $this->redirectToCalendarOf($scheduled->getOwner(), $date);
     }
 
     /**
-     * Cycle rapide du statut (clic sur la zone gauche d'une pastille au
-     * calendrier) : prévue → faite → manquée → prévue. Ne touche pas la note
-     * d'écart (contrairement au formulaire complet de la modale) : c'est un
-     * geste express, pas une saisie. Repli sans JS : c'est un vrai bouton de
-     * formulaire, il fonctionne sans Stimulus.
+     * Statut express, depuis le petit menu de la pastille au calendrier (#89) :
+     * le statut posté est **nommé** (Prévue, Faite, Manquée), plus déduit du
+     * précédent. L'ancien cycle prévue → faite → manquée changeait le statut à
+     * chaque clic sans dire lequel, et un clic de trop passait inaperçu.
+     *
+     * Ne touche ni la note d'écart ni le ressenti (contrairement au formulaire
+     * complet de la modale) : c'est un geste express, pas une saisie. Repli sans
+     * JS : le menu est un popover natif et ses choix de vrais boutons de
+     * formulaire, ils fonctionnent sans Stimulus.
      */
-    #[Route('/{id}/cycle-status', name: 'app_scheduled_workout_cycle_status', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function cycleStatus(Request $request, ScheduledWorkout $scheduled, PlanFlattener $planFlattener): Response
+    #[Route('/{id}/quick-status', name: 'app_scheduled_workout_quick_status', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function quickStatus(Request $request, ScheduledWorkout $scheduled, PlanFlattener $planFlattener): Response
     {
         $this->denyAccessUnlessGranted(ScheduledWorkoutVoter::EDIT, $scheduled);
 
-        if ($this->isCsrfTokenValid('cycle'.$scheduled->getId(), $request->getPayload()->getString('_token'))) {
-            $scheduled->setStatus($scheduled->getStatus()->next());
+        $payload = $request->getPayload();
+        $status = ScheduledStatus::tryFrom($payload->getString('status'));
+
+        if (null !== $status && $this->isCsrfTokenValid('quick-status'.$scheduled->getId(), $payload->getString('_token'))) {
+            $scheduled->setStatus($status);
+            $planned = $this->bringDoneToToday($scheduled);
             $this->entityManager->flush();
+
+            // Ramenée à aujourd'hui : la pastille quitte son jour, le flux
+            // demande un refresh par morphing (cf. updateStatus).
+            if (null !== $planned) {
+                $this->addFlash('success', $this->broughtToTodayMessage($planned));
+            }
 
             // Geste express : on re-rend la pastille en place (pas de rechargement,
             // la vue mois/semaine est préservée). Repli sans JS = redirection.
             if (TurboBundle::STREAM_FORMAT === $request->getPreferredFormat()) {
-                return $this->streamCalEvent($request, $scheduled, $planFlattener);
+                return $this->streamCalEvent($request, $scheduled, $planFlattener, null !== $planned);
             }
         }
 
-        return $this->redirectToMonth($scheduled->getScheduledDate());
+        return $this->redirectToCalendarOf($scheduled->getOwner(), $scheduled->getScheduledDate());
     }
 
     /**
-     * Re-rend en Turbo Stream les deux zones de `/schedule/{id}` qui portent le
-     * statut : la pastille du hero et la section « Réalisé ». Pendant de
+     * Re-rend en Turbo Stream les trois zones de `/schedule/{id}` qui portent le
+     * statut : la pastille du hero, le bilan et le formulaire du bas. Pendant de
      * streamCalEvent() pour l'autre page appelante.
      */
-    private function streamScheduleStatus(Request $request, ScheduledWorkout $scheduled): Response
+    private function streamScheduleStatus(Request $request, ScheduledWorkout $scheduled, bool $refresh = false): Response
     {
         $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
 
         return $this->render('scheduled_workout/stream/status.stream.html.twig', [
-            'scheduled' => $scheduled,
-            'rating' => $this->ratingOf($scheduled),
+            'summaryContext' => $this->summaryContext($scheduled),
+            'statuses' => ScheduledStatus::cases(),
+            'refresh' => $refresh,
         ]);
     }
 
@@ -422,8 +580,9 @@ final class ScheduledWorkoutController extends AbstractController
      * Re-rend la pastille d'une séance datée en Turbo Stream (action="replace"
      * sur `#cal-event-{id}`), à l'identique de son rendu d'origine. `detailed`
      * (vue semaine) est reporté par le formulaire ; `overdue` est recalculé.
+     * En vue semaine, le bandeau de synthèse part avec (#120).
      */
-    private function streamCalEvent(Request $request, ScheduledWorkout $scheduled, PlanFlattener $planFlattener): Response
+    private function streamCalEvent(Request $request, ScheduledWorkout $scheduled, PlanFlattener $planFlattener, bool $refresh = false): Response
     {
         $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
 
@@ -432,13 +591,22 @@ final class ScheduledWorkoutController extends AbstractController
             && $scheduled->getScheduledDate() < $today;
 
         $workout = $scheduled->getWorkout();
+        $detailed = (bool) $request->getPayload()->getInt('detailed');
+        $owner = $scheduled->getOwner();
 
         return $this->render('calendar/stream/cal_event.stream.html.twig', [
             'scheduled' => $scheduled,
             // null pour une séance sans source : la pastille retombe sur son titre.
             'fw' => null === $workout ? null : $planFlattener->flattenWorkout($workout),
+            'instruction' => $planFlattener->planInstruction($scheduled),
             'statuses' => ScheduledStatus::cases(),
-            'detailed' => (bool) $request->getPayload()->getInt('detailed'),
+            'detailed' => $detailed,
+            // Vue semaine : son bandeau de synthèse suit le statut (#120). La
+            // semaine est celle de la séance, chez son propriétaire, comme la
+            // page l'a rendue (le coach lit celle de son athlète).
+            'weekSummary' => $detailed && null !== $owner
+                ? $this->calendarWeek->summary($owner, $scheduled->getScheduledDate())
+                : null,
             'rating' => $this->ratingOf($scheduled),
             'overdue' => $overdue,
             // Ancre de contexte de la vue appelante, reconduite telle quelle : la
@@ -446,6 +614,8 @@ final class ScheduledWorkoutController extends AbstractController
             // Non validée ici — c'est `BackTarget::parse()` qui tranche, à la
             // lecture, et un jeton illisible s'y lit comme une absence.
             'backFrom' => $request->getPayload()->getString('from') ?: null,
+            // Séance ramenée à aujourd'hui : la page entière se morphe ensuite.
+            'refresh' => $refresh,
         ]);
     }
 
@@ -487,10 +657,14 @@ final class ScheduledWorkoutController extends AbstractController
         }
         $this->entityManager->flush();
 
+        $count = \count($scheduled);
+        $plural = $count > 1 ? 's' : '';
         $this->addFlash('success', sprintf(
-            'Plan « %s » retiré du planning : %d séance(s) supprimée(s).',
+            'Plan « %s » retiré du planning : %d séance%s supprimée%s.',
             $template->getTitle(),
-            \count($scheduled),
+            $count,
+            $plural,
+            $plural,
         ));
 
         return $redirect;
@@ -526,7 +700,7 @@ final class ScheduledWorkoutController extends AbstractController
             $scheduled->setEndedAt(null);
             $this->entityManager->flush();
 
-            $this->addFlash('success', 'Réalisé supprimé. La séance reste au planning.');
+            $this->addFlash('success', 'Détail saisi supprimé. La séance reste au planning.');
         }
 
         return $this->redirectToRoute('app_scheduled_workout_show', ['id' => $scheduled->getId()]);
@@ -538,12 +712,88 @@ final class ScheduledWorkoutController extends AbstractController
         $this->denyAccessUnlessGranted(ScheduledWorkoutVoter::DELETE, $scheduled);
 
         $date = $scheduled->getScheduledDate();
+        $owner = $scheduled->getOwner();
+        $id = $scheduled->getId();
 
-        if ($this->isCsrfTokenValid('delete'.$scheduled->getId(), $request->getPayload()->getString('_token'))) {
+        if ($this->isCsrfTokenValid('delete'.$id, $request->getPayload()->getString('_token'))) {
             $this->entityManager->remove($scheduled);
             $this->entityManager->flush();
 
-            $this->addFlash('success', 'Séance retirée du planning.');
+            $this->addFlash('success', 'Séance retirée de l\'agenda.');
+
+            if ($this->staysOnCalendar($request)) {
+                return $this->streamCalendarRefresh($request, $id);
+            }
+        }
+
+        return $this->redirectToCalendarOf($owner, $date);
+    }
+
+    /**
+     * Le geste vient du calendrier (`return=calendar`) et Turbo est là : on reste
+     * sur la vue au lieu de la recharger par une redirection, qui remontait en
+     * haut de page à chaque geste. Le marqueur est explicite parce que retirer
+     * et déplacer servent aussi la page de la séance datée, qui doit garder son
+     * propre retour.
+     *
+     * `$landing` = le jour où le geste a porté, quand il peut sortir de la vue
+     * (déplacer, placer un plan). Il faut alors qu'il tombe dans les jours que
+     * montre la vue, lus sur le jeton `from` (`BackTarget::calendarSpan()`) :
+     * sinon rester ferait disparaître la séance sans la montrer. Jeton absent ou
+     * illisible = vue inconnue = on redirige, le comportement d'avant.
+     */
+    private function staysOnCalendar(Request $request, ?\DateTimeImmutable $landing = null): bool
+    {
+        if (TurboBundle::STREAM_FORMAT !== $request->getPreferredFormat()
+            || 'calendar' !== $request->getPayload()->getString('return')) {
+            return false;
+        }
+
+        if (null === $landing) {
+            return true;
+        }
+
+        $span = BackTarget::parse($request->getPayload()->getString('from'))?->calendarSpan();
+        if (null === $span) {
+            return false;
+        }
+
+        $day = $landing->format('Y-m-d');
+
+        return $day >= $span[0]->format('Y-m-d') && $day <= $span[1]->format('Y-m-d');
+    }
+
+    /**
+     * Relit la vue calendrier courante en arrière-plan et la morphe (cf.
+     * calendar/stream/refresh.stream.html.twig). `$removed` = pastille à retirer
+     * tout de suite, sans attendre le refresh.
+     */
+    private function streamCalendarRefresh(Request $request, ?int $removed = null): Response
+    {
+        $request->setRequestFormat(TurboBundle::STREAM_FORMAT);
+
+        return $this->render('calendar/stream/refresh.stream.html.twig', ['removed' => $removed]);
+    }
+
+    /**
+     * Le calendrier où retomber après un geste sur une séance datée : celui de
+     * son **propriétaire**. Pour soi, c'est son calendrier dans la vue mémorisée ;
+     * pour le coach (seul autre lecteur que `ScheduledWorkoutVoter` laisse
+     * écrire), c'est l'agenda de l'athlète sur la semaine de la séance (#77).
+     * Sans cette branche, déplacer ou retirer une séance de l'athlète envoyait
+     * le coach sur SON calendrier : un lien ne change pas de sujet en silence.
+     *
+     * Comparaison par `id` : `owner` peut être un proxy Doctrine.
+     */
+    private function redirectToCalendarOf(?User $owner, \DateTimeImmutable $date): Response
+    {
+        $viewer = $this->getUser();
+
+        if ($owner instanceof User && $viewer instanceof User && $owner->getId() !== $viewer->getId()) {
+            return $this->redirectToRoute('app_coach_athlete_calendar', [
+                'id' => $owner->getId(),
+                'date' => $date->format('Y-m-d'),
+            ]);
         }
 
         return $this->redirectToMonth($date);
@@ -564,6 +814,27 @@ final class ScheduledWorkoutController extends AbstractController
         return $this->redirectToRoute('app_calendar_month', [
             'year' => (int) $date->format('Y'),
             'month' => (int) $date->format('n'),
+        ]);
+    }
+
+    /**
+     * Comme `redirectToMonth`, mais pour montrer UN jour : la vue semaine ouvre sa
+     * semaine, la vue mois ouvre son mois et le fait défiler jusqu'à lui
+     * (`focus`, lu par le contrôleur Stimulus `caladd`). Pas d'ancre `#` : Turbo
+     * suit la redirection en fetch et la perdrait.
+     */
+    private function redirectToDay(\DateTimeImmutable $date): Response
+    {
+        $focus = $date->format('Y-m-d');
+
+        if ('week' === $this->preferredCalendarView()) {
+            return $this->redirectToRoute('app_calendar_week', ['date' => $focus, 'focus' => $focus]);
+        }
+
+        return $this->redirectToRoute('app_calendar_month', [
+            'year' => (int) $date->format('Y'),
+            'month' => (int) $date->format('n'),
+            'focus' => $focus,
         ]);
     }
 

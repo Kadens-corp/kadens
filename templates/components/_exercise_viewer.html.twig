@@ -1,0 +1,45 @@
+{# La visionneuse des images d'un exercice (#38), une par page, sur <body>
+   (`exercise-viewer`). Un œil (`components/_exercise_eye`) l'ouvre n'importe où :
+   compositeur, lecture d'une séance, réalisé. Elle joue les images comme la fiche
+   de l'exercice, en fondu enchaîné, avec pause et étapes.
+
+   Le gabarit (<template>) porte le lecteur vide, icônes comprises : le
+   contrôleur le clone, y pose les images et les pastilles, et le contrôleur
+   `exercise-frames` démarre de lui-même à l'insertion. #}
+<dialog class="kd-modal kd-modal--exviewer" aria-labelledby="exviewer-title"
+        data-exercise-viewer-target="dialog"
+        data-action="close->exercise-viewer#closed click->exercise-viewer#backdrop">
+    <div class="kd-modal__card">
+        <div class="kd-modal__head">
+            <div>
+                <p class="kd-eyebrow">Mouvement</p>
+                <h2 class="kd-modal__title" id="exviewer-title" data-exercise-viewer-target="name"></h2>
+            </div>
+            <button type="button" class="kd-modal__close" data-action="exercise-viewer#close" aria-label="Fermer">
+                {{ ux_icon('lucide:x') }}
+            </button>
+        </div>
+
+        <div class="kd-exviewer__body" data-exercise-viewer-target="body"></div>
+
+        <div class="kd-formactions">
+            <a href="#" class="kd-btn kd-btn--ghost kd-btn--sm" data-exercise-viewer-target="link" data-turbo-frame="_top">
+                {{ ux_icon('lucide:arrow-right') }} Fiche de l'exercice
+            </a>
+        </div>
+    </div>
+
+    <template data-exercise-viewer-target="template">
+        <figure class="kd-exframes kd-exframes--viewer" data-controller="exercise-frames">
+            <div class="kd-exframes__stage" data-slot="stage"></div>
+            <figcaption class="kd-exframes__controls" data-slot="controls">
+                <button type="button" class="kd-iconbtn" aria-pressed="false" aria-label="Lecture en boucle"
+                        data-exercise-frames-target="toggle" data-action="exercise-frames#toggle">
+                    <span data-when="playing" hidden>{{ ux_icon('lucide:pause') }}</span>
+                    <span data-when="paused">{{ ux_icon('lucide:play') }}</span>
+                </button>
+                <span class="kd-exframes__dots" data-slot="dots"></span>
+            </figcaption>
+        </figure>
+    </template>
+</dialog>

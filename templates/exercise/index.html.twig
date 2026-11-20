@@ -1,22 +1,25 @@
 {% extends 'base.html.twig' %}
 {% import 'components/_activity.html.twig' as activity %}
 
-{% block title %}Bibliothèque d'exercices{% endblock %}
+{% block title %}Exercices{% endblock %}
 
 {% block body %}
-    {% for message in app.flashes('success') %}
-        <p class="kd-flash" role="status">{{ ux_icon('lucide:circle-check') }} {{ message }}</p>
-    {% endfor %}
-
     <div class="kd-pagehead">
         <div>
-            <p class="kd-eyebrow">Bibliothèque</p>
+            <p class="kd-eyebrow">Catalogue</p>
             <h1 class="kd-title">Exercices</h1>
-            <p class="kd-lead">Tes mouvements, perso et globaux. La brique de base des séances.</p>
+            <p class="kd-lead">Les exercices du site et les tiens. La brique de base des séances.</p>
         </div>
-        <a href="{{ path('app_exercise_new') }}" class="kd-btn kd-btn--primary">
-            {{ ux_icon('lucide:plus') }} Nouvel exercice
-        </a>
+        <div style="display:flex; gap:var(--kd-space-4); flex-wrap:wrap;">
+            {% if canIllustrate|default(false) %}
+                <a href="{{ path('app_exercise_images') }}" class="kd-btn kd-btn--secondary">
+                    {{ ux_icon('lucide:image') }} Images
+                </a>
+            {% endif %}
+            <a href="{{ path('app_exercise_new') }}" class="kd-btn kd-btn--primary">
+                {{ ux_icon('lucide:plus') }} Nouvel exercice
+            </a>
+        </div>
     </div>
 
     <div data-controller="filter">
@@ -48,9 +51,9 @@
             ]|merge(usageSorts),
             facetGroups: [
                 { group: 'activity', allLabel: 'Toutes activités', facets: activityFacets },
-                { group: 'scope', allLabel: 'Toutes portées', facets: [
-                    { value: 'perso', label: 'Perso', count: persoCount },
-                    { value: 'global', label: 'Bibliothèque', count: globalCount },
+                { group: 'scope', allLabel: 'Tous', facets: [
+                    { value: 'global', label: 'Du site', count: globalCount },
+                    { value: 'perso', label: 'Les miens', count: persoCount },
                 ]|filter(f => f.count > 0) },
             ],
         }) }}
@@ -96,9 +99,9 @@
                                     {{ exercise.activity.label }}
                                     <span class="kd-scope">
                                         {% if exercise.owner is null %}
-                                            {{ ux_icon('lucide:library') }} Bibliothèque
+                                            {{ ux_icon('lucide:library') }} Du site
                                         {% else %}
-                                            {{ ux_icon('lucide:user') }} Perso
+                                            {{ ux_icon('lucide:user') }} À moi
                                         {% endif %}
                                     </span>
                                     {# Usage réel, discret : le compte de MES séances, pas de tout le monde. #}
@@ -136,10 +139,10 @@
                 {% endfor %}
             </div>
 
-            <div class="kd-card kd-empty" data-filter-target="empty" hidden>
-                {{ ux_icon('lucide:search') }}
-                <div>Aucun exercice ne correspond à ta recherche.</div>
-            </div>
+            {{ include('components/_filter_empty.html.twig', {
+                search: 'Aucun exercice ne correspond à ta recherche.',
+                filters: 'Aucun exercice ne correspond à ces filtres.',
+            }) }}
         {% endif %}
     </div>
 {% endblock %}

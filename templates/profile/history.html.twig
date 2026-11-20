@@ -35,8 +35,16 @@
     {% set subject = subject|default(null) %}
     {% set statsPath = subject ? path('app_coach_athlete_stats', {id: subject.id}) : path('app_profile_stats') %}
     {% set logPath = subject ? path('app_coach_athlete_log', {id: subject.id}) : path('app_profile_log') %}
+    {# Une séance ouverte depuis l'historique d'un athlète repart vers sa fiche,
+       pas vers le calendrier du coach, vide (#64, C-13). Pour soi, aucun jeton :
+       le retour d'origine de la séance datée (« Calendrier ») est le bon. #}
+    {% set back = subject ? back_to('athlete', subject.id) : {} %}
     {% set backPath = subject ? path('app_coach_athlete', {id: subject.id}) : path('app_profile') %}
     {% set years = history.years %}
+    {# Des séances posées mais aucune faite : la grille existerait (ses bornes
+       viennent du calendrier), mais elle ne serait qu'une suite de mois vides.
+       C'est l'état vide, avec la vraie règle (#73). #}
+    {% set nothingDone = history.totals.sessions == 0 %}
 
     <div class="kd-pagehead">
         <div>
@@ -45,7 +53,7 @@
                 {{- subject ? 'Son année, jour par jour' : 'Ton année, jour par jour' -}}
             </h1>
             {% if subject %}<p class="kd-pagehead__lead">{{ subject.displayName }}</p>{% endif %}
-            {% if years is not empty %}
+            {% if not nothingDone %}
                 {# Le libellé du premier mois d'historique est déjà calculé : les
                    années sont triées du plus récent au plus ancien, donc c'est le
                    dernier mois de la dernière année. Pas de second formatage de
@@ -56,6 +64,10 @@
                     sur {{ history.totals.activeDays }} jour{{ history.totals.activeDays > 1 ? 's' }}
                 </p>
             {% endif %}
+            {# Ce que la page montre et ce qu'elle ne montre pas (#73). #}
+            <p class="kd-pagehead__scope">
+                Toutes les séances faites, depuis la première, chacune sur son jour. Les séances seulement prévues n'y figurent pas : elles restent au calendrier. Le volume et les charges se lisent dans les Statistiques.
+            </p>
         </div>
         <div class="kd-actionbar__end">
             <a href="{{ logPath }}" class="kd-btn kd-btn--secondary">
@@ -81,24 +93,25 @@
         </div>
     </div>
 
-    {% if years is empty %}
+    {% if nothingDone %}
+        {# La règle exacte : c'est le statut « faite » qui fait entrer une séance
+           ici (`doneSessionsForOwner`), pas sa pose au calendrier. L'ancien
+           texte promettait l'inverse (#73, A-41). #}
         <div class="kd-empty">
             {{ ux_icon('lucide:calendar-off') }}
-            <div>Aucun historique pour l'instant.</div>
-            <p class="kd-empty__hint">Dès qu'une séance est posée au calendrier, elle apparaît ici.</p>
+            <div>Aucune séance faite pour l'instant.</div>
+            <p class="kd-empty__hint">Une séance apparaît ici dès qu'elle est marquée faite, sur le web ou dans <a href="{{ path('app_install') }}">l'app Kadens</a>. Tant qu'elle est seulement prévue, elle reste au calendrier.</p>
         </div>
     {% else %}
         {# Répartition par nature. Chaque séance compte pour UNE, sous son
-           activité dominante : la somme vaut le total affiché plus haut. À ne
-           pas confondre avec la répartition de /profile/stats, qui compte une
-           séance dans chacune de ses activités — deux questions, deux chiffres,
-           d'où deux libellés distincts. #}
+           activité dominante (SessionNature) : la somme vaut le total affiché
+           plus haut. /profile/stats et l'accueil suivent la même règle (#62). #}
         {% if history.totals.byActivity is not empty %}
             <div class="kd-grid kd-grid--4 kd-section__block">
                 {% for row in history.totals.byActivity %}
                     <div class="kd-metric">
                         <span class="kd-metric__icon">
-                            {{ ux_icon(row.activity ? activity.icon(row.activity)|trim : 'lucide:circle-dot') }}
+                            {{ ux_icon(activity.icon(row.activity)|trim) }}
                         </span>
                         <div>
                             <div class="kd-metric__value">{{ row.sessions }}</div>
@@ -107,7 +120,7 @@
                                programme » (l'historique importé n'en a pas et se
                                range très bien) : c'est une séance restée vide. #}
                             <div class="kd-metric__label">
-                                {{ row.activity ? row.activity.label : 'Sans contenu' }}
+                                {{ activity.label(row.activity) }}
                             </div>
                         </div>
                     </div>
@@ -128,7 +141,7 @@
                 {% endfor %}
                 <li class="kd-legend__item">
                     <span class="kd-legend__key kd-histdot--bare" aria-hidden="true"></span>
-                    Sans réalisé
+                    Sans détail saisi
                 </li>
                 <li class="kd-legend__item kd-legend__item--icon">
                     {{ ux_icon('lucide:footprints') }}{{ ux_icon('lucide:bike') }}{{ ux_icon('lucide:waves') }}
@@ -183,12 +196,12 @@
                                                         ? ' — ' ~ session.groups|map(g => g.label)|join(', ')
                                                         : (session.endurance
                                                             ? ' — ' ~ session.activity.label
-                                                            : ' — sans réalisé'))
+                                                            : ' — sans détail saisi'))
                                                     ~ (session.rating.feeling ? ' — forme : ' ~ session.rating.feelingLabel|lower)
                                                     ~ (session.rating.sessionRpe ? ' — difficulté ' ~ session.rating.sessionRpe ~ '/10') %}
 
                                                 <a class="kd-histsess{{ session.endurance ? ' kd-histsess--endurance' }}"
-                                                   href="{{ path('app_scheduled_workout_show', {id: session.id}) }}"
+                                                   href="{{ path('app_scheduled_workout_show', {id: session.id}|merge(back)) }}"
                                                    title="{{ label }}" aria-label="{{ label }}">
                                                     {% if session.endurance %}
                                                         {{ ux_icon(activity.icon(session.activity)|trim) }}

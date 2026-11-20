@@ -1,0 +1,84 @@
+{# Les textes d'aide (#72), écrits une seule fois.
+
+   Lus à deux endroits : le « ? » d'un écran (`components/_help`) et la page
+   `/aide`, qui les regroupe. Chaque macro rend 3 à 5 phrases, le principe de
+   l'écran, pas son mode d'emploi complet.
+
+   Chaque phrase décrit ce que fait le code, pas l'intention. À relire si l'un
+   de ces points bouge :
+     - compositeur : une case de plan est une copie (`Workout.planLocal`, fork
+       à la pose), une pose directe au calendrier ne l'est pas ;
+     - plan : `PlanScheduler::resync()` relancé à chaque pose et chaque retrait
+       de case, add-only, les séances faites restent ; `LineageSeed` (dernier
+       réalisé, muscu seulement) ;
+     - calendrier : menu du statut, modale rapide (`_cal_event`), pas de
+       glisser-déposer entre deux jours (#108), réalisé
+       logué en muscu, importé d'Intervals.icu en cardio ;
+     - app : `templates/app/install.html.twig` (Android seulement, réalisé
+       muscu, hors réseau) ;
+     - coaching : mêmes sources que `_coaching_rights` (#66) et
+       `Coaching.coachNotes` (#65), effacées à la fin de la relation.
+
+   Pas de HTML chargé à la demande : les pages de consultation doivent rester
+   auto-suffisantes (cache hors ligne), le texte est donc dans la page. #}
+
+{% macro composer() %}
+    <p>Une séance se range en <strong>blocs</strong> : échauffement, corps de séance, retour au calme. Un bloc peut se répéter plusieurs fois (« Répéter … fois » dans son en-tête), pour un circuit par exemple.</p>
+    <p>Pour ajouter un exercice, clique sur sa carte dans la liste des exercices ou glisse-la dans un bloc. Le haut de la liste dit où il va (« Ajout dans : Échauffement ») ; clique dans un autre bloc pour changer. Dans une séance vide, le premier exercice crée le premier bloc.</p>
+    <p>Clique sur un exercice pour régler ses séries, ses répétitions, sa charge ou sa distance. « Enchaîner », entre deux exercices, les lie en superset : on passe de l'un à l'autre sans repos, et seul le repos du dernier compte. Le menu « … » détache, déplace ou retire l'exercice.</p>
+    <p>Tout s'enregistre seul, sans bouton : « Enregistré » s'affiche en bas de l'écran à chaque modification. Les cases d'un plan sont des copies de la séance : la modifier ici ne les change pas. Une séance posée directement dans l'agenda, elle, suit chaque modification. Le haut de l'éditeur dit où la séance est déjà posée.</p>
+{% endmacro %}
+
+{% macro plan() %}
+    <p>Un plan est une grille de semaines, <strong>sans dates</strong>. Tu le places ensuite dans l'agenda, à partir du jour de ton choix.</p>
+    <p>Choisis une séance dans la liste, puis clique sur les jours où tu veux la faire.</p>
+    <p>Chaque case est une copie de la séance : l'ajuster ne change ni la séance d'origine ni les autres semaines. C'est ce qui permet de faire progresser une charge d'une semaine à l'autre. Comme dans l'éditeur de séance, chaque modification s'enregistre seule. Une case identique à la fois d'avant de la même séance porte un repère, par exemple « = S11 » : il disparaît dès que tu l'ajustes. Tu peux aussi renommer une case en haut de sa fenêtre, pour que son titre dise ce qu'elle contient (« 8 x 400 m ») : c'est lui qu'on lit dans l'agenda.</p>
+    <p>Pour faire monter une charge ou des répétitions sur plusieurs semaines d'un coup, « Faire progresser un exercice » règle toutes les cases d'une même séance, avec un aperçu avant d'appliquer. Les séances déjà faites gardent ce qui était prévu.</p>
+    <p>En muscu, une séance déjà faite repart de ce que tu as réellement fait la dernière fois. Si le plan est déjà dans l'agenda, une case ajoutée y apparaît aussi, et les séances faites ne bougent jamais.</p>
+{% endmacro %}
+
+{% macro calendar() %}
+    <p>Le « + » d'un jour y pose une de tes séances, ou en crée une nouvelle pour ce jour. « Placer un plan dans l'agenda » pose d'un coup toutes les séances d'un plan, à partir d'une date.</p>
+    <p>Le bouton de statut, sous une séance, ouvre un petit menu : choisis prévue, faite ou manquée. Une séance faite porte une coche devant son titre. Ajoutée sur un jour passé, une séance te demande tout de suite si tu l'as faite. Et marquer faite une séance à venir te demande confirmation : elle revient alors à aujourd'hui, le jour où tu l'as faite.</p>
+    <p>Clique sur une séance pour choisir son statut, écrire un commentaire ou noter ta forme : rien n'est gardé tant que tu n'as pas cliqué « Enregistrer », et la fenêtre te le rappelle si tu la fermes avant. Tu peux aussi la retirer, ou la changer de jour : choisis la nouvelle date sous « Déplacer », la séance ne se glisse pas d'un jour à l'autre. L'œil, comme « Voir la séance », ouvre ta séance du jour : son bilan (statut, commentaire, ressenti, réalisé), son programme et un lien vers la séance type.</p>
+    <p>En muscu, tu saisis tes séries pendant la séance, dans <a href="{{ path('app_install') }}">l'app Kadens</a> sur ton téléphone. Une sortie course, vélo ou natation ne se saisit pas : elle arrive de ta montre, une fois Intervals.icu relié dans tes paramètres.</p>
+{% endmacro %}
+
+{# L'app Android (#74) : à quoi elle sert, en trois phrases, et le lien vers
+   `/app`, qui détaille l'installation. #}
+{% macro mobile_app() %}
+    <p>L'app Kadens sert à noter tes charges pendant la séance, série par série, même sans réseau. Elle ouvre la séance prévue au calendrier, et ce que tu notes revient ensuite sur le site.</p>
+    <p>Elle existe <strong>seulement sur Android</strong> pour l'instant, et pas sur le Play Store. Sur iPhone, le site reste utilisable, mais le détail des charges ne s'y saisit pas.</p>
+    <p><a href="{{ path('app_install') }}">Comment l'installer et la connecter à ton compte</a></p>
+{% endmacro %}
+
+{# `athlete` : User suivi, pour le nommer (repli : « ton athlète »). #}
+{% macro athlete(athlete = null) %}
+    {% set name = athlete ? athlete.displayName : 'ton athlète' %}
+    <p>Cette fiche est ton poste de travail pour {{ name }}. Ce que tu crées ici <strong>lui appartient</strong>, et il le voit.</p>
+    <p>« Nouvelle séance » et « Nouveau plan » ouvrent les éditeurs habituels. « Une de mes séances » lui en donne une copie : ton original ne bouge pas.</p>
+    <p>Pose ensuite sur son calendrier une séance précise ou un plan entier.</p>
+    <p>Il saisit lui-même sa forme, et ses séries dans <a href="{{ path('app_install') }}">l'app Kadens</a>. Tu les lis dans « Ses dernières séances », avec ses séances manquées. Tes notes sur lui ne sont visibles que de toi.</p>
+{% endmacro %}
+
+{# Le mini-guide coach : les quatre moments d'une relation. #}
+{% macro coach_guide() %}
+    <ol class="kd-help__steps">
+        <li>
+            <strong>Inviter.</strong>
+            Dans « Athlètes », saisis l'email du compte Kadens de ton athlète. Son pseudo ne suffit pas. Il voit la liste de ce que tu pourras faire, et doit accepter avant que tu aies accès à quoi que ce soit. En attendant, l'invitation reste dans « Mes athlètes », où tu peux l'annuler. Ton accueil te prévient de sa réponse.
+        </li>
+        <li>
+            <strong>Programmer.</strong>
+            Depuis sa fiche, crée une séance ou un plan, ou donne-lui une copie des tiens. Tu les composes dans les mêmes éditeurs que pour toi, puis tu les poses sur son calendrier.
+        </li>
+        <li>
+            <strong>Ce que voit l'athlète.</strong>
+            Tout ce que tu crées : séances, plans, descriptions, consignes de case. Seules tes notes sur lui restent entre toi et toi. De son côté, ses notes privées te restent fermées, et c'est lui qui saisit sa forme, et ses séries dans <a href="{{ path('app_install') }}">l'app Kadens</a>.
+        </li>
+        <li>
+            <strong>Fin de relation.</strong>
+            L'un ou l'autre peut y mettre fin (« Terminer »). Il garde tout ce que tu as créé pour lui. Tu perds l'accès, y compris aux plans que tu lui as donnés, et tes notes sur lui sont effacées. Il reste dans tes « Anciens athlètes », sur la page Coaching. Une nouvelle invitation peut renouer la relation.
+        </li>
+    </ol>
+{% endmacro %}

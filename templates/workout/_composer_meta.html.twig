@@ -1,0 +1,10 @@
+{# La ligne de compte sous le titre du compositeur : blocs, exercices, durée
+   estimée. Contenu de #workout-meta, re-rendu par chaque réponse de mutation
+   (stream `composer_meta`, #118) : la page n'est jamais rechargée pendant
+   l'édition, un chiffre posé au rendu initial resterait celui de l'ouverture.
+   Contexte : workout. #}
+{%- set blockCount = workout.blocks|length -%}
+{%- set exCount = 0 -%}
+{%- for b in workout.blocks %}{% set exCount = exCount + b.prescribedExercises|length %}{% endfor -%}
+{{ blockCount }} bloc{{ blockCount > 1 ? 's' }} · {{ exCount }} exercice{{ exCount > 1 ? 's' }}
+{%- if workout.estimatedDurationMinutes %} · ≈ {{ workout.estimatedDurationMinutes }} min estimées{% endif -%}

@@ -18,11 +18,19 @@ use App\Enum\PrescriptionType;
  *   - repos par défaut de 2 min entre les séries de renforcement si non précisé.
  *
  * Les durées sont sommées par bloc puis multipliées par le nombre de tours.
+ *
+ * Superset : ses membres s'enchaînent sans repos, seul le DERNIER du groupe repose
+ * (son repos est celui d'entre deux tours du groupe). Le repos des autres compte
+ * donc pour zéro, même renseigné : c'est ce que dit le compositeur (#85).
  */
 final class WorkoutEstimator
 {
     private const SECONDS_PER_REP = 6;        // 10 reps ≈ 1 min
     private const DEFAULT_REST_SECONDS = 180; // 3 min de repos si non renseigné
+
+    public function __construct(private readonly SupersetGrouper $supersets)
+    {
+    }
 
     public function estimateSeconds(Workout $workout): int
     {
@@ -43,8 +51,11 @@ final class WorkoutEstimator
     public function estimateBlockSeconds(Block $block): int
     {
         $seconds = 0;
-        foreach ($block->getPrescribedExercises() as $prescribed) {
-            $seconds += $this->prescribedSeconds($prescribed);
+        foreach ($this->supersets->segments($block) as $segment) {
+            $last = count($segment['exercises']) - 1;
+            foreach ($segment['exercises'] as $i => $prescribed) {
+                $seconds += $this->effortSeconds($prescribed, $i < $last);
+            }
         }
 
         return $seconds * max(1, $block->getRounds());
@@ -61,22 +72,33 @@ final class WorkoutEstimator
         return $seconds > 0 ? (int) ceil($seconds / 60) : null;
     }
 
-    private function prescribedSeconds(PrescribedExercise $pe): int
+    /**
+     * Durée d'UN effort prescrit, récupérations comprises, hors tours de bloc.
+     * C'est la seule écriture de « combien de temps dure cet effort » : la durée
+     * d'une séance en est la somme, et `WorkoutMetrics::volume()` la ventile par
+     * activité (`estimatedSeconds`) pour que la semaine et le plan comptent le
+     * même temps que la séance (#122). Un fractionné 6 × 400 m récup 90 s dure
+     * donc ses 6 × 400 m courus ET ses six récupérations, partout.
+     *
+     * @param bool $chained membre d'un superset suivi d'un autre membre : enchaîné
+     *                      sans repos
+     */
+    public function effortSeconds(PrescribedExercise $pe, bool $chained = false): int
     {
         return match ($pe->getPrescriptionType()) {
-            PrescriptionType::SETS_REPS => $this->setsReps($pe),
-            PrescriptionType::SETS_TIME => $this->setsTime($pe),
+            PrescriptionType::SETS_REPS => $this->setsReps($pe, $chained),
+            PrescriptionType::SETS_TIME => $this->setsTime($pe, $chained),
             PrescriptionType::AMRAP => $pe->getDurationSeconds() ?? 0,
             PrescriptionType::FOR_TIME => $this->forTime($pe),
-            PrescriptionType::DISTANCE_PACE => $this->distancePace($pe),
+            PrescriptionType::DISTANCE_PACE => $this->distancePace($pe, $chained),
             PrescriptionType::DURATION => $pe->getDurationSeconds() ?? 0,
             null => 0,
         };
     }
 
-    private function setsReps(PrescribedExercise $pe): int
+    private function setsReps(PrescribedExercise $pe, bool $chained): int
     {
-        $rest = $pe->getRestSeconds() ?? self::DEFAULT_REST_SECONDS;
+        $rest = $chained ? 0 : ($pe->getRestSeconds() ?? self::DEFAULT_REST_SECONDS);
 
         // Mode détaillé : chaque série a ses propres reps (l'échauffement compte
         // aussi dans la durée vécue, contrairement au volume de travail).
@@ -95,9 +117,9 @@ final class WorkoutEstimator
         return $sets * ($reps * self::SECONDS_PER_REP + $rest);
     }
 
-    private function setsTime(PrescribedExercise $pe): int
+    private function setsTime(PrescribedExercise $pe, bool $chained): int
     {
-        $rest = $pe->getRestSeconds() ?? self::DEFAULT_REST_SECONDS;
+        $rest = $chained ? 0 : ($pe->getRestSeconds() ?? self::DEFAULT_REST_SECONDS);
 
         if ($pe->hasDetailedSets()) {
             $total = 0;
@@ -124,7 +146,7 @@ final class WorkoutEstimator
         return ($pe->getTargetReps() ?? 0) * self::SECONDS_PER_REP;
     }
 
-    private function distancePace(PrescribedExercise $pe): int
+    private function distancePace(PrescribedExercise $pe, bool $chained): int
     {
         $meters = $pe->getDistanceMeters() ?? 0;
         $pace = $pe->getPaceSecondsPerKm() ?? 0;
@@ -134,6 +156,6 @@ final class WorkoutEstimator
         // multiplicateur que le volume (WorkoutMetrics::volume), une seule écriture.
         $reps = $pe->getEnduranceRepeats();
 
-        return $reps * ($work + ($pe->getRestSeconds() ?? 0));
+        return $reps * ($work + ($chained ? 0 : ($pe->getRestSeconds() ?? 0)));
     }
 }

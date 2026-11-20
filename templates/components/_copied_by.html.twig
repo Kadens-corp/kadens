@@ -1,0 +1,19 @@
+{#
+    « Copiée par Tom Roux le 20/11 » (#126) : la seule trace, chez l'auteur, de
+    ce que ses amis ont copié de sa séance depuis leur flux. Une ligne sous le
+    hero, rien d'autre : pas de notification, pas de compteur.
+
+    Attend : copies (list<Workout>, les copies faites par d'autres). Ne rend
+    rien quand la liste est vide.
+#}
+{% if copies is not empty %}
+    <p class="kd-copiedby">
+        {{ ux_icon('lucide:copy') }}
+        <span>
+            Copiée par
+            {% for copy in copies %}
+                {{- copy.owner.displayName }} le {{ copy.createdAt|date('d/m') }}{{ not loop.last ? ', ' -}}
+            {% endfor %}
+        </span>
+    </p>
+{% endif %}

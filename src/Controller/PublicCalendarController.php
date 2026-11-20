@@ -14,7 +14,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * Flux iCalendar (ICS) pour l'abonnement à un calendrier externe (Google Agenda,
  * Apple Calendar…). Récupéré par le serveur du client SANS session : l'accès n'est
  * donc PAS régi par l'authentification ni les voters, mais par un jeton secret
- * porté par l'URL — même philosophie que le partage public par slug. Tout reste
+ * porté par l'URL — même philosophie que le partage par lien (#61). Tout reste
  * sous le préfixe `/feed`, volontairement hors `access_control`.
  *
  * Deux portées, choisies par l'URL : tout le calendrier, ou un plan instancié

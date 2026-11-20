@@ -1,0 +1,60 @@
+{# ============================================================================
+   Bandeau de synthèse de la vue semaine : charge + observance en un coup d'œil.
+   Chiffres fournis par `CalendarWeek::summary()` (counts, sessionCount,
+   totalMinutes), la même écriture pour la page et pour le flux.
+
+   Deux fragments, deux cibles, et pas une seule autour du `<details>` : le
+   bandeau se replie sous 560px (#107), et remplacer le `<details>` entier
+   rouvrirait ou refermerait le pli sous les doigts du lecteur. Le flux d'un
+   changement de statut (calendar/stream/cal_event.stream.html.twig, #120)
+   remplace donc la ligne du summary et la barre, jamais leur conteneur. Les ids
+   sont reportés par le fragment re-rendu : la cible survit aux gestes suivants.
+
+   Usage :
+     {% import 'calendar/_week_summary.html.twig' as weekSummary %}
+     {{ weekSummary.line(summary) }}
+     {{ weekSummary.bar(summary) }}
+   ============================================================================ #}
+
+{%- macro volume(summary) -%}
+    {%- set minutes = summary.totalMinutes -%}
+    {{- minutes >= 60 ? (minutes // 60) ~ 'h' ~ '%02d'|format(minutes % 60) : minutes ~ '′' -}}
+{%- endmacro -%}
+
+{#- Assiduité = faites / (faites + manquées) ; « — » tant que rien n'est échu. -#}
+{%- macro attendance(summary) -%}
+    {%- set rated = summary.counts.done + summary.counts.missed -%}
+    {{- rated ? (summary.counts.done / rated * 100)|round ~ '%' : '—' -}}
+{%- endmacro -%}
+
+{#- Ce que garde le pli fermé : les trois chiffres, sans les puces ni la légende. -#}
+{%- macro line(summary) -%}
+    {%- set n = summary.sessionCount -%}
+    <span id="week-summary-line">{{ n }} séance{{ n > 1 ? 's' }} · {{ _self.volume(summary) }} · assiduité {{ _self.attendance(summary) }}</span>
+{%- endmacro -%}
+
+{%- macro bar(summary) -%}
+    {%- set n = summary.sessionCount -%}
+    {%- set done = summary.counts.done -%}
+    {%- set planned = summary.counts.planned -%}
+    {%- set missed = summary.counts.missed -%}
+    <div id="week-summary" class="kd-weekbar">
+        <div class="kd-weekstat">
+            <span class="kd-weekstat__val">{{ n }}</span>
+            <span class="kd-weekstat__lbl">séance{{ n > 1 ? 's' }}</span>
+        </div>
+        <div class="kd-weekstat">
+            <span class="kd-weekstat__val">{{ _self.volume(summary) }}</span>
+            <span class="kd-weekstat__lbl">volume estimé</span>
+        </div>
+        <div class="kd-weekstat kd-weekstat--sep">
+            <span class="kd-weekstat__val">{{ _self.attendance(summary) }}</span>
+            <span class="kd-weekstat__lbl">assiduité</span>
+        </div>
+        <div class="kd-weekchips">
+            <span class="kd-weekchip kd-weekchip--done">{{ ux_icon('lucide:check') }} {{ done }} faite{{ done > 1 ? 's' }}</span>
+            <span class="kd-weekchip kd-weekchip--planned">{{ ux_icon('lucide:circle-dot') }} {{ planned }} prévue{{ planned > 1 ? 's' }}</span>
+            <span class="kd-weekchip kd-weekchip--missed">{{ ux_icon('lucide:x') }} {{ missed }} manquée{{ missed > 1 ? 's' }}</span>
+        </div>
+    </div>
+{%- endmacro -%}

@@ -28,6 +28,22 @@ class CoachingRepository extends ServiceEntityRepository
     }
 
     /**
+     * La relation ACCEPTÉE où `$coach` suit `$athlete`, sinon null. Porte les
+     * notes privées du coach (#65) : n'est rendue qu'au coach lui-même, jamais
+     * dans l'autre sens, et rien pour soi-même.
+     */
+    public function findAcceptedRelation(User $coach, ?User $athlete): ?Coaching
+    {
+        if (null === $athlete || $athlete->getId() === $coach->getId()) {
+            return null;
+        }
+
+        $coaching = $this->findRelation($coach, $athlete);
+
+        return null !== $coaching && $coaching->isActive() ? $coaching : null;
+    }
+
+    /**
      * Relation dans un sens ou dans l'autre : deux utilisateurs ne peuvent pas être
      * à la fois coach l'un de l'autre. Sert au contrôle avant création d'une demande.
      */
@@ -72,6 +88,26 @@ class CoachingRepository extends ServiceEntityRepository
     }
 
     /**
+     * Anciens athlètes de `$coach` (#81) : relations terminées, les plus
+     * récemment closes d'abord. Une relation refusée n'y entre pas, elle n'a
+     * jamais existé.
+     *
+     * @return list<Coaching>
+     */
+    public function findEndedAthletes(User $coach): array
+    {
+        return $this->createQueryBuilder('c')
+            ->andWhere('c.coach = :coach')
+            ->andWhere('c.status = :status')
+            ->setParameter('coach', $coach)
+            ->setParameter('status', CoachingStatus::ENDED)
+            ->orderBy('c.endedAt', 'DESC')
+            ->addOrderBy('c.id', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Coachs actifs de l'athlète.
      *
      * @return list<Coaching>
@@ -113,6 +149,27 @@ class CoachingRepository extends ServiceEntityRepository
             ->setParameter('user', $user)
             ->setParameter('status', CoachingStatus::PENDING)
             ->orderBy('c.createdAt', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Réponses que `$user` n'a pas encore vues à ses propres demandes (#79) :
+     * acceptées ou refusées, bandeau d'accueil tant qu'il ne l'a pas fermé. Une
+     * relation acceptée puis terminée avant qu'il passe n'a plus rien à annoncer.
+     *
+     * @return list<Coaching>
+     */
+    public function findUnseenResponsesFor(User $user): array
+    {
+        return $this->createQueryBuilder('c')
+            ->andWhere('c.requestedBy = :user')
+            ->andWhere('c.status IN (:statuses)')
+            ->andWhere('c.respondedAt IS NOT NULL')
+            ->andWhere('c.responseSeenAt IS NULL')
+            ->setParameter('user', $user)
+            ->setParameter('statuses', [CoachingStatus::ACCEPTED, CoachingStatus::DECLINED])
+            ->orderBy('c.respondedAt', 'DESC')
             ->getQuery()
             ->getResult();
     }

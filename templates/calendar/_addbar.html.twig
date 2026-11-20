@@ -1,17 +1,20 @@
 {# Barre d'ajout + modales de sélection (vues mois et semaine). « Poser une
    séance » n'est plus un dropdown : elle s'ouvre via le « + » d'un jour (grille)
-   et présente les séances en cartes cherchables/triables/filtrables. « Instancier
-   un plan » garde un bouton en tête mais ouvre lui aussi une vraie modale à cartes.
+   et présente les séances en cartes cherchables/triables/filtrables. « Placer un
+   plan dans l'agenda » garde un bouton en tête mais ouvre lui aussi une vraie
+   modale à cartes, avec l'aperçu des dates (contrôleur `plan-preview`, #68).
    Recherche/tri/filtre 100 % client (contrôleur `caladd`), le wrapper porte
    data-controller="caladd" (posé par index/week, il englobe la grille et ses « + »).
 
    Attend : workoutCards, workoutActivities, planCards, instantiateForm,
-   instantiatedPlans, statuses, year, month. #}
+   instantiatedPlans, planPlacement, statuses, year, month, backFrom (jeton
+   `back_token` de la vue affichée, que reconduit « Nouvelle séance pour ce
+   jour » jusqu'au compositeur). #}
 {% import 'components/_activity.html.twig' as activity %}
 
 <div class="kd-calbar">
     <button type="button" class="kd-btn kd-btn--secondary kd-btn--sm" data-action="caladd#openPlan">
-        {{ ux_icon('lucide:layers') }} Instancier un plan
+        {{ ux_icon('lucide:layers') }} Placer un plan dans l'agenda
     </button>
 
     {% if instantiatedPlans|length %}
@@ -24,7 +27,7 @@
                 <input type="hidden" name="month" value="{{ month }}">
                 <div class="kd-field">
                     <select name="planId" class="kd-input kd-select" required>
-                        <option value="" disabled selected>Choisir un plan instancié…</option>
+                        <option value="" disabled selected>Choisir un plan…</option>
                         {% for plan in instantiatedPlans %}
                             <option value="{{ plan.id }}">{{ plan.title }}</option>
                         {% endfor %}
@@ -73,9 +76,32 @@
             {% endfor %}
         </div>
 
-        <form method="post" action="{{ path('app_scheduled_workout_place') }}" class="kd-picker">
+        {# `return=calendar` : la vue reste en place et se morphe au lieu d'être
+           rechargée (ScheduledWorkoutController::staysOnCalendar). La modale se
+           referme d'elle-même à la réussite (caladd#placed). #}
+        <form method="post" action="{{ path('app_scheduled_workout_place') }}" class="kd-picker"
+              data-action="turbo:submit-end->caladd#placed">
             <input type="hidden" name="_token" value="{{ csrf_token('schedule_place') }}">
+            <input type="hidden" name="return" value="calendar">
             <input type="hidden" name="date" data-caladd-target="dateInput">
+
+            {# Un jour passé (#109) : on n'y planifie plus, on dit ce qui a eu
+               lieu. Le statut se choisit avant la carte, Faite par défaut. Le
+               `disabled` compte autant que le `hidden` : un champ seulement
+               caché partirait avec le formulaire. Sans JS il reste désactivé, la
+               séance est posée prévue et le message de retour demande le statut. #}
+            <fieldset class="kd-picker__past" data-caladd-target="pastStatus" hidden disabled>
+                <legend class="kd-label">Ce jour est passé. Tu l'as faite ?</legend>
+                <div class="kd-segmented">
+                    {% for status, label in {done: 'Faite', missed: 'Manquée', planned: 'Encore à faire'} %}
+                        <label class="kd-segbtn kd-segbtn--{{ status }}">
+                            <input type="radio" name="status" value="{{ status }}"{{ status == 'done' ? ' checked' }}>
+                            {{ ux_icon({done: 'lucide:check', missed: 'lucide:x', planned: 'lucide:circle-dot'}[status], {'aria-hidden': 'true'}) }}
+                            {{ label }}
+                        </label>
+                    {% endfor %}
+                </div>
+            </fieldset>
 
             <div class="kd-picker__list" data-caladd-target="workoutList">
                 {% for card in workoutCards %}
@@ -94,7 +120,7 @@
                                 {% if w.estimatedDurationMinutes %}
                                     <span>{{ ux_icon('lucide:clock') }} {{ w.estimatedDurationMinutes }} min</span>
                                 {% endif %}
-                                <span>{{ card.exerciseCount }} exos</span>
+                                <span>{{ card.exerciseCount }} exo{{ card.exerciseCount > 1 ? 's' }}</span>
                             </span>
                             {% if card.activities %}
                                 <span class="kd-cellbadges">
@@ -104,23 +130,38 @@
                         </span>
                     </button>
                 {% else %}
-                    <p class="kd-libpanel__empty">Aucune séance en bibliothèque. Crée-en une d'abord.</p>
+                    <p class="kd-libpanel__empty">Tu n'as pas encore de séance.</p>
                 {% endfor %}
                 <p class="kd-libpanel__empty" data-caladd-target="workoutEmpty" hidden>Aucune séance ne correspond.</p>
             </div>
+        </form>
+
+        {# Créer sur place (#92) : même POST que « Nouvelle séance » de la
+           bibliothèque, avec la date du jour ouvert. Le brouillon est posé à ce
+           jour et le compositeur s'ouvre, son retour ramené à cette vue. Formulaire
+           à part : les cartes ci-dessus postent ailleurs. #}
+        <form method="post" action="{{ path('app_workout_new') }}" class="kd-picker__foot kd-picker__new">
+            <input type="hidden" name="_token" value="{{ csrf_token('workout_new') }}">
+            <input type="hidden" name="date" data-caladd-target="dateInput">
+            <input type="hidden" name="from" value="{{ backFrom }}">
+            <p class="kd-picker__newlead">Rien qui convienne ? Compose-la directement.</p>
+            <button type="submit" class="kd-btn kd-btn--secondary">
+                {{ ux_icon('lucide:plus') }} Nouvelle séance pour ce jour
+            </button>
         </form>
     </div>
 </dialog>
 
 {# ---------------------------------------------------------------------------
-   Modale « instancier un plan » — cartes de plans (sélection) + date + confirmer.
-   Le <select> du PlanInstantiationType est caché et piloté par les cartes.
+   Modale « placer un plan dans l'agenda » : cartes de plans (sélection) + date
+   + aperçu + confirmer. Le <select> du PlanInstantiationType est caché et piloté
+   par les cartes ; `plan-preview` relit select et date à chaque changement.
    --------------------------------------------------------------------------- #}
 <dialog class="kd-modal kd-modal--picker" data-caladd-target="planDialog" data-action="click->caladd#backdrop">
     <div class="kd-modal__card kd-modal__card--picker">
         <div class="kd-modal__head">
             <div>
-                <h2 class="kd-modal__title">Instancier un plan</h2>
+                <h2 class="kd-modal__title">Placer un plan dans l'agenda</h2>
                 <p class="kd-modal__sub">Choisis un plan, puis sa date de départ.</p>
             </div>
             <button type="button" class="kd-modal__close" data-action="caladd#close" aria-label="Fermer">
@@ -139,9 +180,19 @@
             </select>
         </div>
 
-        {{ form_start(instantiateForm, {attr: {class: 'kd-picker'}}) }}
+        {{ form_start(instantiateForm, {attr: {
+            class: 'kd-picker',
+            'data-controller': 'plan-preview',
+            'data-plan-preview-plans-value': planPlacement|json_encode,
+            'data-action': 'change->plan-preview#update input->plan-preview#update turbo:submit-end->caladd#planPlaced',
+        }}) }}
+            {# Hors du nom du formulaire Symfony (pas de champ en trop) : la vue
+               reste si la première séance y tombe, sinon on l'ouvre sur elle
+               (ScheduledWorkoutController::staysOnCalendar). #}
+            <input type="hidden" name="return" value="calendar">
+            {% if backFrom|default(null) %}<input type="hidden" name="from" value="{{ backFrom }}">{% endif %}
             <div class="kd-picker__hidden" data-caladd-target="planSelectWrap" hidden>
-                {{ form_row(instantiateForm.planTemplate) }}
+                {{ form_row(instantiateForm.planTemplate, {attr: {'data-plan-preview-target': 'plan'}}) }}
             </div>
 
             <div class="kd-picker__list" data-caladd-target="planList">
@@ -170,11 +221,12 @@
             </div>
 
             <div class="kd-picker__foot">
-                {{ form_row(instantiateForm.startDate, {attr: {'data-caladd-target': 'planDate'}}) }}
+                {{ form_row(instantiateForm.startDate, {attr: {'data-caladd-target': 'planDate', 'data-plan-preview-target': 'date'}}) }}
                 <button type="submit" class="kd-btn kd-btn--primary" data-caladd-target="planSubmit" disabled>
-                    {{ ux_icon('lucide:calendar-plus') }} Instancier
+                    {{ ux_icon('lucide:calendar-plus') }} Placer dans l'agenda
                 </button>
             </div>
+            {{ include('components/_plan_placement_preview.html.twig', {whose: 'ton'}, with_context = false) }}
         {{ form_end(instantiateForm) }}
     </div>
 </dialog>

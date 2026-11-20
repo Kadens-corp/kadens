@@ -1,7 +1,10 @@
 {# Réponse Turbo Stream d'un rattachement/détachement d'objectif : on remplace le
    CONTENU du conteneur (action="update"), pas l'élément lui-même — l'id
    #plan-goals survit ainsi à chaque mutation (même piège que #plan-grid).
-   Contexte fourni par goalsContext(). #}
+   Contexte fourni par goalsContext(), plus `goalsNotice`. Les flashes de la page
+   partent d'abord : celui de l'arrivée sur l'éditeur (« Plan créé pour… »)
+   restait affiché et se lisait comme la réponse au rattachement. #}
+<turbo-stream action="remove" targets=".kd-flash"></turbo-stream>
 <turbo-stream action="update" target="plan-goals">
     <template>
         {{ include('plan_template/_goals.html.twig') }}

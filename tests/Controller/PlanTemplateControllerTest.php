@@ -152,6 +152,67 @@ final class PlanTemplateControllerTest extends WebTestCase
         self::assertCount(0, $this->mustFind(PlanTemplate::class, $templateId)->getGoals());
     }
 
+    /**
+     * B-05 coach : après « Associer » dans l'éditeur, le flash d'arrivée
+     * (« Plan créé pour… ») restait en haut de page et passait pour la réponse.
+     * Le stream le retire et confirme dans le bandeau même.
+     */
+    public function testAttachGoalStreamClearsStaleFlashAndConfirmsInPlace(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $template = $this->createPlanTemplate($user, 'Prépa trail', 4);
+
+        $goal = (new Goal())
+            ->setOwner($user)
+            ->setTitle('Trail 42k')
+            ->setTargetDate(new \DateTimeImmutable('+10 weeks'));
+        $this->em->persist($goal);
+        $this->em->flush();
+
+        $templateId = $template->getId();
+        $url = '/plan-template/'.$templateId.'/goals';
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/plan-template/'.$templateId.'/edit');
+        $token = $crawler->filter('form[action="'.$url.'"] input[name="_token"]')->first()->attr('value');
+
+        $this->client->request('POST', $url, ['_token' => $token, 'action' => 'attach', 'goalId' => $goal->getId()], [], [
+            'HTTP_ACCEPT' => 'text/vnd.turbo-stream.html, text/html, application/xhtml+xml',
+        ]);
+
+        self::assertResponseIsSuccessful();
+        $body = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('<turbo-stream action="remove" targets=".kd-flash">', $body);
+        self::assertStringContainsString('Plan associé à « Trail 42k ».', $body);
+        self::assertStringContainsString('role="status"', $body);
+    }
+
+    /** Sans JS, la même confirmation arrive en flash sur l'éditeur. */
+    public function testAttachGoalWithoutJsConfirmsWithAFlash(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $template = $this->createPlanTemplate($user, 'Prépa trail', 4);
+
+        $goal = (new Goal())
+            ->setOwner($user)
+            ->setTitle('Trail 42k')
+            ->setTargetDate(new \DateTimeImmutable('+10 weeks'));
+        $this->em->persist($goal);
+        $this->em->flush();
+
+        $templateId = $template->getId();
+        $url = '/plan-template/'.$templateId.'/goals';
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/plan-template/'.$templateId.'/edit');
+        $token = $crawler->filter('form[action="'.$url.'"] input[name="_token"]')->first()->attr('value');
+
+        $this->client->request('POST', $url, ['_token' => $token, 'action' => 'attach', 'goalId' => $goal->getId()]);
+        self::assertResponseRedirects('/plan-template/'.$templateId.'/edit');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-flash', 'Plan associé à « Trail 42k ».');
+    }
+
     public function testPlaceItemForksWorkoutInCell(): void
     {
         $user = $this->createUser('owner@example.com');
@@ -370,6 +431,138 @@ final class PlanTemplateControllerTest extends WebTestCase
         self::assertCount(1, $this->em->getRepository(PlanItem::class)->findBy(['planTemplate' => $template->getId()]));
     }
 
+    /**
+     * #111 : « Copier vers » d'une semaine prend plusieurs cibles d'un coup. Chaque
+     * cible est remplacée et reçoit ses propres copies locales ; la suivante est
+     * cochée d'office ; la confirmation dit ce qui a été copié où.
+     */
+    public function testCopyAWeekToSeveralWeeks(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $upper = $this->createLiftWorkout($user, 'Upper A');
+        $lower = $this->createLiftWorkout($user, 'Lower A');
+        $template = $this->createPlanTemplate($user, 'Bloc force', 4);
+        $this->placeCell($template, $user, $upper, 1, 1, 'Lourd');
+        $this->placeCell($template, $user, $lower, 1, 4, null);
+        $replaced = $this->placeCell($template, $user, $upper, 3, 2, null);
+        $templateId = $template->getId();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/plan-template/'.$templateId.'/edit');
+        $form = $crawler->filter('form[action$="/weeks/1/copy"]')->form();
+        self::assertSame(['2'], array_values($form->getPhpValues()['targets'] ?? []), 'La semaine suivante est cochée d\'office.');
+        self::assertCount(3, $crawler->filter('form[action$="/weeks/1/copy"] input[name="targets[]"]'), 'Toutes les semaines sauf la source.');
+
+        $this->client->request('POST', '/plan-template/'.$templateId.'/weeks/1/copy', [
+            '_token' => $form->getValues()['_token'],
+            'targets' => ['4', '2', '3', '3', '1', '9'],
+        ]);
+        self::assertResponseRedirects('/plan-template/'.$templateId.'/edit');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-flash', 'Semaine 1 copiée sur S2, S3 et S4.');
+
+        $this->em->clear();
+        $byWeek = [];
+        $cells = [];
+        foreach ($this->em->getRepository(PlanItem::class)->findBy(['planTemplate' => $templateId]) as $item) {
+            $byWeek[(int) $item->getWeekNumber()][] = [$item->getDayOfWeek(), $item->getNotes()];
+            $cells[] = $item->getWorkout()?->getId();
+        }
+        ksort($byWeek);
+        foreach ($byWeek as &$days) {
+            sort($days);
+        }
+        unset($days);
+        $expected = [[1, 'Lourd'], [4, null]];
+        self::assertSame([1 => $expected, 2 => $expected, 3 => $expected, 4 => $expected], $byWeek, 'S3 remplacée, la source et les doublons ignorés.');
+        self::assertCount(8, array_unique($cells), 'Une copie locale par case et par semaine.');
+        self::assertNull($this->em->getRepository(PlanItem::class)->find($replaced->getId()));
+    }
+
+    /** En Turbo, la confirmation arrive sous l'en-tête de la semaine source, les flashes partent. */
+    public function testCopyAWeekConfirmsUnderItsHeaderInTheStream(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $library = $this->createLiftWorkout($user, 'Upper A');
+        $template = $this->createPlanTemplate($user, 'Bloc force', 3);
+        $this->placeCell($template, $user, $library, 2, 1, null);
+        $templateId = $template->getId();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/plan-template/'.$templateId.'/edit');
+        $token = $crawler->filter('form[action$="/weeks/2/copy"] input[name="_token"]')->attr('value');
+
+        $this->client->request('POST', '/plan-template/'.$templateId.'/weeks/2/copy', ['_token' => $token, 'targets' => ['3']], [], [
+            'HTTP_ACCEPT' => 'text/vnd.turbo-stream.html, text/html, application/xhtml+xml',
+        ]);
+        self::assertResponseIsSuccessful();
+        $body = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('<turbo-stream action="remove" targets=".kd-flash">', $body);
+        self::assertStringContainsString('Semaine 2 copiée sur S3.', $body);
+        self::assertSame(1, substr_count($body, 'kd-planweek__notice'), 'Sous la seule semaine source.');
+    }
+
+    /**
+     * « Toutes les suivantes » copie vers chaque semaine après la source, quelles
+     * que soient les cases cochées, et ne s'affiche que s'il en reste deux ou plus.
+     */
+    public function testCopyAWeekToAllTheFollowingOnes(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $library = $this->createLiftWorkout($user, 'Upper A');
+        $template = $this->createPlanTemplate($user, 'Bloc force', 5);
+        $this->placeCell($template, $user, $library, 2, 3, null);
+        $this->placeCell($template, $user, $library, 1, 1, null);
+        $templateId = $template->getId();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/plan-template/'.$templateId.'/edit');
+        self::assertCount(1, $crawler->filter('form[action$="/weeks/2/copy"] button[name="all_after"]'));
+        self::assertCount(1, $crawler->filter('form[action$="/weeks/3/copy"] button[name="all_after"]'));
+        self::assertCount(0, $crawler->filter('form[action$="/weeks/4/copy"] button[name="all_after"]'), 'Une seule suivante : la case cochée suffit.');
+        self::assertCount(0, $crawler->filter('form[action$="/weeks/5/copy"] button[name="all_after"]'));
+
+        $token = $crawler->filter('form[action$="/weeks/2/copy"] input[name="_token"]')->attr('value');
+        $this->client->request('POST', '/plan-template/'.$templateId.'/weeks/2/copy', [
+            '_token' => $token,
+            'targets' => ['1'],
+            'all_after' => '1',
+        ]);
+        self::assertResponseRedirects('/plan-template/'.$templateId.'/edit');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-flash', 'Semaine 2 copiée sur toutes les suivantes (S3 à S5).');
+
+        $this->em->clear();
+        $weeks = [];
+        foreach ($this->em->getRepository(PlanItem::class)->findBy(['planTemplate' => $templateId]) as $item) {
+            $weeks[] = [$item->getWeekNumber(), $item->getDayOfWeek()];
+        }
+        sort($weeks);
+        self::assertSame([[1, 1], [2, 3], [3, 3], [4, 3], [5, 3]], $weeks, 'S1 cochée mais ignorée : le bouton cliqué l\'emporte.');
+    }
+
+    /** Rien de coché : rien ne bouge, et on le dit au lieu de se taire. */
+    public function testCopyAWeekWithoutTargetSaysSo(): void
+    {
+        $user = $this->createUser('owner@example.com');
+        $library = $this->createLiftWorkout($user, 'Upper A');
+        $template = $this->createPlanTemplate($user, 'Bloc force', 3);
+        $this->placeCell($template, $user, $library, 1, 1, null);
+        $templateId = $template->getId();
+
+        $this->client->loginUser($user);
+        $crawler = $this->client->request('GET', '/plan-template/'.$templateId.'/edit');
+        $token = $crawler->filter('form[action$="/weeks/1/copy"] input[name="_token"]')->attr('value');
+
+        $this->client->request('POST', '/plan-template/'.$templateId.'/weeks/1/copy', ['_token' => $token]);
+        self::assertResponseRedirects('/plan-template/'.$templateId.'/edit');
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-flash--error', 'Coche au moins une semaine de destination.');
+
+        $this->em->clear();
+        self::assertCount(1, $this->em->getRepository(PlanItem::class)->findBy(['planTemplate' => $templateId]));
+    }
+
     /** Une case comme la pose la crée : une copie locale racinée sur la séance de bibliothèque. */
     private function placeCell(PlanTemplate $template, User $owner, Workout $library, int $week, int $day, ?string $notes): PlanItem
     {
@@ -448,7 +641,7 @@ final class PlanTemplateControllerTest extends WebTestCase
         $this->client->request('GET', '/plan-template/'.$template->getId());
 
         self::assertResponseIsSuccessful();
-        self::assertSelectorTextContains('body', 'Aucune donnée de réalisé');
+        self::assertSelectorTextContains('body', 'Aucun détail saisi');
         self::assertSelectorNotExists('.kd-prog__adherence');
         self::assertSelectorNotExists('.kd-prog__runpick');
     }

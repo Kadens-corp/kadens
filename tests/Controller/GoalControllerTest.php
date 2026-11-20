@@ -173,7 +173,7 @@ final class GoalControllerTest extends WebTestCase
         $this->client->loginUser($user);
         $crawler = $this->client->request('GET', '/goal/'.$goal->getId());
 
-        $form = $crawler->selectButton('Ancrer sur l\'échéance')->form();
+        $form = $crawler->selectButton('Planifier pour finir le jour J')->form();
         $form['planTemplate'] = (string) $template->getId();
         $this->client->submit($form);
 
@@ -207,7 +207,7 @@ final class GoalControllerTest extends WebTestCase
         $this->client->loginUser($coach);
         $crawler = $this->client->request('GET', '/goal/'.$goal->getId());
 
-        $form = $crawler->selectButton('Ancrer sur l\'échéance')->form();
+        $form = $crawler->selectButton('Planifier pour finir le jour J')->form();
         $form['planTemplate'] = (string) $template->getId();
         $this->client->submit($form);
 
@@ -293,9 +293,18 @@ final class GoalControllerTest extends WebTestCase
         $this->em->clear();
         self::assertCount(2, $this->mustFind(Goal::class, $goalId)->getPlanTemplates());
 
+        // A-35 : le retour confirme l'association, et dit que l'agenda n'a pas
+        // bougé — ce qui distingue ce geste de « Planifier pour finir le jour J ».
+        $crawler = $this->client->followRedirect();
+        self::assertAnySelectorTextContains('.kd-flash', 'Plan « Bloc spécifique » associé à cet objectif. L\'agenda n\'a pas bougé.');
+        // « Détacher » se lit, ce n'est plus une icône seule.
+        self::assertCount(2, $crawler->filter('.kd-goalplan button:contains("Détacher")'));
+
         $this->client->request('POST', $url, [
             '_token' => $token, 'action' => 'detach', 'planTemplate' => $spe->getId(),
         ]);
+        $this->client->followRedirect();
+        self::assertSelectorTextContains('.kd-flash', 'Plan « Bloc spécifique » détaché de cet objectif.');
         $this->em->clear();
         $reloaded = $this->em->getRepository(Goal::class)->find($goalId);
         self::assertNotNull($reloaded);

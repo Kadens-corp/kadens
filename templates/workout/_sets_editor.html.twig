@@ -49,7 +49,7 @@
                                     {% endif %}
                                     <span class="kd-set__at">@</span>
                                     {{ form_widget(sform.weightKg, { attr: {
-                                        class: 'kd-set__val', placeholder: '—',
+                                        class: 'kd-set__val', placeholder: '—', inputmode: 'decimal',
                                         'data-action': 'change->composer#submitForm',
                                     } }) }}
                                     <span class="kd-set__unit">kg</span>

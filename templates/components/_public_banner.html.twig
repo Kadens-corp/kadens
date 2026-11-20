@@ -1,0 +1,17 @@
+{# Bandeau des pages publiques de séance et de plan (#61, A-44). Une page
+   publique reprend le rendu de la page privée : sans ce bandeau, rien ne dit à
+   son propriétaire qu'il regarde ce que voient les autres, ni au visiteur qu'il
+   lit un lien partagé.
+
+   Attendus : isOwner (bool), le lecteur est-il le propriétaire. #}
+<p class="kd-publicbanner" role="note">
+    {{ ux_icon('lucide:globe') }}
+    <span>
+        <strong>Page publique.</strong>
+        {% if isOwner %}
+            C'est ce que voient les personnes à qui tu envoies le lien, sans compte.
+        {% else %}
+            Partagée par lien, lisible sans compte.
+        {% endif %}
+    </span>
+</p>

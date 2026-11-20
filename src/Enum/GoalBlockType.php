@@ -21,10 +21,24 @@ enum GoalBlockType: string
     public function getLabel(): string
     {
         return match ($this) {
-            self::TEXT => 'Texte',
+            self::TEXT => 'Paragraphe',
             self::PHOTO => 'Photo',
             self::ACTIVITY => 'Activité importée',
             self::SESSION => 'Séance faite',
+        };
+    }
+
+    /**
+     * Le nom de l'élément tel qu'on le désigne dans une action (« Monter ce
+     * paragraphe »). « Bloc » avait un autre sens dans les séances (#105).
+     */
+    public function demonstrative(): string
+    {
+        return match ($this) {
+            self::TEXT => 'ce paragraphe',
+            self::PHOTO => 'cette photo',
+            self::ACTIVITY => 'cette activité',
+            self::SESSION => 'cette séance',
         };
     }
 
