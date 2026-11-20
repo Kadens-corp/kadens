@@ -536,7 +536,30 @@ Règles non négociables :
 
 ---
 
-## 6. État d'avancement
+## 6. Tests
+
+Un test vérifie un **comportement**, jamais une présentation. Revue de la
+suite (#130) : les tests de libellé et de balisage cassaient à chaque retouche
+d'interface sans jamais attraper de vrai bug.
+
+- **Unitaire** pour la logique métier (`src/Service/`, enums, voters) : calculs,
+  règles, invariants. C'est le socle, et il ne coûte presque rien à l'exécution.
+- **Fonctionnel** (`WebTestCase`) pour ce qu'un test unitaire ne voit pas :
+  droits et cloisonnement (403/404, ce qu'un lecteur voit ou non des données
+  d'un autre), effets en base d'une action, cible d'un Turbo Stream, contrat de
+  l'API mobile (champs, absence des notes privées). Un sélecteur sert à
+  **trouver** la donnée à vérifier, pas à vérifier le balisage.
+- **Pas de test** pour un libellé, un accord, une classe CSS, un ordre de
+  sections, une icône ou le câblage `data-action` d'un contrôleur Stimulus. Un
+  ticket purement visuel se vérifie à la main dans le navigateur, et ne reçoit
+  pas de test.
+
+Question à se poser avant d'écrire un test : une régression qu'il attraperait
+casserait-elle quelque chose pour l'utilisateur, ou seulement la maquette ?
+
+---
+
+## 7. État d'avancement
 
 Toutes les phases du `ROADMAP.md` sont livrées : socle Symfony (Docker,
 MariaDB, CI/CD), design tokens posés, identité **« Presse »** déployée sur

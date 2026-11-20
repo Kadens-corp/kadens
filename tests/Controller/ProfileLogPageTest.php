@@ -66,20 +66,6 @@ final class ProfileLogPageTest extends WebTestCase
     }
 
     /**
-     * La page dit ce qu'elle montre et ce qu'elle ne montre pas : sans cette
-     * phrase, « 0 séance consignée » côtoie « 1 faite » sur la page d'à côté
-     * (#73).
-     */
-    public function testItSaysWhatItShowsAndWhatItLeavesOut(): void
-    {
-        $this->client->loginUser($this->createUser('perimetre@example.com'));
-        $this->client->request('GET', '/profile/log');
-
-        self::assertSelectorTextContains('.kd-pagehead__scope', 'dont tu as saisi le détail');
-        self::assertSelectorTextContains('.kd-pagehead__scope', 'n\'y figure pas');
-    }
-
-    /**
      * Une séance consignée porte sa ligne, ses chiffres et son mois. Les séries
      * comptées sont celles de travail : l'échauffement n'en est pas.
      */

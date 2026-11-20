@@ -69,45 +69,6 @@ final class ProfileStatsPageTest extends WebTestCase
         self::assertGreaterThan(0, $crawler->filter('.kd-empty')->count());
     }
 
-    /**
-     * La page dit ce qu'elle compte : une séance faite sans détail compte ici,
-     * pas au journal (#73).
-     */
-    public function testItSaysWhatItCounts(): void
-    {
-        $this->client->loginUser($this->createUser('perimetre@example.com'));
-        $this->client->request('GET', '/profile/stats');
-
-        self::assertSelectorTextContains('.kd-pagehead__scope', 'même sans détail');
-    }
-
-    /**
-     * Le vocabulaire du suivi parle sport (#84) : « série » reste aux séries
-     * d'exercice, la suite de semaines se dit « d'affilée ».
-     */
-    public function testTheTrackingVocabularyIsASportsmansOne(): void
-    {
-        $user = $this->createUser('lexique@example.com');
-        // Une séance faite, pour que la régularité ait des chiffres à nommer.
-        $this->em->persist((new ScheduledWorkout())->setOwner($user)->setTitle('Faite')
-            ->setScheduledDate(new \DateTimeImmutable('today'))->setStatus(ScheduledStatus::DONE));
-        $this->em->flush();
-        $this->client->loginUser($user);
-
-        $overview = $this->client->request('GET', '/profile/stats')->filter('body')->text();
-        self::assertStringContainsString('Assiduité', $overview);
-        self::assertStringContainsString("Semaines d'affilée", $overview);
-        self::assertStringContainsString("Record d'affilée", $overview);
-        foreach (['Observance', 'échue', 'Série en cours', 'Meilleure série'] as $old) {
-            self::assertStringNotContainsString($old, $overview);
-        }
-
-        $endurance = $this->client->request('GET', '/profile/stats?tab=endurance')->filter('body')->text();
-        self::assertStringContainsString('À quelle fréquence cardiaque', $endurance);
-        self::assertStringContainsString('Aucune séance prévue reliée à une sortie', $endurance);
-        self::assertStringNotContainsString('prescrit', $endurance);
-    }
-
     public function testEachWindowRendersAndMarksItselfActive(): void
     {
         $this->client->loginUser($this->seedUser());

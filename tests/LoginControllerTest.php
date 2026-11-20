@@ -93,18 +93,4 @@ class LoginControllerTest extends WebTestCase
 
         self::assertSelectorNotExists('.kd-auth__error');
     }
-
-    /**
-     * #99 : pas d'indicatif qui passe pour un mot de passe déjà saisi, et un
-     * « Mot de passe oublié ? » qui dit vers qui se tourner.
-     */
-    public function testTheLoginPageSaysWhoToAskForAForgottenPassword(): void
-    {
-        $crawler = $this->client->request('GET', '/login');
-
-        self::assertResponseIsSuccessful();
-        self::assertNull($crawler->filter('#password')->attr('placeholder'));
-        self::assertSelectorTextContains('.kd-auth__forgot summary', 'Mot de passe oublié ?');
-        self::assertSelectorTextContains('.kd-auth__forgot', "l'administrateur");
-    }
 }

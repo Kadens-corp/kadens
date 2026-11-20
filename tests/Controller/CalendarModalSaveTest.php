@@ -45,58 +45,6 @@ final class CalendarModalSaveTest extends WebTestCase
         parent::tearDown();
     }
 
-    /** « Statut » nomme les trois choix, qui sont des radios ; un seul bouton plein, « Enregistrer ». */
-    public function testTheModalSeparatesChoosingFromSaving(): void
-    {
-        $owner = $this->createUser('athlete@example.com');
-        $scheduled = $this->createScheduled($owner, ScheduledStatus::PLANNED);
-        $this->client->loginUser($owner);
-
-        $this->client->request('GET', '/calendar/2026/3');
-
-        $form = '#cal-event-'.$scheduled->getId().' dialog .kd-modal__form';
-        $group = $form.' [role="radiogroup"]';
-        self::assertSelectorTextContains('#'.$this->attr($group, 'aria-labelledby'), 'Statut');
-        self::assertSelectorCount(3, $group.' input[type="radio"][name="status"]');
-        self::assertSelectorExists($group.' input[value="planned"][checked]');
-        self::assertSelectorNotExists($form.' button[name="status"]');
-
-        self::assertSelectorCount(1, $form.' button[type="submit"]');
-        self::assertSelectorTextContains($form.' button[type="submit"].kd-btn--primary', 'Enregistrer');
-        // Hors l'encart caché de la garde, qui répète « Enregistrer ».
-        self::assertSelectorCount(1, '#cal-event-'.$scheduled->getId().' dialog .kd-modal__section .kd-btn--primary');
-        self::assertSelectorNotExists('#cal-event-'.$scheduled->getId().' dialog .kd-btn--secondary');
-    }
-
-    /**
-     * Fermer avec une saisie en cours (#90) : la question vit dans la modale,
-     * cachée tant que le contrôleur `dialog` ne la montre pas, et son
-     * « Enregistrer » soumet le formulaire surveillé par son id, sans JS.
-     */
-    public function testTheModalCarriesItsUnsavedWarning(): void
-    {
-        $owner = $this->createUser('athlete@example.com');
-        $scheduled = $this->createScheduled($owner, ScheduledStatus::PLANNED);
-        $this->client->loginUser($owner);
-        $id = (int) $scheduled->getId();
-
-        $this->client->request('GET', '/calendar/2026/3');
-
-        $dialog = '#cal-event-'.$id.' dialog';
-        self::assertSame('click->dialog#backdrop cancel->dialog#cancel close->dialog#closed', $this->attr($dialog, 'data-action'));
-        self::assertSelectorExists($dialog.' form#cal-save-'.$id.'[data-dialog-target="guarded"]');
-
-        $warning = $dialog.' [data-dialog-target="unsaved"]';
-        self::assertSelectorExists($warning.'[hidden][role="alert"]');
-        self::assertSelectorTextContains($warning, 'Tes modifications ne sont pas enregistrées.');
-        self::assertSelectorTextContains($warning.' button[type="submit"][form="cal-save-'.$id.'"]', 'Enregistrer');
-        self::assertSelectorTextContains($warning.' button[data-action="dialog#discard"]', 'Ne pas enregistrer');
-
-        // Déplacer recharge la vue : il passe par la même garde. Retirer, non.
-        self::assertSelectorExists($dialog.' form[action$="/move"][data-action="submit->dialog#guardSubmit"]');
-        self::assertSelectorNotExists($dialog.' form[action$="/delete"][data-action]');
-    }
-
     /** Enregistrer sans toucher au statut garde le statut, et écrit texte et ressenti. */
     public function testSavingKeepsTheCurrentStatus(): void
     {
@@ -150,11 +98,6 @@ final class CalendarModalSaveTest extends WebTestCase
         self::assertInstanceOf(ChoiceFormField::class, $field);
 
         return $field;
-    }
-
-    private function attr(string $selector, string $name): string
-    {
-        return (string) $this->client->getCrawler()->filter($selector)->attr($name);
     }
 
     private function createUser(string $email): User

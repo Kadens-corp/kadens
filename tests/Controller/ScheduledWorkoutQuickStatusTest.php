@@ -42,39 +42,6 @@ final class ScheduledWorkoutQuickStatusTest extends WebTestCase
         parent::tearDown();
     }
 
-    /** Trois choix nommés, le courant marqué, ouverts par un vrai bouton. */
-    public function testThePillOffersThreeNamedChoices(): void
-    {
-        $owner = $this->createUser('athlete@example.com');
-        $scheduled = $this->createScheduled($owner, ScheduledStatus::PLANNED);
-        $this->client->loginUser($owner);
-
-        $this->client->request('GET', '/calendar/2026/3');
-
-        $menu = '#cal-status-'.$scheduled->getId();
-        self::assertSelectorExists('button[popovertarget="cal-status-'.$scheduled->getId().'"]');
-        self::assertSelectorExists($menu.'[popover]');
-        self::assertSelectorTextContains($menu.' button[value="planned"]', 'Prévue');
-        self::assertSelectorTextContains($menu.' button[value="done"]', 'Faite');
-        self::assertSelectorTextContains($menu.' button[value="missed"]', 'Manquée');
-        self::assertSelectorExists($menu.' button[value="planned"][aria-pressed="true"]');
-        self::assertSelectorCount(1, $menu.' [aria-pressed="true"]');
-        self::assertSelectorTextContains('#cal-event-'.$scheduled->getId().' .kd-calevent__statuslbl', 'Prévue');
-        self::assertSelectorNotExists('#cal-event-'.$scheduled->getId().' .kd-calevent__check');
-    }
-
-    /** Faite : une coche devant le titre, qui le dit aussi en toutes lettres. */
-    public function testADoneSessionCarriesACheckBeforeItsTitle(): void
-    {
-        $owner = $this->createUser('athlete@example.com');
-        $scheduled = $this->createScheduled($owner, ScheduledStatus::DONE);
-        $this->client->loginUser($owner);
-
-        $this->client->request('GET', '/calendar/2026/3');
-
-        self::assertSelectorTextContains('#cal-event-'.$scheduled->getId().' .kd-calevent__title .kd-calevent__check', 'Faite');
-    }
-
     /** Le statut posté est celui qu'on obtient, même posté deux fois. */
     public function testThePostedStatusIsTheOneSet(): void
     {
@@ -125,20 +92,6 @@ final class ScheduledWorkoutQuickStatusTest extends WebTestCase
         self::assertStringContainsString('target="cal-event-'.$id.'"', $html);
         self::assertMatchesRegularExpression('/value="done"[^>]*aria-pressed="true"/', $html);
         self::assertStringContainsString('kd-calevent__check', $html);
-    }
-
-    /** Le hero de la séance dit le statut en mot et en icône, plus par un point coloré. */
-    public function testTheHeroBadgeNamesTheStatus(): void
-    {
-        $owner = $this->createUser('athlete@example.com');
-        $scheduled = $this->createScheduled($owner, ScheduledStatus::DONE);
-        $this->client->loginUser($owner);
-
-        $this->client->request('GET', '/schedule/'.$scheduled->getId());
-
-        self::assertSelectorTextContains('#schedule-badge', 'Faite');
-        self::assertSelectorExists('#schedule-badge svg');
-        self::assertSelectorNotExists('#schedule-badge .kd-badge__dot');
     }
 
     /**

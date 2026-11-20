@@ -112,22 +112,6 @@ final class ScheduledWorkoutLogTest extends WebTestCase
         self::assertStringContainsString('82,5 kg', $logged->text());
     }
 
-    /** Le prescrit passe en encre atténuée, mais reste rendu. */
-    public function testPrescribedSideIsAttenuatedNotRemoved(): void
-    {
-        $user = $this->createUser('owner@example.com');
-        [$scheduled] = $this->createLoggedSession($user, [[SetType::NORMAL, 8, 80.0]]);
-
-        $this->client->loginUser($user);
-        $crawler = $this->client->request('GET', '/schedule/'.$scheduled->getId());
-
-        // La classe porte l'atténuation ; le nom de l'exercice, lui, n'est pas
-        // atténué (ce n'est pas un paramètre, c'est le sujet de la ligne).
-        self::assertGreaterThan(0, $crawler->filter('.kd-exrow--logged')->count());
-        self::assertGreaterThan(0, $crawler->filter('.kd-setrow__planned')->count());
-        self::assertSelectorTextContains('.kd-exrow--logged .kd-exrow__name', 'Développé couché');
-    }
-
     /**
      * L'onglet d'ouverture dépend du statut. On ne peut pas observer la sélection
      * (le contrôleur Stimulus la fait au navigateur) : ce qu'on garde, c'est ce que
@@ -194,19 +178,6 @@ final class ScheduledWorkoutLogTest extends WebTestCase
         $crawler = $this->client->request('GET', '/schedule/'.$logged->getId());
         self::assertStringContainsString('Volume prévu', $crawler->filter('.kd-wk__kpis')->first()->text());
         self::assertStringContainsString('Volume réalisé', $crawler->filter('.kd-wk__kpis--logged')->text());
-    }
-
-    /** La bibliothèque n'a pas de réalisé à opposer : son bandeau reste « total ». */
-    public function testLibraryPageKeepsTheTotalVolumeLabel(): void
-    {
-        $user = $this->createUser('owner@example.com');
-        [$scheduled] = $this->createLoggedSession($user, []);
-
-        $this->client->loginUser($user);
-        $crawler = $this->client->request('GET', '/workout/'.$scheduled->getWorkout()?->getId());
-
-        self::assertResponseIsSuccessful();
-        self::assertStringContainsString('Volume total', $crawler->filter('.kd-wk__kpis')->text());
     }
 
     /** Une séance manquée le dit en clair, sinon elle a l'allure d'une séance à venir. */
