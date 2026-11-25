@@ -107,7 +107,6 @@ final class WorkoutCloner
             ->setTargetReps($source->getTargetReps())
             ->setCapSeconds($source->getCapSeconds())
             ->setIntensityZone($source->getIntensityZone())
-            ->setElevationGainMeters($source->getElevationGainMeters())
             ->setRpe($source->getRpe())
             ->setRestSeconds($source->getRestSeconds())
             ->setNotes($source->getNotes());

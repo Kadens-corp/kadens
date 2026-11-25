@@ -159,10 +159,9 @@ final class PlanFlattenerTest extends TestCase
             ->setPrescriptionType(PrescriptionType::DISTANCE_PACE)
             ->setExercise($exercise)
             ->setPosition(0)
-            ->setSets(8)
             ->setDistanceMeters(400);
 
-        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(8)->setPosition(0);
         $block->addPrescribedExercise($prescribed);
         $workout = (new Workout())->setTitle('Piste')->setSlug('piste');
         $workout->addBlock($block);
@@ -170,7 +169,7 @@ final class PlanFlattenerTest extends TestCase
         $flat = $this->flattener->flattenWorkout($workout)['blocks'][0]['exercises'][0];
 
         self::assertNull($flat['setLines']);
-        self::assertSame('8 × 400 m', $flat['summary']);
+        self::assertSame('400 m', $flat['summary']);
     }
 
     /**
@@ -392,12 +391,11 @@ final class PlanFlattenerTest extends TestCase
             '40:00 · Z2',
         ];
 
-        yield 'distance_pace intervalles + zone + dénivelé' => [
+        yield 'distance_pace allure + zone' => [
             (new PrescribedExercise())
                 ->setPrescriptionType(PrescriptionType::DISTANCE_PACE)
-                ->setSets(8)->setDistanceMeters(400)->setPaceSecondsPerKm(210)
-                ->setIntensityZone('z5')->setElevationGainMeters(100),
-            '8 × 400 m @ 3:30/km · Z5 VO2max · D+ 100 m',
+                ->setDistanceMeters(400)->setPaceSecondsPerKm(210)->setIntensityZone('z5'),
+            '400 m @ 3:30/km · Z5 VO2max',
         ];
 
         yield 'duration avec allure et zone Karvonen' => [

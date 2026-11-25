@@ -69,9 +69,6 @@ class PrescribedExercise
     private ?string $intensityZone = null;
 
     #[ORM\Column(nullable: true)]
-    private ?int $elevationGainMeters = null;
-
-    #[ORM\Column(nullable: true)]
     private ?int $rpe = null;
 
     #[ORM\Column(nullable: true)]
@@ -277,18 +274,6 @@ class PrescribedExercise
         return $this;
     }
 
-    public function getElevationGainMeters(): ?int
-    {
-        return $this->elevationGainMeters;
-    }
-
-    public function setElevationGainMeters(?int $elevationGainMeters): static
-    {
-        $this->elevationGainMeters = $elevationGainMeters;
-
-        return $this;
-    }
-
     public function getRpe(): ?int
     {
         return $this->rpe;
@@ -417,22 +402,6 @@ class PrescribedExercise
         }
 
         return 0.0;
-    }
-
-    /**
-     * Répétitions d'un effort d'endurance : « 4 × 1 km » décrit 4 km, pas 1 km.
-     * Le fractionné se prescrit en séries — en course, en vélo comme en natation —,
-     * et `sets` fait partie des champs de DISTANCE_PACE comme de SETS_TIME. Là où
-     * le champ n'a pas de sens (DURATION), il est null et l'effort compte une fois.
-     *
-     * À ne pas confondre avec getWorkingSetCount(), qui compte des SÉRIES de
-     * travail (échauffement exclu, lignes détaillées si présentes, zéro possible).
-     * Celui-ci est un MULTIPLICATEUR de distance et de durée, donc jamais nul. Le
-     * mode détaillé est réservé à la muscu : il ne le concerne pas.
-     */
-    public function getEnduranceRepeats(): int
-    {
-        return max(1, $this->sets ?? 1);
     }
 
     /**

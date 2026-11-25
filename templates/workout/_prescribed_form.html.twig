@@ -24,7 +24,7 @@
      data-prescription-fields-map-value="{{ prescription_type_fields_map()|json_encode|e('html_attr') }}">
     {{ form_start(form, { attr: { class: 'kd-form' } }) }}
         {# Rappel de l'activité (le nom est déjà porté par la ligne parente) : donne
-           le contexte utile pour lire les champs cardio (allure/zone/dénivelé). #}
+           le contexte utile pour lire les champs cardio (allure/zone). #}
         {% if exercise %}
             <p class="kd-prescribed__exo">{{ activity.badge(exercise.activity) }}</p>
         {% endif %}
@@ -35,7 +35,7 @@
         } }) }}
 
         <div class="kd-fieldrow">
-            {% for field in ['sets', 'reps', 'weightKg', 'durationSeconds', 'distanceMeters', 'paceSecondsPerKm', 'intensityZone', 'elevationGainMeters', 'targetReps', 'capSeconds'] %}
+            {% for field in ['sets', 'reps', 'weightKg', 'durationSeconds', 'distanceMeters', 'paceSecondsPerKm', 'intensityZone', 'targetReps', 'capSeconds'] %}
                 {% if field not in scalar_overridden %}
                     {% set opts = auto ? { attr: { 'data-action': auto } } : {} %}
                     {# Le compteur pilote la liste de séries : on le dit, et on précise
@@ -61,7 +61,7 @@
            le dernier (enchaîné sans repos, #85). Le champ reste dans le formulaire :
            sa valeur survit et revient si l'on détache l'exercice. #}
         <div class="kd-fieldrow">
-            <div class="kd-fieldrow__cell kd-fieldrow__cell--rest">{{ form_row(form.restSeconds, auto ? { attr: { 'data-action': auto } } : {}) }}</div>
+            <div class="kd-fieldrow__cell kd-fieldrow__cell--rest" data-prescription-fields-target="field" data-field="restSeconds">{{ form_row(form.restSeconds, auto ? { attr: { 'data-action': auto } } : {}) }}</div>
             <div class="kd-fieldrow__cell">{{ form_row(form.rpe, (auto ? { attr: { 'data-action': auto } } : {})|merge({ term: 'RPE' })) }}</div>
         </div>
         {# Chez le coach d'un athlète, la note d'exercice est une consigne que

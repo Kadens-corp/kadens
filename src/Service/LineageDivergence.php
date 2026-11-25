@@ -128,7 +128,6 @@ final class LineageDivergence
                     $prescribed->getTargetReps(),
                     $prescribed->getCapSeconds(),
                     $prescribed->getIntensityZone(),
-                    $prescribed->getElevationGainMeters(),
                     $prescribed->getRpe(),
                     $prescribed->getRestSeconds(),
                     $prescribed->getNotes(),

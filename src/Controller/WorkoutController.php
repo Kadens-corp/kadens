@@ -59,7 +59,7 @@ final class WorkoutController extends AbstractController
     private const VALUE_FIELDS = [
         'sets', 'reps', 'weightKg', 'durationSeconds', 'distanceMeters',
         'paceSecondsPerKm', 'targetReps', 'capSeconds', 'intensityZone',
-        'elevationGainMeters',
+        'restSeconds',
     ];
 
     /** Titre d'un brouillon créé en un clic, que l'éditeur ouvre aussitôt en édition. */

@@ -917,11 +917,12 @@ final class WorkoutControllerTest extends WebTestCase
         $exercise = $this->createExercise($user, 'Fractionné piste');
         $exercise->setActivity(ActivityType::RUNNING);
         $workout = $this->createWorkout($user, 'Fractionné');
-        $block = (new Block())->setRole(BlockRole::MAIN)->setPosition(0);
+        // Le fractionné est un bloc à plusieurs tours.
+        $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(4)->setPosition(0);
         $block->addPrescribedExercise(
             $this->makePrescribed($exercise, 0)
                 ->setPrescriptionType(PrescriptionType::DISTANCE_PACE)
-                ->setSets(4)->setDistanceMeters(1000)->setPaceSecondsPerKm(300)
+                ->setDistanceMeters(1000)->setPaceSecondsPerKm(300)
         );
         $workout->addBlock($block);
         $this->em->flush();
@@ -1285,7 +1286,7 @@ final class WorkoutControllerTest extends WebTestCase
      * 400 km » enregistré par erreur est signalé sous le champ par le stream de
      * l'enregistrement automatique, sans être refusé.
      */
-    public function testDistanceIsTypedWithItsUnitAndImplausibleTotalsAreFlagged(): void
+    public function testDistanceIsTypedWithItsUnitAndImplausibleValuesAreFlagged(): void
     {
         $user = $this->createUser('owner@example.com');
         $run = $this->createExercise($user, 'Course fractionnée')->setActivity(ActivityType::RUNNING);
@@ -1293,7 +1294,6 @@ final class WorkoutControllerTest extends WebTestCase
         $block = (new Block())->setRole(BlockRole::MAIN)->setRounds(1)->setPosition(0);
         $prescribed = $this->makePrescribed($run, 0)
             ->setPrescriptionType(PrescriptionType::DISTANCE_PACE)
-            ->setSets(6)
             ->setDistanceMeters(400);
         $block->addPrescribedExercise($prescribed);
         $workout->addBlock($block);
@@ -1323,7 +1323,7 @@ final class WorkoutControllerTest extends WebTestCase
         self::assertResponseIsSuccessful();
         $content = (string) $this->client->getResponse()->getContent();
         self::assertStringContainsString('<turbo-stream action="update" target="distance-check-'.$prescribedId.'">', $content);
-        self::assertStringContainsString('6 × 400 km, soit 2 400 km au total : vérifie l&#039;unité (m ou km).', $content);
+        self::assertStringContainsString('400 km : vérifie l&#039;unité (m ou km).', $content);
         $this->em->clear();
         self::assertSame(400_000, $this->mustFind(PrescribedExercise::class, $prescribedId)->getDistanceMeters());
 
