@@ -364,15 +364,27 @@ final readonly class FriendFeed
         }
 
         $count = \count($sets);
-        $reps = array_unique(array_map(static fn (LoggedSet $s): int => $s->getReps() ?? 0, $sets));
-        $durations = array_unique(array_map(static fn (LoggedSet $s): int => $s->getDurationSeconds() ?? 0, $sets));
+        $reps = array_filter(array_map(static fn (LoggedSet $s): int => $s->getReps() ?? 0, $sets));
+        $durations = array_filter(array_map(static fn (LoggedSet $s): int => $s->getDurationSeconds() ?? 0, $sets));
         $weights = array_map(static fn (LoggedSet $s): float => $s->getWeightKg() ?? 0.0, $sets);
-        $hasReps = max($reps) > 0;
+        $hasReps = [] !== $reps;
 
+        // Des séries inégales se lisent en fourchette (« 4 × 9-12 »), pas en
+        // simple compte : on voit ce qui a été fait sans détailler chaque série.
         if ($hasReps) {
-            $head = 1 === \count($reps) ? sprintf('%d × %d', $count, $reps[0]) : sprintf('%d séries', $count);
+            $low = min($reps);
+            $high = max($reps);
+            $head = $low === $high ? sprintf('%d × %d', $count, $low) : sprintf('%d × %d-%d', $count, $low, $high);
+        } elseif ([] === $durations) {
+            $head = sprintf('%d séries', $count);
         } else {
-            $head = 1 === \count($durations) ? sprintf('%d × %s', $count, $this->seconds((int) reset($durations))) : sprintf('%d séries', $count);
+            $low = min($durations);
+            $high = max($durations);
+            $head = match (true) {
+                $low === $high => sprintf('%d × %s', $count, $this->seconds($low)),
+                $high < 60 => sprintf('%d × %d-%d s', $count, $low, $high),
+                default => sprintf('%d × %s-%s', $count, $this->seconds($low), $this->seconds($high)),
+            };
         }
 
         $top = max($weights);

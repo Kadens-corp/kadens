@@ -194,8 +194,9 @@ final class FriendControllerTest extends WebTestCase
 
         $bench = $this->createExercise(null, 'Développé couché barre');
         $rotations = $this->createExercise($lea, 'Rotations d\'épaules à l\'élastique');
+        $pulldown = $this->createExercise(null, 'Tirage vertical');
 
-        $this->logSession($lea, 'Upper A', 'today', [[$rotations, [[15, null]]], [$bench, [[6, 92.5], [6, 92.5], [6, 92.5], [6, 92.5]]]], note: 'Enfin 92,5 sur les 6 reps.');
+        $this->logSession($lea, 'Upper A', 'today', [[$rotations, [[15, null]]], [$bench, [[6, 92.5], [6, 92.5], [6, 92.5], [6, 92.5]]], [$pulldown, [[12, 30.0], [10, 32.0], [9, 32.0]]]], note: 'Enfin 92,5 sur les 6 reps.');
         $this->logSession($me, 'Lower A', 'today', [[$bench, [[5, 60.0]]]]);
         $this->logSession($stranger, 'Séance secrète', 'today', [[$bench, [[5, 60.0]]]]);
         $this->logSession($lea, 'Prévue', 'today', [[$bench, [[5, 60.0]]]], status: ScheduledStatus::PLANNED);
@@ -213,6 +214,8 @@ final class FriendControllerTest extends WebTestCase
         self::assertStringContainsString('Rotations d\'épaules à l\'élastique', $lea->text());
         self::assertCount(1, $lea->filter('.kd-feedex__perso'));
         self::assertStringContainsString('4 × 6 · 92,5 kg', $lea->text());
+        // Des séries inégales (#136) : la fourchette des reps, pas « 3 séries ».
+        self::assertStringContainsString('3 × 9-12 · jusqu\'à 32 kg', $lea->text());
         self::assertStringContainsString('Enfin 92,5 sur les 6 reps.', $lea->filter('.kd-feedcard__note')->text());
         self::assertCount(1, $lea->filter('button:contains("Copier dans mes séances")'));
 
