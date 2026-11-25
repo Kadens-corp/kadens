@@ -95,7 +95,9 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     // La silhouette dessinée par la carte musculaire du compositeur. Réglage
     // d'affichage, donc ici et non dans la fiche athlète : `sex` en dessous est
     // nullable, accepte « autre » et sert au DOTS (cf. BodySilhouette). Il n'a
-    // donné que la valeur initiale de ce champ, à la migration.
+    // donné que la valeur initiale de ce champ, à la migration. Une exception
+    // au « réglage du lecteur » : sur le flux d'amis, c'est celle de l'auteur
+    // qui dessine ses séances (#135, docs/feature-friends.md).
     #[ORM\Column(enumType: BodySilhouette::class, options: ['default' => 'male'])]
     private BodySilhouette $bodySilhouette = BodySilhouette::MALE;
 

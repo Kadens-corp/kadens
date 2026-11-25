@@ -205,6 +205,33 @@ final class LogMetricsTest extends TestCase
         self::assertSame(20.0, $regions[1]['percent']);
     }
 
+    /**
+     * Ce que la carte musculaire du flux peint (#135) : une série de travail
+     * compte pour chaque zone de son exercice, et celles qu'aucune zone ne
+     * reçoit se comptent à part au lieu de disparaître.
+     */
+    public function testSetsByAreaAttributesWorkingSetsAndCountsTheUnmapped(): void
+    {
+        $squat = $this->logged('Squat', [TargetArea::QUADRICEPS, TargetArea::GLUTES], [
+            [SetType::WARMUP, 8, 40.0],
+            [SetType::NORMAL, 5, 100.0],
+            [SetType::NORMAL, 5, 100.0],
+        ]);
+        $noArea = $this->logged('Machine inconnue', [], [
+            [SetType::NORMAL, 10, 30.0],
+        ]);
+        $orphan = $this->logged('Rowing barre', [TargetArea::BACK], [
+            [SetType::NORMAL, 10, 60.0],
+            [SetType::NORMAL, 10, 60.0],
+        ]);
+        $orphan->setExercise(null);
+
+        $summary = $this->summaryOf($this->scheduled([$squat, $noArea, $orphan]));
+
+        self::assertSame(['quadriceps' => 2, 'glutes' => 2], $summary['setsByArea']);
+        self::assertSame(3, $summary['unmappedSets']);
+    }
+
     public function testDurationUsesRealBoundsAndNeedsBoth(): void
     {
         $scheduled = $this->scheduled([$this->logged('Squat', [], [[SetType::NORMAL, 5, 100.0]])]);

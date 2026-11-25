@@ -225,6 +225,7 @@ final class FriendController extends AbstractController
         $context = [
             'entries' => $result['entries'],
             'hasMore' => $result['hasMore'],
+            'plates' => $result['plates'],
             'page' => $page,
             'filter' => null === $only ? null : ($only === $user ? 'moi' : (string) $only->getId()),
             'previewCount' => FriendFeed::PREVIEW_EXERCISES,

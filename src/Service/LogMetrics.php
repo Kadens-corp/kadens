@@ -16,7 +16,10 @@ use App\Entity\ScheduledWorkout;
  * n'ont simplement pas d'équivalent et valent 0 — le réalisé est PLAT : il ne
  * porte ni blocs (`blockCount`) ni liaisons de superset (`supersets`,
  * `circuits`), qui n'appartiennent qu'à l'intention. Trois clés s'y ajoutent,
- * propres au fait accompli : `durationSeconds`, `skipped`, `loggedAt`.
+ * propres au fait accompli : `durationSeconds`, `skipped`, `loggedAt`. Deux
+ * autres, `setsByArea` et `unmappedSets`, donnent la ventilation par zone que le
+ * prescrit range dans `WorkoutMetrics::volume()` : c'est ce que la carte
+ * musculaire du flux d'amis peint (#135).
  *
  * Périmètre du volume : tout le réalisé compte, sans filtrer sur
  * ActivityType::GYM comme le fait le prescrit. La règle du projet est que seule
@@ -28,7 +31,7 @@ use App\Entity\ScheduledWorkout;
  * @phpstan-import-type RegionShare from RegionBreakdown
  * @phpstan-import-type TopLift from WorkoutMetrics
  *
- * @phpstan-type LogSummary array{tonnageKg: float, workingSets: int, exerciseCount: int, blockCount: int, supersets: int, circuits: int, averageRpe: float|null, topLift: TopLift|null, regions: list<RegionShare>, durationSeconds: int|null, skipped: int, loggedAt: \DateTimeImmutable|null}
+ * @phpstan-type LogSummary array{tonnageKg: float, workingSets: int, exerciseCount: int, blockCount: int, supersets: int, circuits: int, averageRpe: float|null, topLift: TopLift|null, regions: list<RegionShare>, setsByArea: array<string, int>, unmappedSets: int, durationSeconds: int|null, skipped: int, loggedAt: \DateTimeImmutable|null}
  */
 final class LogMetrics
 {
@@ -53,6 +56,7 @@ final class LogMetrics
         }
 
         $setsByArea = [];
+        $unmappedSets = 0;
         $tonnage = 0.0;
         $workingSets = 0;
         $exerciseCount = 0;
@@ -80,10 +84,16 @@ final class LogMetrics
             $sets = $logged->getWorkingSetCount();
             $workingSets += $sets;
 
-            if ($sets > 0) {
-                foreach ($logged->getExercise()?->getTargetAreas() ?? [] as $area) {
-                    $setsByArea[$area->value] = ($setsByArea[$area->value] ?? 0) + $sets;
-                }
+            // Les zones vivent sur la définition en bibliothèque : un exercice
+            // supprimé depuis (SET NULL) ou sans zone déclarée n'a personne à
+            // colorier. Ses séries se comptent à part (`unmappedSets`), pour
+            // que la carte musculaire le dise au lieu de les perdre.
+            $areas = $sets > 0 ? $logged->getExercise()?->getTargetAreas() ?? [] : [];
+            if ($sets > 0 && [] === $areas) {
+                $unmappedSets += $sets;
+            }
+            foreach ($areas as $area) {
+                $setsByArea[$area->value] = ($setsByArea[$area->value] ?? 0) + $sets;
             }
 
             foreach ($logged->getLoggedSets() as $set) {
@@ -124,6 +134,10 @@ final class LogMetrics
                 ? ['exercise' => $topExercise, 'weightKg' => $topWeight, 'sets' => $topSets]
                 : null,
             'regions' => $this->regions->shares($setsByArea),
+            // La ventilation brute, celle que `BodyLoad` peint : une série compte
+            // pour chaque zone de son exercice (règle de `RegionBreakdown`).
+            'setsByArea' => $setsByArea,
+            'unmappedSets' => $unmappedSets,
             'durationSeconds' => $this->durationSeconds($scheduled),
             'skipped' => $skipped,
             'loggedAt' => $this->loggedAt($scheduled),

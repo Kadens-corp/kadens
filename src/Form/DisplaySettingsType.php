@@ -45,7 +45,7 @@ final class DisplaySettingsType extends AbstractType
             'expanded' => true,
             'multiple' => false,
             'choice_label' => fn (BodySilhouette $silhouette): string => $silhouette->getLabel(),
-            'help' => "Le dessin des zones travaillées, dans le compositeur de séance. Sans rapport avec le sexe de la fiche athlète, qui sert au score de force.",
+            'help' => "Le dessin des zones travaillées, dans le compositeur de séance. C'est aussi celle que tes amis voient sur tes séances, dans le flux. Sans rapport avec le sexe de la fiche athlète, qui sert au score de force.",
         ]);
 
         // Mappé sur `User::get/setActivityColors()`, qui ne portent que les

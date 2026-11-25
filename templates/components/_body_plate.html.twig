@@ -1,0 +1,43 @@
+{# Les tracés d'une planche anatomique : ce que components/_body_map dessine, et
+   ce que components/_body_map_symbols pose une fois en <symbol>.
+
+   Paramètres :
+     plate      une planche (sortie de BodyPlates::plate)
+     levels     paliers par SLUG DE MUSCLE (sortie de BodyLoad::for()['levels'])
+     variables  vrai = chaque muscle lit sa teinte dans `--bm-<slug>`, posée par
+                celui qui renvoie au symbole ; `levels` est alors ignoré (défaut
+                faux). Un <use> ne laisse passer que l'héritage CSS : c'est ce qui
+                permet à dix cartes de peindre dix fois le même symbole autrement. #}
+{% set variables = variables|default(false) %}
+{% set levels = levels|default({}) %}
+{# Avant les muscles, et c'est la seule chose à savoir de cet ordre : le
+   cou passe SOUS les trapèzes, comme il le doit. Les cheveux, eux, sont
+   derniers de leur propre liste et ne rencontrent aucun muscle. #}
+{% for shape in plate.inert %}
+    {% for d in shape.paths %}
+        <path d="{{ d }}"
+              fill="{{ shape.slug == 'hair' ? 'var(--color-text-secondary)' : 'var(--color-surface-raised)' }}"
+              stroke="{{ shape.slug == 'hair' ? 'none' : 'var(--color-border-strong)' }}"
+              stroke-width="0.75" vector-effect="non-scaling-stroke"/>
+    {% endfor %}
+{% endfor %}
+
+{% for shape in plate.muscles %}
+    {% if variables %}
+        {% set fill = 'var(--bm-' ~ shape.slug ~ ', var(--color-fill))' %}
+    {% else %}
+        {% set level = levels[shape.slug]|default(null) %}
+        {% set fill = level ? 'var(--color-bodymap-' ~ level ~ ')' : 'var(--color-fill)' %}
+    {% endif %}
+    {% for d in shape.paths %}
+        {# Sans `vector-effect`, l'épaisseur suivrait l'échelle : le viewBox
+           fait 1448 points de haut pour ~240 à l'écran, un trait de 1 se
+           rendrait à 0,17. #}
+        <path d="{{ d }}" fill="{{ fill }}"
+              stroke="var(--color-border-strong)"
+              stroke-width="0.75" vector-effect="non-scaling-stroke"/>
+    {% endfor %}
+{% endfor %}
+
+<path d="{{ plate.outline }}" fill="none" stroke="var(--color-text-soft)"
+      stroke-width="1" vector-effect="non-scaling-stroke"/>

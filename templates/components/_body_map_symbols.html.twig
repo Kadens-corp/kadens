@@ -1,0 +1,18 @@
+{# Les planches anatomiques d'une page, posées une seule fois en <symbol>, pour
+   les components/_body_map rendus avec `symbols` (cf. son en-tête).
+
+   Paramètres :
+     plates  planches indexées par clé (`male-front`…), sortie de BodyPlates
+     prefix  préfixe des identifiants : chaque symbole est `<prefix>-<clé>`
+
+   Le SVG porteur est sorti du flux sans `display: none`, que certains moteurs
+   appliquent aussi aux instances. #}
+{% if plates is not empty %}
+    <svg class="kd-bodymap-symbols" width="0" height="0" aria-hidden="true" focusable="false">
+        {% for key, plate in plates %}
+            <symbol id="{{ prefix }}-{{ key }}" viewBox="{{ plate.viewBox }}">
+                {{ include('components/_body_plate.html.twig', {plate: plate, variables: true}, with_context = false) }}
+            </symbol>
+        {% endfor %}
+    </svg>
+{% endif %}
