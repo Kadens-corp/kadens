@@ -33,9 +33,9 @@ use PHPUnit\Framework\TestCase;
  * (`PlanVolumeAggregator`) et la rampe du plan (`ProgressionAggregator`).
  *
  * Le cas est celui de l'audit : un fractionné qui mélange une durée avec allure
- * (échauffement 15 min à 6:15/km), une distance avec allure et récupérations
- * (6 × 400 m à 4:00/km, récup 90 s) et une durée sans allure (retour au calme
- * 10 min). Avant, la séance disait 44 min, la semaine de deux séances 4,8 km (la
+ * (échauffement 15 min à 6:15/km), un bloc à 6 tours d'une distance avec allure
+ * et d'un footing de récup (400 m à 4:00/km, puis 90 s) et une durée sans allure
+ * (retour au calme 10 min). Avant, la séance disait 44 min, la semaine de deux séances 4,8 km (la
  * distance saisie seule) et la rampe 1h09 (les récupérations oubliées).
  */
 final class EnduranceConsistencyTest extends TestCase
@@ -68,8 +68,8 @@ final class EnduranceConsistencyTest extends TestCase
 
         $running = $this->metrics->volume($workout)['running'];
         self::assertSame(2616, $running['estimatedSeconds']);
-        // Le temps en mouvement reste celui d'une allure : sans les récupérations.
-        self::assertSame(900 + 600, $running['seconds']);
+        // La récup est un footing : elle compte dans le temps en mouvement.
+        self::assertSame(900 + 6 * 90 + 600, $running['seconds']);
         self::assertSame(6 * 96, $running['derivedSeconds']);
     }
 
@@ -102,15 +102,16 @@ final class EnduranceConsistencyTest extends TestCase
 
     public function testWeekAndRampAgreeOnDistanceWhenEveryEffortHasOne(): void
     {
-        // Retour au calme à 6:15/km : 1,6 km déduits, la distance est complète.
+        // Récup et retour au calme à 6:15/km : 6 × 240 m et 1,6 km déduits, la
+        // distance est complète.
         $plan = $this->plan([[1, $this->intervals(cooldownPace: 375)], [1, $this->intervals(cooldownPace: 375)]]);
 
-        // 2 × (2,4 + 2,4 + 1,6) km, dont une part déduite de l'allure.
-        self::assertSame(['Course · ≈ 12,8 km'], $this->chips($this->week->byWeek($plan)[1]));
+        // 2 × (2,4 + 2,4 + 1,44 + 1,6) km, dont une part déduite de l'allure.
+        self::assertSame(['Course · ≈ 15,7 km'], $this->chips($this->week->byWeek($plan)[1]));
 
         $series = $this->runningSeries($plan);
         self::assertSame('en distance', $series['unitLabel']);
-        self::assertSame('≈ 12,8 km', $series['points'][0]['label']);
+        self::assertSame('≈ 15,7 km', $series['points'][0]['label']);
         self::assertSame(0, $series['points'][0]['missing']);
     }
 
@@ -139,11 +140,16 @@ final class EnduranceConsistencyTest extends TestCase
             $cooldown['paceSecondsPerKm'] = $cooldownPace;
         }
 
-        return $this->workout(
+        $workout = $this->workout(
             [[PrescriptionType::DURATION, ['durationSeconds' => 900, 'paceSecondsPerKm' => 375]]],
-            [[PrescriptionType::DISTANCE_PACE, ['sets' => 6, 'distanceMeters' => 400, 'paceSecondsPerKm' => 240, 'restSeconds' => 90]]],
+            [[PrescriptionType::DISTANCE_PACE, ['distanceMeters' => 400, 'paceSecondsPerKm' => 240]], [PrescriptionType::DURATION, ['durationSeconds' => 90] + $cooldown]],
             [[PrescriptionType::DURATION, $cooldown]],
         );
+
+        // Le fractionné est un bloc à 6 tours : l'effort, puis le footing de récup.
+        $workout->getBlocks()[1]?->setRounds(6);
+
+        return $workout->setEstimatedDurationMinutes($this->estimator->estimateMinutes($workout));
     }
 
     /**

@@ -519,11 +519,6 @@ final class PlanFlattener
     {
         $summary = $this->units->distance($pe->getDistanceMeters());
 
-        // Intervalles : « 8 × 400 m » quand un nombre de répétitions est posé.
-        if (null !== $pe->getSets()) {
-            $summary = sprintf('%d × %s', $pe->getSets(), $summary);
-        }
-
         if (null !== $pe->getPaceSecondsPerKm()) {
             // Allure affichée dans l'unité naturelle de l'activité de l'exercice
             // (course min/km, vélo km/h, natation min/100m).
@@ -533,10 +528,6 @@ final class PlanFlattener
 
         if (null !== ($zone = $this->intensityLabel($pe->getIntensityZone()))) {
             $summary .= ' · '.$zone;
-        }
-
-        if (null !== $pe->getElevationGainMeters()) {
-            $summary .= sprintf(' · D+ %d m', $pe->getElevationGainMeters());
         }
 
         return $summary;

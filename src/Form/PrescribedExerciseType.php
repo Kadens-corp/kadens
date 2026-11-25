@@ -97,11 +97,6 @@ class PrescribedExerciseType extends AbstractType
                 'placeholder' => '—',
                 'choices' => $this->intensityChoices($user),
             ])
-            ->add('elevationGainMeters', IntegerType::class, [
-                'label' => 'Dénivelé + (m)',
-                'required' => false,
-                'attr' => ['min' => 0, 'step' => 10],
-            ])
             ->add('rpe', IntegerType::class, [
                 // Effort ressenti 1-10 (transverse à tous les types d'effort).
                 'label' => 'RPE (1-10)',

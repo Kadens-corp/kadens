@@ -24,12 +24,12 @@ final class DistancePlausibilityTest extends TestCase
         $this->plausibility = new DistancePlausibility(new UnitFormatter());
     }
 
-    /** Le cas de l'audit : 400 tapé avec « km » proposé, six répétitions. */
+    /** Le cas de l'audit : 400 tapé avec « km » proposé. */
     public function testIntervalTypedInKilometersIsFlagged(): void
     {
         self::assertSame(
-            '6 × 400 km, soit 2 400 km au total : vérifie l\'unité (m ou km).',
-            $this->plausibility->warning($this->prescribed(ActivityType::RUNNING, 400_000, 6)),
+            '400 km : vérifie l\'unité (m ou km).',
+            $this->plausibility->warning($this->prescribed(ActivityType::RUNNING, 400_000)),
         );
     }
 
@@ -37,48 +37,47 @@ final class DistancePlausibilityTest extends TestCase
     {
         self::assertSame(
             '400 km : vérifie l\'unité (m ou km).',
-            $this->plausibility->warning($this->prescribed(ActivityType::RUNNING, 400_000, null)),
+            $this->plausibility->warning($this->prescribed(ActivityType::RUNNING, 400_000)),
         );
     }
 
     #[DataProvider('plausibleCases')]
-    public function testPlausibleDistancesStaySilent(ActivityType $activity, int $meters, ?int $sets): void
+    public function testPlausibleDistancesStaySilent(ActivityType $activity, int $meters): void
     {
-        self::assertNull($this->plausibility->warning($this->prescribed($activity, $meters, $sets)));
+        self::assertNull($this->plausibility->warning($this->prescribed($activity, $meters)));
     }
 
     public static function plausibleCases(): \Generator
     {
-        yield 'fractionné 6 × 400 m' => [ActivityType::RUNNING, 400, 6];
-        yield 'marathon' => [ActivityType::RUNNING, 42_195, null];
-        yield 'sortie vélo de 200 km' => [ActivityType::CYCLING, 200_000, null];
-        yield 'natation 10 × 100 m' => [ActivityType::SWIMMING, 100, 10];
-        yield 'marathon au rameur' => [ActivityType::OTHER, 42_195, null];
+        yield 'fractionné 400 m' => [ActivityType::RUNNING, 400];
+        yield 'marathon' => [ActivityType::RUNNING, 42_195];
+        yield 'sortie vélo de 200 km' => [ActivityType::CYCLING, 200_000];
+        yield 'natation 100 m' => [ActivityType::SWIMMING, 100];
+        yield 'marathon au rameur' => [ActivityType::OTHER, 42_195];
     }
 
     /** Le seuil suit l'activité : 50 km est plausible à vélo, pas à la nage. */
     public function testThresholdFollowsActivity(): void
     {
-        self::assertNull($this->plausibility->warning($this->prescribed(ActivityType::CYCLING, 50_000, null)));
-        self::assertNotNull($this->plausibility->warning($this->prescribed(ActivityType::SWIMMING, 50_000, null)));
+        self::assertNull($this->plausibility->warning($this->prescribed(ActivityType::CYCLING, 50_000)));
+        self::assertNotNull($this->plausibility->warning($this->prescribed(ActivityType::SWIMMING, 50_000)));
     }
 
     /** Une distance hors du type d'effort sera effacée à l'enregistrement : rien à dire. */
     public function testDistanceOutsideThePrescriptionTypeIsIgnored(): void
     {
-        $prescribed = $this->prescribed(ActivityType::RUNNING, 400_000, 6)
+        $prescribed = $this->prescribed(ActivityType::RUNNING, 400_000)
             ->setPrescriptionType(PrescriptionType::DURATION);
 
         self::assertNull($this->plausibility->warning($prescribed));
     }
 
-    private function prescribed(ActivityType $activity, int $meters, ?int $sets): PrescribedExercise
+    private function prescribed(ActivityType $activity, int $meters): PrescribedExercise
     {
         return (new PrescribedExercise())
             ->setExercise((new Exercise())->setName('Test')->setActivity($activity))
             ->setPrescriptionType(PrescriptionType::DISTANCE_PACE)
             ->setDistanceMeters($meters)
-            ->setSets($sets)
             ->setPosition(0);
     }
 }

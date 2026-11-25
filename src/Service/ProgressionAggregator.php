@@ -650,9 +650,7 @@ final class ProgressionAggregator
                     break;
                 case 'distance':
                     if (null !== $pe->getDistanceMeters()) {
-                        // Répétitions de l'effort comprises, comme dans le volume
-                        // de séance : « 4 × 1 km » pèse 4 km sur la semaine.
-                        $result = ($result ?? 0.0) + $pe->getDistanceMeters() * $pe->getEnduranceRepeats() * $rounds;
+                        $result = ($result ?? 0.0) + $pe->getDistanceMeters() * $rounds;
                     }
                     break;
                 case 'duration':

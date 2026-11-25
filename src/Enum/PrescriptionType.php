@@ -30,19 +30,24 @@ enum PrescriptionType: string
      *
      * Source unique consommée par : le form (affichage dynamique des champs),
      * le nettoyage serveur (on annule tout champ hors sous-ensemble) et le rendu
-     * via PlanFlattener. `restSeconds`, `rpe` et `notes` sont transverses (valables
-     * pour tous les types), donc absents d'ici.
+     * via PlanFlattener. `rpe` et `notes` sont transverses (valables pour tous les
+     * types), donc absents d'ici.
+     *
+     * Le cardio se prescrit en durée ou distance, intensité et allure, rien de
+     * plus. Ni séries ni repos : un fractionné, c'est un bloc à plusieurs tours
+     * (l'effort, puis un footing ou une marche de récup, qui compte dans le
+     * volume) ; le terrain (côte, D+) va dans les notes.
      *
      * @return list<string>
      */
     public function fields(): array
     {
         return match ($this) {
-            self::SETS_REPS => ['sets', 'reps', 'weightKg'],
-            self::SETS_TIME => ['sets', 'durationSeconds', 'weightKg'],
-            self::AMRAP => ['durationSeconds', 'targetReps'],
-            self::FOR_TIME => ['targetReps', 'capSeconds'],
-            self::DISTANCE_PACE => ['sets', 'distanceMeters', 'paceSecondsPerKm', 'intensityZone', 'elevationGainMeters'],
+            self::SETS_REPS => ['sets', 'reps', 'weightKg', 'restSeconds'],
+            self::SETS_TIME => ['sets', 'durationSeconds', 'weightKg', 'restSeconds'],
+            self::AMRAP => ['durationSeconds', 'targetReps', 'restSeconds'],
+            self::FOR_TIME => ['targetReps', 'capSeconds', 'restSeconds'],
+            self::DISTANCE_PACE => ['distanceMeters', 'paceSecondsPerKm', 'intensityZone'],
             self::DURATION => ['durationSeconds', 'paceSecondsPerKm', 'intensityZone'],
         };
     }

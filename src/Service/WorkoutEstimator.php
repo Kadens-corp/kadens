@@ -90,7 +90,7 @@ final class WorkoutEstimator
             PrescriptionType::SETS_TIME => $this->setsTime($pe, $chained),
             PrescriptionType::AMRAP => $pe->getDurationSeconds() ?? 0,
             PrescriptionType::FOR_TIME => $this->forTime($pe),
-            PrescriptionType::DISTANCE_PACE => $this->distancePace($pe, $chained),
+            PrescriptionType::DISTANCE_PACE => $this->distancePace($pe),
             PrescriptionType::DURATION => $pe->getDurationSeconds() ?? 0,
             null => 0,
         };
@@ -146,16 +146,13 @@ final class WorkoutEstimator
         return ($pe->getTargetReps() ?? 0) * self::SECONDS_PER_REP;
     }
 
-    private function distancePace(PrescribedExercise $pe, bool $chained): int
+    private function distancePace(PrescribedExercise $pe): int
     {
         $meters = $pe->getDistanceMeters() ?? 0;
         $pace = $pe->getPaceSecondsPerKm() ?? 0;
-        $work = (int) round($meters / 1000 * $pace);
 
-        // Intervalles : chaque répétition refait la distance + sa récup. Même
-        // multiplicateur que le volume (WorkoutMetrics::volume), une seule écriture.
-        $reps = $pe->getEnduranceRepeats();
-
-        return $reps * ($work + ($chained ? 0 : ($pe->getRestSeconds() ?? 0)));
+        // Ni répétitions ni repos en cardio : le fractionné est un bloc à
+        // plusieurs tours, et la récup un exercice de footing ou de marche.
+        return (int) round($meters / 1000 * $pace);
     }
 }
