@@ -6,16 +6,19 @@
 
     Une carte se lit de haut en bas : qui, quoi, combien (durée, volume,
     exercices), le record battu, le ressenti écrit, puis les exercices — les
-    trois premiers, les autres derrière « Voir les N autres » (un <details>
-    natif : tout est dans la page, rien ne se charge après coup). Le pied dit ce
-    qu'on peut faire : copier la séance d'un ami, ou masquer la sienne.
+    trois premiers, les autres derrière « Voir les N autres » (#134). Le bouton
+    est un <details> natif posé au-dessus de la liste, sans contenu : tant qu'il
+    est fermé, le CSS masque les lignes `kd-feedex--rest` de la liste qui le
+    suit. Il ne bouge donc pas au clic, et tout est dans la page, rien ne se
+    charge après coup. Le pied dit ce qu'on peut faire : copier la séance d'un
+    ami, ou masquer la sienne.
 
     Attend : entry (FeedEntry, cf. FriendFeed), filter (null | 'moi' | id d'ami),
     page, previewCount. `filter` et `page` ne servent qu'au repli sans JS, qui
     redirige vers la même page du flux.
 #}
-{% macro exerciseRow(row) %}
-    <li class="kd-feedex">
+{% macro exerciseRow(row, rest = false) %}
+    <li class="kd-feedex{{ rest ? ' kd-feedex--rest' }}">
         <span class="kd-feedex__n">{{ row.n }}</span>
         <span class="kd-feedex__name">{{ exercise_name(row.exercise, row.name) }}</span>
         {% if row.perso %}
@@ -87,21 +90,19 @@
 
         {% set shown = entry.exercises|slice(0, previewCount) %}
         {% set rest = entry.exercises|slice(previewCount) %}
-        <ol class="kd-feedcard__exos">
-            {% for row in shown %}{{ ui.exerciseRow(row) }}{% endfor %}
-        </ol>
         {% if rest is not empty %}
             <details class="kd-feedcard__more">
-                <summary>
+                <summary aria-controls="seance-{{ session.id }}-exos">
                     <span class="kd-feedcard__moreopen">Voir {{ rest|length > 1 ? 'les ' ~ rest|length ~ ' autres exercices' : 'l\'autre exercice' }}</span>
                     <span class="kd-feedcard__moreclose">Réduire</span>
                     {{ ux_icon('lucide:chevron-down') }}
                 </summary>
-                <ol class="kd-feedcard__exos" start="{{ previewCount + 1 }}">
-                    {% for row in rest %}{{ ui.exerciseRow(row) }}{% endfor %}
-                </ol>
             </details>
         {% endif %}
+        <ol class="kd-feedcard__exos" id="seance-{{ session.id }}-exos">
+            {% for row in shown %}{{ ui.exerciseRow(row) }}{% endfor %}
+            {% for row in rest %}{{ ui.exerciseRow(row, true) }}{% endfor %}
+        </ol>
 
         <div class="kd-feedcard__foot">
             {% if entry.mine %}
