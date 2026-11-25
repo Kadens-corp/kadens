@@ -10,6 +10,7 @@ use App\Entity\LoggedSet;
 use App\Entity\ScheduledWorkout;
 use App\Entity\User;
 use App\Entity\Workout;
+use App\Enum\BodySide;
 use App\Repository\FriendshipRepository;
 use App\Repository\ScheduledWorkoutRepository;
 use App\Repository\WorkoutRepository;
@@ -35,11 +36,23 @@ use Symfony\Bundle\SecurityBundle\Security;
  * qui tient la contrainte de coût du projet (une liste qui hydrate le réalisé
  * ne tient que bornée à une dizaine de lignes).
  *
+ * **Les muscles travaillés (#135)** se lisent sur le réalisé (`LogMetrics`) et
+ * se peignent par `BodyLoad`, comme la carte de l'accueil. La silhouette est
+ * celle de l'**auteur**, pas du lecteur : partout ailleurs elle est un réglage
+ * d'affichage de celui qui regarde, mais ici la carte montre quelqu'un, et
+ * c'est lui qui a choisi comment il est dessiné. Les tracés (~35 Ko par
+ * planche) ne se répètent pas de carte en carte : la page les pose une fois en
+ * `<symbol>` (`plates`), et chaque carte n'y renvoie qu'avec ses paliers.
+ *
  * @phpstan-import-type SessionRecord from SessionRecords
+ * @phpstan-import-type BodyLoadResult from BodyLoad
+ * @phpstan-import-type BodyPlate from BodyPlates
  *
  * @phpstan-type FeedExercise array{n: int, exercise: Exercise|null, name: string, perso: bool, addedToMine: bool, summary: string, rpe: string|null, record: bool}
  * @phpstan-type FeedRecord array{exercise: Exercise|null, name: string, value: string, gain: string}
- * @phpstan-type FeedEntry array{session: ScheduledWorkout, author: User, mine: bool, hidden: bool, dayKey: string, dayLabel: string, title: string, durationMinutes: int|null, tonnageKg: float, exerciseCount: int, note: string|null, exercises: list<FeedExercise>, records: list<FeedRecord>, copiedBy: list<Workout>, myCopy: Workout|null, copyTitle: string, addedCount: int}
+ * @phpstan-type FeedPlateRef array{key: string, side: string, viewBox: string}
+ * @phpstan-type FeedBody array{load: BodyLoadResult, plates: list<FeedPlateRef>, firstSide: string}
+ * @phpstan-type FeedEntry array{session: ScheduledWorkout, author: User, mine: bool, hidden: bool, dayKey: string, dayLabel: string, title: string, durationMinutes: int|null, tonnageKg: float, exerciseCount: int, note: string|null, exercises: list<FeedExercise>, records: list<FeedRecord>, copiedBy: list<Workout>, myCopy: Workout|null, copyTitle: string, addedCount: int, body: FeedBody|null}
  */
 final readonly class FriendFeed
 {
@@ -59,6 +72,8 @@ final readonly class FriendFeed
         private SessionRecords $records,
         private UnitFormatter $units,
         private Security $security,
+        private BodyLoad $bodyLoad,
+        private BodyPlates $bodyPlates,
     ) {
     }
 
@@ -67,7 +82,11 @@ final readonly class FriendFeed
      * (un ami, ou lui-même pour « Mes séances »). L'appelant ne passe qu'un
      * auteur autorisé : `authorFor()`.
      *
-     * @return array{entries: list<FeedEntry>, hasMore: bool}
+     * `plates` : les planches que les cartes de la page dessinent, indexées
+     * `silhouette-côté`, à poser une fois en `<symbol>`. Celles d'une carte
+     * masquée en font partie : la repartager la redessine sans recharger.
+     *
+     * @return array{entries: list<FeedEntry>, hasMore: bool, plates: array<string, BodyPlate>}
      */
     public function page(User $viewer, ?User $only, int $page): array
     {
@@ -87,7 +106,14 @@ final readonly class FriendFeed
             $entries[] = $this->entry($viewer, $session, $records[(int) $session->getId()] ?? [], $copies[(int) $session->getId()] ?? []);
         }
 
-        return ['entries' => $entries, 'hasMore' => $hasMore];
+        $plates = [];
+        foreach ($entries as $entry) {
+            foreach ($entry['body']['plates'] ?? [] as $ref) {
+                $plates[$ref['key']] ??= $this->bodyPlates->all()[$ref['key']];
+            }
+        }
+
+        return ['entries' => $entries, 'hasMore' => $hasMore, 'plates' => $plates];
     }
 
     /**
@@ -256,6 +282,64 @@ final readonly class FriendFeed
             'myCopy' => $myCopy,
             'copyTitle' => self::copyTitle($session),
             'addedCount' => $added,
+            'body' => $this->body($author, $summary),
+        ];
+    }
+
+    /**
+     * La carte musculaire d'une séance : ce que ses séries de travail ont
+     * chargé, sur la silhouette de l'auteur : face puis dos, et `firstSide`,
+     * le côté le plus chargé, que le petit écran montre seul d'abord. Null quand rien ne se peint (aucune
+     * zone déclarée, ou rien que du « corps entier ») : une silhouette nue sur
+     * une carte de flux n'apprendrait rien.
+     *
+     * @param array{setsByArea: array<string, int>, unmappedSets: int}|null $summary
+     *
+     * @return FeedBody|null
+     */
+    private function body(User $author, ?array $summary): ?array
+    {
+        if (null === $summary) {
+            return null;
+        }
+
+        $load = $this->bodyLoad->for($summary['setsByArea'], $summary['unmappedSets']);
+        if ([] === $load['areas']) {
+            return null;
+        }
+
+        $setsBySlug = [];
+        foreach ($load['areas'] as $item) {
+            // « Corps entier » n'a pas de muscle en face (BodyLoad l'écarte déjà).
+            $slug = BodyLoad::AREA_TO_SLUG[$item['area']->value] ?? null;
+            if (null !== $slug) {
+                $setsBySlug[$slug] = $item['sets'];
+            }
+        }
+
+        $silhouette = $author->getBodySilhouette();
+        $plates = [];
+        $weights = [];
+        foreach ([BodySide::FRONT, BodySide::BACK] as $side) {
+            $plate = $this->bodyPlates->plate($silhouette, $side);
+            $plates[] = [
+                'key' => $silhouette->value.'-'.$side->value,
+                'side' => $side->value,
+                'viewBox' => $plate['viewBox'],
+            ];
+            // Les séries des muscles que cette planche montre. Ceux qui se voient
+            // des deux côtés (épaules, triceps, mollets…) comptent pour les deux
+            // et s'annulent : la face gagne par les pectoraux, les abdos, les
+            // quadriceps ; le dos par le haut du dos, les lombaires, les fessiers.
+            $weights[] = array_sum(array_intersect_key($setsBySlug, array_flip(array_column($plate['muscles'], 'slug'))));
+        }
+
+        // Sur un petit écran, une seule planche, la plus chargée ; l'autre se
+        // retourne. À égalité, la face : c'est le sens de lecture d'un corps.
+        return [
+            'load' => $load,
+            'plates' => $plates,
+            'firstSide' => $weights[1] > $weights[0] ? BodySide::BACK->value : BodySide::FRONT->value,
         ];
     }
 
@@ -280,15 +364,27 @@ final readonly class FriendFeed
         }
 
         $count = \count($sets);
-        $reps = array_unique(array_map(static fn (LoggedSet $s): int => $s->getReps() ?? 0, $sets));
-        $durations = array_unique(array_map(static fn (LoggedSet $s): int => $s->getDurationSeconds() ?? 0, $sets));
+        $reps = array_filter(array_map(static fn (LoggedSet $s): int => $s->getReps() ?? 0, $sets));
+        $durations = array_filter(array_map(static fn (LoggedSet $s): int => $s->getDurationSeconds() ?? 0, $sets));
         $weights = array_map(static fn (LoggedSet $s): float => $s->getWeightKg() ?? 0.0, $sets);
-        $hasReps = max($reps) > 0;
+        $hasReps = [] !== $reps;
 
+        // Des séries inégales se lisent en fourchette (« 4 × 9-12 »), pas en
+        // simple compte : on voit ce qui a été fait sans détailler chaque série.
         if ($hasReps) {
-            $head = 1 === \count($reps) ? sprintf('%d × %d', $count, $reps[0]) : sprintf('%d séries', $count);
+            $low = min($reps);
+            $high = max($reps);
+            $head = $low === $high ? sprintf('%d × %d', $count, $low) : sprintf('%d × %d-%d', $count, $low, $high);
+        } elseif ([] === $durations) {
+            $head = sprintf('%d séries', $count);
         } else {
-            $head = 1 === \count($durations) ? sprintf('%d × %s', $count, $this->seconds((int) reset($durations))) : sprintf('%d séries', $count);
+            $low = min($durations);
+            $high = max($durations);
+            $head = match (true) {
+                $low === $high => sprintf('%d × %s', $count, $this->seconds($low)),
+                $high < 60 => sprintf('%d × %d-%d s', $count, $low, $high),
+                default => sprintf('%d × %s-%s', $count, $this->seconds($low), $this->seconds($high)),
+            };
         }
 
         $top = max($weights);

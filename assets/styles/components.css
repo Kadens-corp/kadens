@@ -16087,6 +16087,80 @@ turbo-frame.kd-feed__page[busy] > .kd-feed__older {
     color: var(--color-text-soft);
 }
 
+/* Les muscles travaillés (#135) : la silhouette à gauche, la légende chiffrée
+   à droite, comme la carte de l'accueil, en plus petit. Sous 560px, une
+   planche à la fois : la case `kd-feedcard__flip`, juste avant le dessin,
+   montre l'autre (cf. la règle en fin de section). */
+.kd-feedcard__body {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--kd-space-7);
+    margin: var(--kd-space-6) var(--kd-space-8) 0;
+}
+
+.kd-feedcard__figure {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--kd-space-2);
+    flex: none;
+}
+
+.kd-feedcard__fliplabel {
+    display: none;
+    align-items: center;
+    gap: var(--kd-space-1);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.kd-feedcard__fliplabel:hover {
+    color: var(--color-primary);
+}
+
+.kd-feedcard__fliplabel svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* La case est hors écran : c'est son label qui porte le focus visible. */
+.kd-feedcard__flip:focus-visible ~ .kd-feedcard__fliplabel {
+    outline: 2px solid var(--color-text);
+    outline-offset: 2px;
+}
+
+.kd-feedcard__zones {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.kd-feedcard__zones .kd-wkvol__aside {
+    margin-bottom: 0;
+}
+
+.kd-feedcard__zoneslabel {
+    margin: 0 0 var(--kd-space-3);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--kd-weight-semibold);
+    letter-spacing: var(--kd-tracking-eyebrow-xl);
+    text-transform: uppercase;
+    color: var(--color-text-soft);
+}
+
+/* Le porteur des <symbol> du flux : hors du flux, sans `display: none`. */
+.kd-bodymap-symbols {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
 .kd-feedcard__record {
     display: flex;
     align-items: center;
@@ -16216,14 +16290,15 @@ turbo-frame.kd-feed__page[busy] > .kd-feed__older {
     color: var(--color-text-secondary);
 }
 
-/* « Voir les N autres exercices » : <details> natif, libellé selon l'état. */
+/* « Voir les N autres exercices » : <details> natif posé au-dessus de la
+   liste, sans contenu, libellé selon l'état. Fermé, il masque les lignes en
+   trop de la liste qui le suit : le bouton ne bouge pas au clic (#134). */
 .kd-feedcard__more > summary {
     display: flex;
     align-items: center;
     gap: var(--kd-space-2);
-    margin: 0 var(--kd-space-8);
-    padding: var(--kd-space-4) 0;
-    border-top: 1px solid var(--color-divider-soft);
+    margin: var(--kd-space-5) var(--kd-space-8) 0;
+    padding: var(--kd-space-2) 0;
     font-family: var(--font-mono);
     font-size: 11px;
     font-weight: var(--kd-weight-semibold);
@@ -16257,8 +16332,12 @@ turbo-frame.kd-feed__page[busy] > .kd-feed__older {
     transform: rotate(180deg);
 }
 
-.kd-feedcard__more > .kd-feedcard__exos {
-    margin-top: 0;
+.kd-feedcard__more + .kd-feedcard__exos {
+    margin-top: var(--kd-space-2);
+}
+
+.kd-feedcard__more:not([open]) + .kd-feedcard__exos > .kd-feedex--rest {
+    display: none;
 }
 
 .kd-feedcard__foot {
@@ -16499,6 +16578,7 @@ turbo-frame.kd-feed__page[busy] > .kd-feed__older {
 
     .kd-feedcard__title,
     .kd-feedcard__kpis,
+    .kd-feedcard__body,
     .kd-feedcard__record,
     .kd-feedcard__note,
     .kd-feedcard__exos,
@@ -16509,6 +16589,21 @@ turbo-frame.kd-feed__page[busy] > .kd-feed__older {
 
     .kd-feedcard__kpis dd {
         font-size: 22px;
+    }
+
+    /* Une planche à la fois : la plus chargée, puis l'autre une fois la case
+       cochée. Le DOM reste face puis dos ; `--back` inverse le choix. */
+    .kd-feedcard__fliplabel {
+        display: inline-flex;
+    }
+
+    .kd-feedcard__figure:not(.kd-feedcard__figure--back) .kd-feedcard__flip:not(:checked) ~ .kd-bodymap .kd-bodymap__plate:nth-child(2),
+    .kd-feedcard__figure:not(.kd-feedcard__figure--back) .kd-feedcard__flip:checked ~ .kd-bodymap .kd-bodymap__plate:nth-child(1),
+    .kd-feedcard__figure--back .kd-feedcard__flip:not(:checked) ~ .kd-bodymap .kd-bodymap__plate:nth-child(1),
+    .kd-feedcard__figure--back .kd-feedcard__flip:checked ~ .kd-bodymap .kd-bodymap__plate:nth-child(2),
+    .kd-feedcard__flip:not(:checked) ~ .kd-feedcard__fliplabel .kd-feedcard__flipback,
+    .kd-feedcard__flip:checked ~ .kd-feedcard__fliplabel .kd-feedcard__flipto {
+        display: none;
     }
 
     .kd-feedex__rpe {

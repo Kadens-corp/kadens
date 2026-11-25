@@ -13,6 +13,7 @@ use App\Entity\User;
 use App\Entity\Workout;
 use App\Enum\ActivityType;
 use App\Enum\BlockRole;
+use App\Enum\BodySilhouette;
 use App\Enum\PrescriptionType;
 use App\Enum\ScheduledStatus;
 use App\Enum\SetType;
@@ -193,8 +194,9 @@ final class FriendControllerTest extends WebTestCase
 
         $bench = $this->createExercise(null, 'Développé couché barre');
         $rotations = $this->createExercise($lea, 'Rotations d\'épaules à l\'élastique');
+        $pulldown = $this->createExercise(null, 'Tirage vertical');
 
-        $this->logSession($lea, 'Upper A', 'today', [[$rotations, [[15, null]]], [$bench, [[6, 92.5], [6, 92.5], [6, 92.5], [6, 92.5]]]], note: 'Enfin 92,5 sur les 6 reps.');
+        $this->logSession($lea, 'Upper A', 'today', [[$rotations, [[15, null]]], [$bench, [[6, 92.5], [6, 92.5], [6, 92.5], [6, 92.5]]], [$pulldown, [[12, 30.0], [10, 32.0], [9, 32.0]]]], note: 'Enfin 92,5 sur les 6 reps.');
         $this->logSession($me, 'Lower A', 'today', [[$bench, [[5, 60.0]]]]);
         $this->logSession($stranger, 'Séance secrète', 'today', [[$bench, [[5, 60.0]]]]);
         $this->logSession($lea, 'Prévue', 'today', [[$bench, [[5, 60.0]]]], status: ScheduledStatus::PLANNED);
@@ -212,12 +214,58 @@ final class FriendControllerTest extends WebTestCase
         self::assertStringContainsString('Rotations d\'épaules à l\'élastique', $lea->text());
         self::assertCount(1, $lea->filter('.kd-feedex__perso'));
         self::assertStringContainsString('4 × 6 · 92,5 kg', $lea->text());
+        // Des séries inégales (#136) : la fourchette des reps, pas « 3 séries ».
+        self::assertStringContainsString('3 × 9-12 · jusqu\'à 32 kg', $lea->text());
         self::assertStringContainsString('Enfin 92,5 sur les 6 reps.', $lea->filter('.kd-feedcard__note')->text());
         self::assertCount(1, $lea->filter('button:contains("Copier dans mes séances")'));
 
         $mine = $this->card($crawler, 'Lower A');
         self::assertStringContainsString('Toi', $mine->filter('.kd-feedcard__who')->text());
         self::assertCount(1, $mine->filter('button:contains("Masquer pour mes amis")'));
+    }
+
+    /**
+     * Les muscles travaillés (#135) : la silhouette est celle de l'AUTEUR, pas
+     * du lecteur ; un petit écran l'ouvre sur le côté le plus chargé (la face
+     * à égalité) ; et les tracés ne sont posés qu'une fois par page, quel que
+     * soit le nombre de cartes qui les dessinent.
+     */
+    public function testFeedDrawsWorkedMusclesOnTheAuthorsSilhouette(): void
+    {
+        $me = $this->createUser('me@example.com');
+        $lea = $this->createUser('lea@example.com', 'Léa')->setBodySilhouette(BodySilhouette::FEMALE);
+        $this->em->flush();
+        $this->befriend($me, $lea);
+
+        $bench = $this->createExercise(null, 'Développé couché barre');
+        $noArea = $this->createExercise(null, 'Machine sans zone')->setTargetAreas([]);
+        $rdl = $this->createExercise(null, 'Soulevé de terre roumain')->setTargetAreas([TargetArea::HAMSTRINGS, TargetArea::GLUTES, TargetArea::LOWER_BACK]);
+        $this->em->flush();
+
+        $this->logSession($lea, 'Upper A', 'today', [[$bench, [[6, 92.5], [6, 92.5]]]]);
+        $this->logSession($lea, 'Upper B', 'yesterday', [[$bench, [[8, 80.0]]]]);
+        $this->logSession($me, 'Lower A', 'today', [[$bench, [[5, 60.0]]]]);
+        $this->logSession($me, 'Sans zone', 'today', [[$noArea, [[10, 30.0]]]]);
+        // Deux séries de chaîne postérieure contre une de développé : le dos.
+        $this->logSession($me, 'Pull A', 'today', [[$rdl, [[8, 80.0], [8, 80.0]]], [$bench, [[5, 60.0]]]]);
+
+        $this->client->loginUser($me);
+        $crawler = $this->client->request('GET', '/friends/feed');
+        self::assertResponseIsSuccessful();
+
+        $plateOf = fn (string $title): array => $this->card($crawler, $title)->filter('.kd-feedcard__body use')
+            ->each(static fn (Crawler $n): string => (string) $n->attr('href'));
+
+        self::assertSame(['#feed-plates-1-female-front', '#feed-plates-1-female-back'], $plateOf('Upper A'));
+        self::assertSame(['#feed-plates-1-male-front', '#feed-plates-1-male-back'], $plateOf('Lower A'));
+        self::assertCount(0, $this->card($crawler, 'Lower A')->filter('.kd-feedcard__figure--back'));
+        self::assertCount(1, $this->card($crawler, 'Pull A')->filter('.kd-feedcard__figure--back'));
+        // Rien à peindre : pas de silhouette nue.
+        self::assertCount(0, $this->card($crawler, 'Sans zone')->filter('.kd-feedcard__body'));
+
+        $symbols = $crawler->filter('symbol')->each(static fn (Crawler $n): string => (string) $n->attr('id'));
+        sort($symbols);
+        self::assertSame(['feed-plates-1-female-back', 'feed-plates-1-female-front', 'feed-plates-1-male-back', 'feed-plates-1-male-front'], $symbols);
     }
 
     /** Couper le partage retire tout, l'ancien compris ; masquer retire une séance. */

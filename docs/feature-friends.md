@@ -60,6 +60,42 @@ identifiant). Une requête pour toute une page
 (`LoggedSetRepository::loadsBySessionForOwners()`). Si l'une des deux règles
 bouge, l'autre bouge avec.
 
+## Muscles travaillés (#135)
+
+Chaque carte dessine face et dos avec les zones chargées, et les reprend en
+toutes lettres à côté (zone, séries), comme la carte de l'accueil.
+
+- **Lu sur le réalisé**, par `LogMetrics::summary()` (`setsByArea`,
+  `unmappedSets`) : séries de travail chiffrées, une série compte pour chaque
+  zone de son exercice, peint par `BodyLoad`. Le palier est relatif à la séance.
+  Une séance dont rien ne se peint (aucune zone déclarée, que du « corps
+  entier ») n'a pas de silhouette : un corps nu n'apprendrait rien.
+- **La silhouette est celle de l'auteur**, et c'est la seule exception à « la
+  silhouette suit celui qui regarde » (`VolumePanel`, `ExerciseBodyMap`,
+  `LastSevenDays`, compositeur coach). Ailleurs, elle dessine des données sur le
+  corps du lecteur ; ici, la carte montre quelqu'un, et c'est lui qui a choisi
+  comment il est dessiné. Elle ne se dérive toujours pas de `User.sex`.
+- **Les tracés sont posés une fois par page.** Une planche pèse ~35 Ko : dix
+  cartes en ligne feraient ~700 Ko. `_feed_page` pose les planches de ses cartes
+  en `<symbol>` (`components/_body_map_symbols`, ids `feed-plates-{page}-{clé}`),
+  et chaque carte y renvoie par `<use>` (`_body_map` avec `symbols`), ses
+  paliers en propriétés CSS `--bm-<slug>` (seul l'héritage traverse un `<use>`).
+  Le préfixe porte la page : la page chargée plus bas pose les siennes sans
+  doublon d'id, et une carte remplacée par Turbo Stream renvoie aux symboles de
+  sa page. Les planches d'une carte masquée sont posées aussi : la repartager la
+  redessine sans recharger.
+- **Sous 560 px, une seule planche**, la plus chargée (`FeedBody.firstSide`, la
+  face à égalité), et « Voir de dos / de face » montre l'autre. Le poids d'un
+  côté = les séries des muscles que sa planche montre ; ceux qui se voient des
+  deux côtés (épaules, triceps, mollets…) s'annulent. Le retournement est une
+  case à cocher et du CSS, sans JS. Au-dessus, face et dos côte à côte comme
+  partout. Piège déjà rencontré : le `<use>` se pose à l'origine 0 0 de son SVG,
+  donc le porteur prend `viewBox="0 0 l h"` et non celui de la planche (le dos
+  commence à x = 724, il se dessinait hors cadre).
+- Limite assumée : si l'auteur change de silhouette entre l'affichage et un
+  geste sur sa carte, la carte rendue par le stream vise un symbole absent de la
+  page et reste blanche jusqu'au rechargement.
+
 ## Aucun geste du flux ne recharge la page
 
 On agit au milieu d'une liste qu'on fait défiler : une redirection ramènerait

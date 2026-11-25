@@ -15,11 +15,15 @@
     chargée dans le frame reçoit le dernier jour de la précédente
     (`continuesDay`, par `?jour=`), et ne le redit pas.
 
-    Attend : entries, hasMore, page, filter, previewCount, continuesDay (null
-    sur une page ouverte entière).
+    Attend : entries, hasMore, plates (planches des cartes, cf.
+    FriendFeed::page), page, filter, previewCount, continuesDay (null sur une
+    page ouverte entière).
 #}
 {% set filterParams = filter ? {ami: filter} : {} %}
 <turbo-frame id="feed-page-{{ page }}" class="kd-feed__page" target="_top">
+    {# Les planches des cartes de cette page, une fois (#135). Préfixées par la
+       page : celle qu'on charge plus bas pose les siennes sans doublon d'id. #}
+    {{ include('components/_body_map_symbols.html.twig', {plates: plates, prefix: 'feed-plates-' ~ page}, with_context = false) }}
     {% set lastDay = continuesDay|default(null) %}
     {% for entry in entries %}
         {% if entry.dayKey != lastDay %}

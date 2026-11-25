@@ -5,17 +5,20 @@
     l'id `seance-{id}` est donc sur l'élément racine, et nulle part ailleurs.
 
     Une carte se lit de haut en bas : qui, quoi, combien (durée, volume,
-    exercices), le record battu, le ressenti écrit, puis les exercices — les
-    trois premiers, les autres derrière « Voir les N autres » (un <details>
-    natif : tout est dans la page, rien ne se charge après coup). Le pied dit ce
-    qu'on peut faire : copier la séance d'un ami, ou masquer la sienne.
+    exercices), les muscles travaillés (#135), le record battu, le ressenti écrit, puis les exercices — les
+    trois premiers, les autres derrière « Voir les N autres » (#134). Le bouton
+    est un <details> natif posé au-dessus de la liste, sans contenu : tant qu'il
+    est fermé, le CSS masque les lignes `kd-feedex--rest` de la liste qui le
+    suit. Il ne bouge donc pas au clic, et tout est dans la page, rien ne se
+    charge après coup. Le pied dit ce qu'on peut faire : copier la séance d'un
+    ami, ou masquer la sienne.
 
     Attend : entry (FeedEntry, cf. FriendFeed), filter (null | 'moi' | id d'ami),
     page, previewCount. `filter` et `page` ne servent qu'au repli sans JS, qui
     redirige vers la même page du flux.
 #}
-{% macro exerciseRow(row) %}
-    <li class="kd-feedex">
+{% macro exerciseRow(row, rest = false) %}
+    <li class="kd-feedex{{ rest ? ' kd-feedex--rest' }}">
         <span class="kd-feedex__n">{{ row.n }}</span>
         <span class="kd-feedex__name">{{ exercise_name(row.exercise, row.name) }}</span>
         {% if row.perso %}
@@ -70,6 +73,52 @@
             </div>
         </dl>
 
+        {# Les muscles travaillés (#135), sur la silhouette de l'AUTEUR : la carte
+           montre quelqu'un. Les tracés sont des <symbol> posés une fois par page
+           (`_feed_page`), d'où le préfixe qui porte le numéro de page : une carte
+           remplacée par Turbo Stream renvoie aux symboles de sa page. Tout ce
+           que le dessin dit est repris en toutes lettres à côté. #}
+        {% if entry.body %}
+            {% set load = entry.body.load %}
+            {% set back = entry.body.firstSide == 'back' %}
+            <div class="kd-feedcard__body">
+                {# Face et dos côte à côte. Sous 560 px, une seule planche, la plus
+                   chargée (`firstSide`, FriendFeed), et la case montre l'autre, en
+                   CSS seul : le dessin est décoratif (la légende dit tout), le
+                   geste n'a rien à charger. #}
+                <div class="kd-feedcard__figure{{ back ? ' kd-feedcard__figure--back' }}">
+                    <input type="checkbox" id="seance-{{ session.id }}-flip" class="kd-sr-only kd-feedcard__flip">
+                    {{ include('components/_body_map.html.twig', {
+                        plates: entry.body.plates, levels: load.levels, height: 130, symbols: 'feed-plates-' ~ page
+                    }, with_context = false) }}
+                    <label for="seance-{{ session.id }}-flip" class="kd-feedcard__fliplabel">
+                        {{ ux_icon('lucide:rotate-cw') }}
+                        <span class="kd-feedcard__flipto">Voir {{ back ? 'de face' : 'de dos' }}</span>
+                        <span class="kd-feedcard__flipback">Voir {{ back ? 'de dos' : 'de face' }}</span>
+                    </label>
+                </div>
+                <div class="kd-feedcard__zones">
+                    <p class="kd-feedcard__zoneslabel">Muscles travaillés</p>
+                    <ul class="kd-wkvol__areas">
+                        {% for item in load.areas %}
+                            <li class="kd-wkvol__area">
+                                <span class="kd-wkvol__dot kd-wkvol__dot--{{ item.level }}" aria-hidden="true"></span>
+                                <span class="kd-wkvol__areaname">{{ item.area.label }}</span>
+                                <span class="kd-wkvol__areasets">{{ item.sets }} série{{ item.sets > 1 ? 's' }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                    {% if load.fullBody > 0 or load.unmapped > 0 %}
+                        <p class="kd-wkvol__aside">
+                            {%- if load.fullBody > 0 %}{{ load.fullBody }} série{{ load.fullBody > 1 ? 's' }} « corps entier », hors du dessin{% endif -%}
+                            {%- if load.fullBody > 0 and load.unmapped > 0 %} · {% endif -%}
+                            {%- if load.unmapped > 0 %}{{ load.unmapped }} série{{ load.unmapped > 1 ? 's' }} sans zone déclarée{% endif -%}
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+
         {% for record in entry.records %}
             <p class="kd-feedcard__record">
                 {{ ux_icon('lucide:crown', {class: 'kd-icon--solid'}) }}
@@ -87,21 +136,19 @@
 
         {% set shown = entry.exercises|slice(0, previewCount) %}
         {% set rest = entry.exercises|slice(previewCount) %}
-        <ol class="kd-feedcard__exos">
-            {% for row in shown %}{{ ui.exerciseRow(row) }}{% endfor %}
-        </ol>
         {% if rest is not empty %}
             <details class="kd-feedcard__more">
-                <summary>
+                <summary aria-controls="seance-{{ session.id }}-exos">
                     <span class="kd-feedcard__moreopen">Voir {{ rest|length > 1 ? 'les ' ~ rest|length ~ ' autres exercices' : 'l\'autre exercice' }}</span>
                     <span class="kd-feedcard__moreclose">Réduire</span>
                     {{ ux_icon('lucide:chevron-down') }}
                 </summary>
-                <ol class="kd-feedcard__exos" start="{{ previewCount + 1 }}">
-                    {% for row in rest %}{{ ui.exerciseRow(row) }}{% endfor %}
-                </ol>
             </details>
         {% endif %}
+        <ol class="kd-feedcard__exos" id="seance-{{ session.id }}-exos">
+            {% for row in shown %}{{ ui.exerciseRow(row) }}{% endfor %}
+            {% for row in rest %}{{ ui.exerciseRow(row, true) }}{% endfor %}
+        </ol>
 
         <div class="kd-feedcard__foot">
             {% if entry.mine %}
